@@ -1,0 +1,109 @@
+# ===========================
+# Functions
+# ===========================
+
+@func build_project(target):
+    @desc "Builds the project for the specified target platform"
+    @before echo "Building project for {{target}}..."
+    script:
+        cargo build --release --target {{target}}
+    @after echo "Build finished for {{target}}"
+    @fallback echo "Build failed for {{target}}"
+
+@func notify(msg, user="{{NOTIFY_USER}}"):
+    @desc "Sends a notification to a user"
+    script:
+        echo "Notify {{user}}: {{msg}}"
+
+@func migrate_up():
+    @before echo "Starting migration"
+    script: ./migrate_up.sh
+    @after echo "Migration finished"
+    @fallback ./rollback_up.sh
+
+# ===========================
+# Top-Level CLI Commands
+# ===========================
+
+deploy(version, push=false):
+    @desc "Deploys the application"
+    @args
+        -p, --push
+        version
+    @flags
+        --force
+    @env-file .env
+    @env
+        APP_ENV=prod
+    @defaults
+        push=false
+    @cwd ./project
+    @depends build test
+    @before
+        echo "Preparing deployment..."
+        @call notify("Deploy started")
+    @after
+        @call notify("Deploy finished")
+        echo "Deployment completed."
+    @fallback
+        echo "Deploy failed! Rolling back..."
+        ./rollback.sh
+    script:
+        @call build_project("x86_64-unknown-linux-gnu")
+        ./deploy.sh {{version}}
+        if [ "{{push}}" = "true" ]; then
+            git push origin main
+        fi
+
+build:
+    @desc "Builds the project for multiple targets"
+    @flags
+        --release
+    script:
+        @call build_project("x86_64-unknown-linux-gnu")
+        @call build_project("arm64-apple-darwin")
+
+test:
+    @desc "Runs project tests"
+    script:
+        cargo test
+
+migrate:
+    @desc "Manages database migrations"
+
+    up:
+        @desc "Applies pending migrations"
+        script:
+            @call migrate_up
+
+    down:
+        @desc "Rolls back the last migration"
+        script: ./migrate_down.sh
+        @fallback ./rollback_down.sh
+
+# ===========================
+# Nested CLI Command
+# ===========================
+
+nest:
+    cli:
+        @desc "Example of a nested CLI command group"
+
+        run(name):
+            @desc "Executes a named task"66
+            @args
+                name
+            @flags
+                --dry
+            @env
+                DEBUG=true
+            script:
+                echo "Running {{name}}..."
+                if [ "{{dry}}" = "true" ]; then
+                    echo "(dry run)"
+                fi
+
+        build(name):
+            @desc "Builds the project using the nested CLI"
+            script:
+                @call build_project({{name}})

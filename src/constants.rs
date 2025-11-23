@@ -1,0 +1,1 @@
+pub const CONFIG_NAMES: [&str; 2] = ["nestfile", "Nestfile"];
