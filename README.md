@@ -51,6 +51,37 @@ sudo cp target/release/nest /usr/local/bin/
 nest <command>
 ```
 
+### Hidden Commands
+
+Nest has several hidden commands that don't appear in `nest --help` but are available for advanced usage:
+
+#### `--version` / `-V`
+Print version information:
+```bash
+nest --version
+# or
+nest -V
+```
+
+#### `--show <format>`
+Display commands in different formats. Requires a Nestfile to be present:
+```bash
+nest --show json    # Output commands as JSON
+nest --show ast     # Output commands as Abstract Syntax Tree
+```
+
+#### `--example`
+Download the example `nestfile.example` from GitHub and save it as `nestfile` in the current directory:
+```bash
+nest --example
+```
+
+This command:
+- Downloads `nestfile.example` from the official repository
+- Saves it as `nestfile` in the current directory
+- Works without requiring an existing Nestfile
+- Requires `curl` or `wget` to be available on your system
+
 ## 📝 Writing Nestfile
 
 ### Basic Command Structure

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// JSON representation of a Value.
 #[derive(Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "value")]
 pub enum JsonValue {
     /// A string value
     String(String),
@@ -37,7 +37,7 @@ pub struct JsonParameter {
 
 /// JSON representation of a Directive.
 #[derive(Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "value")]
 pub enum JsonDirective {
     /// Description directive
     #[serde(rename = "desc")]

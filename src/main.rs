@@ -35,6 +35,20 @@ fn main() {
     // Build a minimal CLI first to check for special flags that don't need config
     let minimal_cli = ClapCommand::new("nest")
         .arg(
+            clap::Arg::new(FLAG_VERSION)
+                .long(FLAG_VERSION)
+                .short('V')
+                .action(clap::ArgAction::SetTrue)
+                .hide(true),
+        )
+        .arg(
+            clap::Arg::new(FLAG_SHOW)
+                .long(FLAG_SHOW)
+                .value_name("FORMAT")
+                .value_parser([FORMAT_JSON, FORMAT_AST])
+                .hide(true),
+        )
+        .arg(
             clap::Arg::new(FLAG_EXAMPLE)
                 .long(FLAG_EXAMPLE)
                 .action(clap::ArgAction::SetTrue)
@@ -42,10 +56,20 @@ fn main() {
         );
     let minimal_matches = minimal_cli.get_matches();
 
-    // Handle --example flag before loading config (it doesn't need config)
+    // Handle special flags before loading config (they don't need config)
+    if minimal_matches.get_flag(FLAG_VERSION) {
+        handle_version();
+        return;
+    }
+
     if minimal_matches.get_flag(FLAG_EXAMPLE) {
         handle_example();
         return;
+    }
+
+    // --show needs config, but we need to parse it early to avoid errors
+    if minimal_matches.contains_id(FLAG_SHOW) {
+        // Will be handled after config is loaded
     }
 
     let commands = match load_and_parse_config() {
