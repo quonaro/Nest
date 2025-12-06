@@ -4,3 +4,4 @@ nestfile
 *.tar.gz
 *.zip
 *.sha256
+.cargo/config.toml

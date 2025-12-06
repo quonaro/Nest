@@ -53,6 +53,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install cross-compilation tools (Linux aarch64)
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -65,6 +71,15 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      - name: Configure linker for aarch64
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
+        run: |
+          mkdir -p .cargo
+          cat >> .cargo/config.toml <<EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
 
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}

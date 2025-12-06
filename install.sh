@@ -60,24 +60,61 @@ echo "${YELLOW}Downloading from: ${URL}${NC}"
 
 # Download with curl or wget
 TEMP_DIR=$(mktemp -d)
-TEMP_FILE="${TEMP_DIR}/nest-${PLATFORM}-${ARCHITECTURE}"
+TEMP_FILE="${TEMP_DIR}/nest-${PLATFORM}-${ARCHITECTURE}.tar.gz"
 
+echo "${YELLOW}Downloading from: ${URL}${NC}"
+
+# Download and check for errors
 if command -v curl > /dev/null 2>&1; then
-    curl -L -o "${TEMP_FILE}.tar.gz" "${URL}"
+    HTTP_CODE=$(curl -L -w "%{http_code}" -o "${TEMP_FILE}" "${URL}" -s)
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "${RED}Error: Failed to download binary (HTTP $HTTP_CODE)${NC}" >&2
+        echo "${YELLOW}The release may not exist yet. Please check:${NC}" >&2
+        echo "  https://github.com/${REPO}/releases" >&2
+        rm -rf "${TEMP_DIR}"
+        exit 1
+    fi
 elif command -v wget > /dev/null 2>&1; then
-    wget -O "${TEMP_FILE}.tar.gz" "${URL}"
+    if ! wget -O "${TEMP_FILE}" "${URL}" 2>&1 | grep -q "200 OK"; then
+        echo "${RED}Error: Failed to download binary${NC}" >&2
+        echo "${YELLOW}The release may not exist yet. Please check:${NC}" >&2
+        echo "  https://github.com/${REPO}/releases" >&2
+        rm -rf "${TEMP_DIR}"
+        exit 1
+    fi
 else
     echo "${RED}Error: Neither curl nor wget found. Please install one of them.${NC}" >&2
     exit 1
 fi
 
+# Verify downloaded file is a valid archive
+if ! file "${TEMP_FILE}" | grep -q "gzip\|archive"; then
+    echo "${RED}Error: Downloaded file is not a valid archive${NC}" >&2
+    echo "${YELLOW}Response content:${NC}" >&2
+    head -20 "${TEMP_FILE}" >&2
+    echo "" >&2
+    echo "${YELLOW}The release may not exist yet. Please check:${NC}" >&2
+    echo "  https://github.com/${REPO}/releases" >&2
+    rm -rf "${TEMP_DIR}"
+    exit 1
+fi
+
 # Extract archive
 cd "${TEMP_DIR}"
-if [ "$PLATFORM" = "windows" ]; then
-    echo "${RED}Error: Windows installation should use install.ps1${NC}" >&2
+if ! tar -xzf "${TEMP_FILE}" 2>/dev/null; then
+    echo "${RED}Error: Failed to extract archive${NC}" >&2
+    echo "${YELLOW}The downloaded file may be corrupted.${NC}" >&2
+    rm -rf "${TEMP_DIR}"
     exit 1
-else
-    tar -xzf "${TEMP_FILE}.tar.gz"
+fi
+
+# Check if binary exists
+if [ ! -f "${BINARY_NAME}" ]; then
+    echo "${RED}Error: Binary '${BINARY_NAME}' not found in archive${NC}" >&2
+    echo "${YELLOW}Archive contents:${NC}" >&2
+    ls -la "${TEMP_DIR}" >&2
+    rm -rf "${TEMP_DIR}"
+    exit 1
 fi
 
 # Move binary to install directory
