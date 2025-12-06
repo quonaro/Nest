@@ -24,6 +24,7 @@ pub enum Value {
 ///
 /// Parameters can be required or optional (if a default value is provided).
 /// They can also have aliases for shorter command-line usage.
+/// Parameters can be positional (by default) or named (with ! prefix).
 #[derive(Debug, Clone)]
 pub struct Parameter {
     /// The parameter name
@@ -34,6 +35,8 @@ pub struct Parameter {
     pub param_type: String,
     /// Optional default value
     pub default: Option<Value>,
+    /// Whether this parameter is named (uses --name) or positional
+    pub is_named: bool,
 }
 
 /// Represents a directive that modifies command behavior.
@@ -77,7 +80,8 @@ impl fmt::Display for Command {
         write!(f, "{}", self.name)?;
         if !self.parameters.is_empty() {
             let params: Vec<String> = self.parameters.iter().map(|p| {
-                let mut s = p.name.clone();
+                let mut s = if p.is_named { "!".to_string() } else { String::new() };
+                s.push_str(&p.name);
                 if let Some(alias) = &p.alias {
                     s.push_str(&format!("|{}", alias));
                 }

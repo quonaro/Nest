@@ -9,6 +9,7 @@ use super::ast::Command;
 use super::args::ArgumentExtractor;
 use super::cli::CliGenerator;
 use super::help::HelpFormatter;
+use crate::constants::DEFAULT_SUBCOMMAND;
 use clap::ArgMatches;
 
 /// Handles command execution routing and orchestration.
@@ -69,7 +70,7 @@ impl CommandHandler {
     ) -> Result<(), String> {
         let default_path = {
             let mut path = command_path.to_vec();
-            path.push("default".to_string());
+            path.push(DEFAULT_SUBCOMMAND.to_string());
             path
         };
 

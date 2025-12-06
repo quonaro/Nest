@@ -3,6 +3,7 @@
 //! This module handles replacing placeholders in scripts with actual values.
 //! Supports parameter placeholders ({{param}}) and special variables ({{now}}, {{user}}).
 
+use crate::constants::{DEFAULT_USER, ENV_VAR_USER, TEMPLATE_VAR_NOW, TEMPLATE_VAR_USER};
 use std::collections::HashMap;
 use std::env;
 use chrono::Utc;
@@ -49,10 +50,10 @@ impl TemplateProcessor {
         }
 
         // Replace special variables
-        processed = processed.replace("{{now}}", &Utc::now().to_rfc3339());
+        processed = processed.replace(TEMPLATE_VAR_NOW, &Utc::now().to_rfc3339());
         processed = processed.replace(
-            "{{user}}",
-            &env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+            TEMPLATE_VAR_USER,
+            &env::var(ENV_VAR_USER).unwrap_or_else(|_| DEFAULT_USER.to_string()),
         );
 
         processed

@@ -3,6 +3,7 @@
 //! This module handles extracting command arguments from clap's ArgMatches
 //! and converting them into a format suitable for script execution.
 
+use crate::constants::BOOL_TRUE;
 use super::ast::Parameter;
 use super::cli::CliGenerator;
 use clap::ArgMatches;
@@ -39,10 +40,24 @@ impl ArgumentExtractor {
 
         for param in parameters {
             if param.param_type == "bool" {
-                let value = Self::extract_bool_flag(matches, param, generator);
+                let value = if param.is_named {
+                    Self::extract_bool_flag(matches, param, generator)
+                } else {
+                    // Positional bool arguments
+                    Self::extract_bool_positional(matches, param)
+                };
                 args.insert(param.name.clone(), value.to_string());
             } else {
-                if let Some(value) = Self::extract_value_arg(matches, param, generator) {
+                let value = if param.is_named {
+                    // For named arguments, use param_id from generator
+                    let param_id = generator.get_param_id(&param.name);
+                    Self::extract_value_arg_named(matches, param, param_id)
+                } else {
+                    // Positional arguments are accessible by name
+                    Self::extract_value_arg_positional(matches, param)
+                };
+                
+                if let Some(value) = value {
                     args.insert(param.name.clone(), value);
                 } else if let Some(default) = &param.default {
                     if let Some(default_str) = generator.value_to_string(default) {
@@ -79,11 +94,23 @@ impl ArgumentExtractor {
 
         for param in parameters {
             if param.param_type == "bool" {
-                let value = Self::extract_bool_flag_for_default(matches, param, generator);
+                let value = if param.is_named {
+                    Self::extract_bool_flag_for_default(matches, param, generator)
+                } else {
+                    Self::extract_bool_positional(matches, param)
+                };
                 args.insert(param.name.clone(), value.to_string());
             } else {
-                if let Some(value) = Self::extract_value_arg_for_default(matches, param, generator)
-                {
+                let value = if param.is_named {
+                    // For named arguments, use param_id from generator
+                    let param_id = generator.get_param_id(&param.name);
+                    Self::extract_value_arg_for_default_named(matches, param_id)
+                } else {
+                    // Positional arguments are accessible by name
+                    Self::extract_value_arg_for_default_positional(matches, param)
+                };
+                
+                if let Some(value) = value {
                     args.insert(param.name.clone(), value);
                 } else if let Some(default) = &param.default {
                     if let Some(default_str) = generator.value_to_string(default) {
@@ -107,7 +134,7 @@ impl ArgumentExtractor {
         if matches.contains_id(param_id) {
             // If value is provided, parse it
             if let Some(value_str) = matches.get_one::<String>(param_id) {
-                value_str == "true"
+                value_str == BOOL_TRUE
             } else {
                 // Flag present without value means true
                 true
@@ -122,7 +149,7 @@ impl ArgumentExtractor {
                     let alias_str = c.to_string();
                     if matches.contains_id(&alias_str) {
                         if let Some(value_str) = matches.get_one::<String>(&alias_str) {
-                            value_str == "true"
+                            value_str == BOOL_TRUE
                         } else {
                             true
                         }
@@ -145,7 +172,7 @@ impl ArgumentExtractor {
         if matches.contains_id(param_id) {
             // If value is provided, parse it
             if let Some(value_str) = matches.get_one::<String>(param_id) {
-                value_str == "true"
+                value_str == BOOL_TRUE
             } else {
                 // Flag present without value means true
                 true
@@ -160,7 +187,7 @@ impl ArgumentExtractor {
                     let alias_str = c.to_string();
                     if matches.contains_id(&alias_str) {
                         if let Some(value_str) = matches.get_one::<String>(&alias_str) {
-                            value_str == "true"
+                            value_str == BOOL_TRUE
                         } else {
                             true
                         }
@@ -172,41 +199,52 @@ impl ArgumentExtractor {
         }
     }
 
-    fn extract_value_arg(
+    fn extract_value_arg_named(
         matches: &ArgMatches,
-        param: &Parameter,
-        _generator: &CliGenerator,
+        _param: &Parameter,
+        param_id: &str,
     ) -> Option<String> {
-        matches
-            .get_one::<String>(&param.name)
-            .cloned()
-            .or_else(|| {
-                param.alias.as_ref().and_then(|alias| {
-                    alias
-                        .chars()
-                        .next()
-                        .and_then(|c| matches.get_one::<String>(&c.to_string()).cloned())
-                })
-            })
+        // For named arguments, clap uses the param_id (parameter name) as the ID
+        // The alias is only used for the short option, but the ID remains the parameter name
+        matches.get_one::<String>(param_id).cloned()
     }
 
-    fn extract_value_arg_for_default(
+    fn extract_value_arg_positional(
         matches: &ArgMatches,
         param: &Parameter,
-        generator: &CliGenerator,
     ) -> Option<String> {
-        let param_id = generator.get_param_id(&param.name);
-        matches
-            .get_one::<String>(param_id)
-            .cloned()
-            .or_else(|| {
-                param.alias.as_ref().and_then(|alias| {
-                    alias
-                        .chars()
-                        .next()
-                        .and_then(|c| matches.get_one::<String>(&c.to_string()).cloned())
-                })
-            })
+        // Positional arguments are accessible by their name
+        matches.get_one::<String>(&param.name).cloned()
+    }
+
+    fn extract_bool_positional(
+        matches: &ArgMatches,
+        param: &Parameter,
+    ) -> bool {
+        // For positional bool arguments, check if value exists
+        if let Some(value_str) = matches.get_one::<String>(&param.name) {
+            value_str == BOOL_TRUE
+        } else {
+            // If not provided and has default, use default
+            // Otherwise false
+            false
+        }
+    }
+
+    fn extract_value_arg_for_default_named(
+        matches: &ArgMatches,
+        param_id: &str,
+    ) -> Option<String> {
+        // For named arguments, use the param_id directly
+        matches.get_one::<String>(param_id).cloned()
+    }
+
+    fn extract_value_arg_for_default_positional(
+        matches: &ArgMatches,
+        param: &Parameter,
+    ) -> Option<String> {
+        // Positional arguments are accessible by their name
+        matches.get_one::<String>(&param.name).cloned()
     }
 }
 

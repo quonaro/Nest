@@ -8,8 +8,20 @@ use super::ast::{Command, Directive, Parameter, Value};
 use super::env::EnvironmentManager;
 use super::executor::CommandExecutor;
 use super::template::TemplateProcessor;
+use crate::constants::{
+    APP_DESCRIPTION, APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_SHOW, FLAG_VERSION,
+    FORMAT_AST, FORMAT_JSON, RESERVED_FLAG_HELP, RESERVED_FLAG_VERSION, RESERVED_SHORT_HELP,
+    RESERVED_SHORT_OPTIONS, RESERVED_SHORT_VERSION, SHORT_VERSION,
+};
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
+
+/// Represents a conflict with a reserved short option.
+struct ShortAliasConflict {
+    short: char,
+    param_name: String,
+    command_path: String,
+}
 
 /// Generates a CLI interface from parsed commands.
 ///
@@ -56,7 +68,7 @@ impl CliGenerator {
         let mut ids = std::collections::HashMap::new();
 
         for command in commands {
-            if let Some(default_cmd) = command.children.iter().find(|c| c.name == "default") {
+            if let Some(default_cmd) = command.children.iter().find(|c| c.name == DEFAULT_SUBCOMMAND) {
                 for param in &default_cmd.parameters {
                     let static_str: &'static str =
                         Box::leak(param.name.clone().into_boxed_str());
@@ -98,32 +110,134 @@ impl CliGenerator {
     /// # Returns
     ///
     /// Returns a `ClapCommand` ready to be used with `get_matches()`.
-    pub fn build_cli(&self) -> ClapCommand {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there are conflicts with reserved short option names.
+    pub fn build_cli(&self) -> Result<ClapCommand, String> {
+        // Check for reserved short option conflicts
+        self.validate_short_aliases()?;
+
         let mut app = Self::create_base_cli();
 
         for command in &self.commands {
             app = self.add_command_to_clap(app, command);
         }
 
-        app
+        Ok(app)
+    }
+
+    /// Validates that no parameter aliases conflict with reserved short options.
+    ///
+    /// Reserved short options:
+    /// - `h` - reserved for `--help`
+    /// - `V` - reserved for `--version`
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if no conflicts found, `Err(message)` with a user-friendly error message otherwise.
+    fn validate_short_aliases(&self) -> Result<(), String> {
+        let mut conflicts = Vec::new();
+
+        self.collect_short_aliases(&mut conflicts);
+
+        for conflict in conflicts {
+            let reserved_for = match conflict.short {
+                RESERVED_SHORT_HELP => RESERVED_FLAG_HELP,
+                RESERVED_SHORT_VERSION => RESERVED_FLAG_VERSION,
+                _ => unreachable!(),
+            };
+
+            return Err(format!(
+                "❌ Error: Short option '-{}' is reserved for '--{}'\n\n\
+                 Parameter '{}' in command '{}' uses reserved alias '-{}'.\n\
+                 Please use a different alias (e.g., change '{}|{}' to '{}|i').",
+                conflict.short,        // 1: -{}
+                reserved_for,          // 2: --{}
+                conflict.param_name,   // 3: '{}'
+                conflict.command_path, // 4: '{}'
+                conflict.short,        // 5: -{}
+                conflict.param_name,   // 6: '{}|{}' first
+                conflict.short,        // 7: '{}|{}' second
+                conflict.param_name    // 8: '{}|i'
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Collects all short aliases from all commands and checks for conflicts.
+    fn collect_short_aliases(&self, conflicts: &mut Vec<ShortAliasConflict>) {
+        for command in &self.commands {
+            self.collect_short_aliases_recursive(command, &[command.name.clone()], conflicts);
+        }
+    }
+
+    fn collect_short_aliases_recursive(
+        &self,
+        command: &Command,
+        path: &[String],
+        conflicts: &mut Vec<ShortAliasConflict>,
+    ) {
+
+        // Check parameters of this command
+        for param in &command.parameters {
+            if let Some(alias) = &param.alias {
+                if let Some(short) = alias.chars().next() {
+                    if RESERVED_SHORT_OPTIONS.contains(&short) {
+                        conflicts.push(ShortAliasConflict {
+                            short,
+                            param_name: param.name.clone(),
+                            command_path: path.join(" "),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Check default subcommand parameters
+        if let Some(default_cmd) = command.children.iter().find(|c| c.name == DEFAULT_SUBCOMMAND) {
+            for param in &default_cmd.parameters {
+                if let Some(alias) = &param.alias {
+                    if let Some(short) = alias.chars().next() {
+                        if RESERVED_SHORT_OPTIONS.contains(&short) {
+                            let mut path = path.to_vec();
+                            path.push(DEFAULT_SUBCOMMAND.to_string());
+                            conflicts.push(ShortAliasConflict {
+                                short,
+                                param_name: param.name.clone(),
+                                command_path: path.join(" "),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recursively check child commands
+        for child in &command.children {
+            let mut child_path = path.to_vec();
+            child_path.push(child.name.clone());
+            self.collect_short_aliases_recursive(child, &child_path, conflicts);
+        }
     }
 
     fn create_base_cli() -> ClapCommand {
-        ClapCommand::new("nest")
-            .about("Nest task runner")
+        ClapCommand::new(APP_NAME)
+            .about(APP_DESCRIPTION)
             .arg(
-                Arg::new("version")
-                    .long("version")
-                    .short('V')
+                Arg::new(FLAG_VERSION)
+                    .long(FLAG_VERSION)
+                    .short(SHORT_VERSION)
                     .action(ArgAction::SetTrue)
                     .hide(true)
                     .help("Print version information"),
             )
             .arg(
-                Arg::new("show")
-                    .long("show")
+                Arg::new(FLAG_SHOW)
+                    .long(FLAG_SHOW)
                     .value_name("FORMAT")
-                    .value_parser(["json", "ast"])
+                    .value_parser([FORMAT_JSON, FORMAT_AST])
                     .hide(true)
                     .help("Show commands in different formats (json, ast)"),
             )
@@ -157,10 +271,24 @@ impl CliGenerator {
         parameters: &[Parameter],
         generator: &CliGenerator,
     ) -> ClapCommand {
+        // First, add all named arguments (they don't use indices)
         for param in parameters {
-            let arg = generator.parameter_to_arg(param);
-            subcmd = subcmd.arg(arg);
+            if param.is_named {
+                let arg = generator.parameter_to_arg(param);
+                subcmd = subcmd.arg(arg);
+            }
         }
+        
+        // Then, add all positional arguments with sequential indices
+        let mut positional_index = 1; // Start from 1 (0 is command name)
+        for param in parameters {
+            if !param.is_named {
+                let arg = generator.parameter_to_arg_positional(param, positional_index);
+                subcmd = subcmd.arg(arg);
+                positional_index += 1;
+            }
+        }
+        
         subcmd
     }
 
@@ -170,11 +298,24 @@ impl CliGenerator {
         generator: &CliGenerator,
     ) -> ClapCommand {
         if !command.children.is_empty() {
-            if let Some(default_cmd) = command.children.iter().find(|c| c.name == "default") {
+            if let Some(default_cmd) = command.children.iter().find(|c| c.name == DEFAULT_SUBCOMMAND) {
+                // First, add all named arguments
                 for param in &default_cmd.parameters {
-                    let param_id = generator.get_param_id(&param.name);
-                    let arg = generator.parameter_to_arg_with_id(param, param_id);
-                    subcmd = subcmd.arg(arg);
+                    if param.is_named {
+                        let param_id = generator.get_param_id(&param.name);
+                        let arg = generator.parameter_to_arg_with_id(param, param_id);
+                        subcmd = subcmd.arg(arg);
+                    }
+                }
+                
+                // Then, add all positional arguments with sequential indices
+                let mut positional_index = 1;
+                for param in &default_cmd.parameters {
+                    if !param.is_named {
+                        let arg = generator.parameter_to_arg_positional(param, positional_index);
+                        subcmd = subcmd.arg(arg);
+                        positional_index += 1;
+                    }
                 }
             }
         }
@@ -197,13 +338,42 @@ impl CliGenerator {
         arg
     }
 
+    fn parameter_to_arg_positional(&self, param: &Parameter, index: usize) -> Arg {
+        let param_name: &'static str = Box::leak(param.name.clone().into_boxed_str());
+        let mut arg = Arg::new(param_name)
+            .index(index);
+
+        match param.param_type.as_str() {
+            "bool" => {
+                // Positional bool arguments are not common, but we'll support them
+                let help_text = format!("Positional argument: {} (bool)", param.name);
+                if param.default.is_some() {
+                    arg = arg.required(false).help(help_text);
+                } else {
+                    arg = arg.required(true).help(help_text);
+                }
+            }
+            _ => {
+                if param.default.is_some() {
+                    let help_text = format!("Positional argument: {} ({})", param.name, param.param_type);
+                    arg = arg.required(false).help(help_text);
+                } else {
+                    let help_text = format!("Required positional argument: {} ({})", param.name, param.param_type);
+                    arg = arg.required(true).help(help_text);
+                }
+            }
+        }
+
+        arg
+    }
+
     fn build_bool_flag(arg: &mut Arg, param: &Parameter, param_id: &'static str) {
         // Allow boolean flags to accept true/false values or be used as a flag (defaults to true)
         let mut new_arg = arg
             .clone()
             .long(param_id)
             .action(ArgAction::Set)
-            .value_parser(["true", "false"])
+            .value_parser([BOOL_TRUE, BOOL_FALSE])
             .num_args(0..=1)
             .help(format!("Flag: {} (true/false, or use without value for true)", param.name));
 
@@ -219,7 +389,7 @@ impl CliGenerator {
         if param.default.is_some() {
             Self::build_optional_arg(arg, param, param_id);
         } else {
-            Self::build_required_arg(arg, param);
+            Self::build_required_arg(arg, param, param_id);
         }
     }
 
@@ -239,13 +409,21 @@ impl CliGenerator {
         *arg = new_arg;
     }
 
-    fn build_required_arg(arg: &mut Arg, param: &Parameter) {
+    fn build_required_arg(arg: &mut Arg, param: &Parameter, param_id: &'static str) {
         let help_text = format!("Required parameter: {} ({})", param.name, param.param_type);
-        *arg = arg
+        let mut new_arg = arg
             .clone()
+            .long(param_id)
             .help(help_text)
             .required(true)
             .action(ArgAction::Set);
+        
+        if let Some(alias) = &param.alias {
+            if let Some(short) = alias.chars().next() {
+                new_arg = new_arg.short(short);
+            }
+        }
+        *arg = new_arg;
     }
 
     /// Converts a Value to its string representation.
@@ -314,7 +492,7 @@ impl CliGenerator {
     ///
     /// Returns `true` if the command has a child named "default", `false` otherwise.
     pub fn has_default_command(&self, command: &Command) -> bool {
-        command.children.iter().any(|c| c.name == "default")
+        command.children.iter().any(|c| c.name == DEFAULT_SUBCOMMAND)
     }
 
     /// Executes a command with the provided arguments.

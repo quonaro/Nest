@@ -3,7 +3,7 @@
 //! This module parses the Nestfile syntax into an Abstract Syntax Tree (AST).
 //! It handles nested commands, parameters, directives, and multiline constructs.
 
-use crate::constants::INDENT_SIZE;
+use crate::constants::{BOOL_FALSE, BOOL_TRUE, INDENT_SIZE};
 use super::ast::{Command, Parameter, Value, Directive};
 
 /// Parser state for processing Nestfile content.
@@ -271,7 +271,8 @@ impl Parser {
     }
 
     fn parse_parameter(&self, param_str: &str) -> Result<Parameter, ParseError> {
-        // Format: name|alias: type = default
+        // Format: [!]name|alias: type = default
+        // ! prefix means named argument (uses --name)
         let parts: Vec<&str> = param_str.split(':').collect();
         
         if parts.len() < 2 {
@@ -282,14 +283,21 @@ impl Parser {
         let type_default_str: String = parts[1..].join(":");
         let type_default = type_default_str.trim();
         
+        // Check if it's a named argument (starts with !)
+        let (is_named, name_part_clean) = if name_part.starts_with('!') {
+            (true, &name_part[1..])
+        } else {
+            (false, name_part)
+        };
+        
         // Parse name and alias
-        let (name, alias) = if let Some(pipe_pos) = name_part.find('|') {
+        let (name, alias) = if let Some(pipe_pos) = name_part_clean.find('|') {
             (
-                name_part[..pipe_pos].trim().to_string(),
-                Some(name_part[pipe_pos + 1..].trim().to_string())
+                name_part_clean[..pipe_pos].trim().to_string(),
+                Some(name_part_clean[pipe_pos + 1..].trim().to_string())
             )
         } else {
-            (name_part.to_string(), None)
+            (name_part_clean.to_string(), None)
         };
         
         // Parse type and default
@@ -307,6 +315,7 @@ impl Parser {
             alias,
             param_type,
             default,
+            is_named,
         })
     }
 
@@ -320,10 +329,10 @@ impl Parser {
         }
         
         // Boolean
-        if trimmed == "true" {
+        if trimmed == BOOL_TRUE {
             return Ok(Value::Bool(true));
         }
-        if trimmed == "false" {
+        if trimmed == BOOL_FALSE {
             return Ok(Value::Bool(false));
         }
         

@@ -55,11 +55,62 @@ build(target: str = "x86_64", release: bool = false):
 - `arr` - Array of strings
 
 **Parameter Features:**
+- **Positional arguments**: `name: str` - passed without `--` prefix
+- **Named arguments**: `!name|n: str` - use `!` prefix to make it named (uses `--name` or `-n`)
 - Required parameters: `name: str` (no default value)
 - Optional parameters: `name: str = "default"` (with default value)
-- Aliases: `force|f: bool = false` (use `--force` or `-f`)
+- Aliases: `force|f: bool = false` or `!force|f: bool = false` (use `--force` or `-f`)
 
-**Usage:**
+**Usage Examples:**
+
+**Positional Arguments:**
+```nest
+greet(name: str, message: str):
+    > desc: Greet someone with a message
+    > script: echo "Hello {{name}}, {{message}}"
+```
+```bash
+nest greet "Alice" "welcome!"
+# Output: Hello Alice, welcome!
+```
+
+**Named Arguments (with `!` prefix):**
+```nest
+deploy(version: str, !env|e: str = "production", !force|f: bool = false):
+    > desc: Deploy application
+    > script: |
+        #!/bin/sh
+        echo "Deploying {{version}} to {{env}}"
+        if [ "{{force}}" = "true" ]; then
+            ./deploy.sh --force --env {{env}} {{version}}
+        else
+            ./deploy.sh --env {{env}} {{version}}
+        fi
+```
+```bash
+nest deploy "v1.2.3" --env staging
+nest deploy "v1.2.3" -e staging --force true
+nest deploy "v1.2.3"  # env defaults to "production"
+```
+
+**Mixed: Positional + Named:**
+```nest
+copy(source: str, !destination|d: str, !overwrite|o: bool = false):
+    > desc: Copy file with optional overwrite
+    > script: |
+        #!/bin/sh
+        if [ "{{overwrite}}" = "true" ]; then
+            cp -f "{{source}}" "{{destination}}"
+        else
+            cp "{{source}}" "{{destination}}"
+        fi
+```
+```bash
+nest copy "file.txt" --destination "backup.txt"
+nest copy "file.txt" -d "backup.txt" -o true
+```
+
+**Boolean Flags:**
 ```bash
 nest build --target aarch64-apple-darwin --release true
 nest build --target x86_64  # release defaults to false
@@ -86,18 +137,18 @@ Group related commands under a namespace:
 dev:
     > desc: Development tools
 
-    default(hot: bool = false):
+    default(!hot|h: bool = false):
         > desc: Start dev server
         > env: NODE_ENV=development
         > script: |
             #!/bin/sh
-            if [ "$hot" = "true" ]; then
+            if [ "{{hot}}" = "true" ]; then
                 nodemon src/index.js
             else
                 node src/index.js
             fi
 
-    lint(fix|f: bool = false):
+    lint(!fix|f: bool = false):
         > desc: Lint code
         > script: eslint src/ ${fix:+--fix}
 ```
@@ -105,9 +156,11 @@ dev:
 **Usage:**
 ```bash
 nest dev                    # Runs default subcommand
-nest dev --hot true         # Pass arguments to default
+nest dev --hot true         # Pass named argument to default
+nest dev -h true            # Use short alias
 nest dev lint               # Run lint subcommand
 nest dev lint --fix true    # Run lint with fix flag
+nest dev lint -f true       # Use short alias
 ```
 
 ### Template Variables
@@ -137,6 +190,7 @@ See `nestfile.example` for a complete working example with:
 - Multiple command types
 - Nested command groups
 - Parameter types (str, bool, num, arr)
+- **Positional and named arguments**
 - Environment variable management
 - Multiline scripts
 
@@ -149,6 +203,8 @@ See `nestfile.example` for a complete working example with:
 - Nested subcommands
 - Default subcommands for groups
 - Command parameters with types (str, bool, num, arr)
+- **Positional arguments** (without `--` prefix)
+- **Named arguments** (with `!` prefix, uses `--name` or `-n`)
 - Parameter aliases
 - Default parameter values
 

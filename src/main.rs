@@ -7,6 +7,7 @@
 mod constants;
 mod nestparse;
 
+use constants::{FLAG_SHOW, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
 use nestparse::cli::{handle_json, handle_show_ast, handle_version, CliGenerator};
 use nestparse::command_handler::CommandHandler;
 use nestparse::file::read_config_file;
@@ -39,7 +40,13 @@ fn main() {
     };
 
     let generator = CliGenerator::new(commands.clone());
-    let mut cli = generator.build_cli();
+    let mut cli = match generator.build_cli() {
+        Ok(cli) => cli,
+        Err(e) => {
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
     let matches = cli.clone().get_matches();
 
     if handle_special_flags(&matches, &commands) {
@@ -107,18 +114,18 @@ fn load_and_parse_config() -> Result<Vec<nestparse::ast::Command>, String> {
 /// Returns `true` if a special flag was handled (and execution should stop),
 /// `false` otherwise.
 fn handle_special_flags(matches: &clap::ArgMatches, commands: &[nestparse::ast::Command]) -> bool {
-    if matches.get_flag("version") {
+    if matches.get_flag(FLAG_VERSION) {
         handle_version();
         return true;
     }
 
-    if let Some(format) = matches.get_one::<String>("show") {
+    if let Some(format) = matches.get_one::<String>(FLAG_SHOW) {
         match format.as_str() {
-            "ast" => {
+            FORMAT_AST => {
                 handle_show_ast(commands);
                 return true;
             }
-            "json" => {
+            FORMAT_JSON => {
                 if let Err(e) = handle_json(commands) {
                     eprintln!("Error: JSON generation failed: {}", e);
                     process::exit(1);
@@ -126,7 +133,10 @@ fn handle_special_flags(matches: &clap::ArgMatches, commands: &[nestparse::ast::
                 return true;
             }
             _ => {
-                eprintln!("Error: Unknown format: {}. Available: json, ast", format);
+                eprintln!(
+                    "Error: Unknown format: {}. Available: {}, {}",
+                    format, FORMAT_JSON, FORMAT_AST
+                );
                 process::exit(1);
             }
         }

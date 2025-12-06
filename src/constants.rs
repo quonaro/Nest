@@ -26,3 +26,74 @@ pub const RESERVED_WORDS: [&str; 2] = ["nest", "default"];
 /// - `arr` - Array of strings
 #[allow(dead_code)]
 pub const DATA_TYPES: [&str; 4] = ["str", "bool", "num", "arr"];
+
+// CLI Application Constants
+
+/// The name of the CLI application.
+pub const APP_NAME: &str = "nest";
+
+/// Description of the CLI application.
+pub const APP_DESCRIPTION: &str = "Nest task runner";
+
+// CLI Special Flags
+
+/// Flag name for version information.
+pub const FLAG_VERSION: &str = "version";
+
+/// Flag name for showing commands in different formats.
+pub const FLAG_SHOW: &str = "show";
+
+/// Format option for JSON output.
+pub const FORMAT_JSON: &str = "json";
+
+/// Format option for AST output.
+pub const FORMAT_AST: &str = "ast";
+
+/// Short option for version flag.
+pub const SHORT_VERSION: char = 'V';
+
+// Command Structure Constants
+
+/// Name of the default subcommand in group commands.
+pub const DEFAULT_SUBCOMMAND: &str = "default";
+
+// Boolean Values
+
+/// String representation of boolean true.
+pub const BOOL_TRUE: &str = "true";
+
+/// String representation of boolean false.
+pub const BOOL_FALSE: &str = "false";
+
+// Reserved Short Options
+
+/// Reserved short option for help.
+pub const RESERVED_SHORT_HELP: char = 'h';
+
+/// Reserved short option for version.
+pub const RESERVED_SHORT_VERSION: char = 'V';
+
+/// Reserved short options that cannot be used as parameter aliases.
+pub const RESERVED_SHORT_OPTIONS: &[char] = &[RESERVED_SHORT_HELP, RESERVED_SHORT_VERSION];
+
+/// Name of the help flag (reserved).
+pub const RESERVED_FLAG_HELP: &str = "help";
+
+/// Name of the version flag (reserved).
+pub const RESERVED_FLAG_VERSION: &str = "version";
+
+// Template Variables
+
+/// Template variable for current UTC time.
+pub const TEMPLATE_VAR_NOW: &str = "{{now}}";
+
+/// Template variable for current user.
+pub const TEMPLATE_VAR_USER: &str = "{{user}}";
+
+// Environment Variables
+
+/// Environment variable name for current user.
+pub const ENV_VAR_USER: &str = "USER";
+
+/// Default value for user when USER environment variable is not set.
+pub const DEFAULT_USER: &str = "unknown";
