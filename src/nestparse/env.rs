@@ -1,11 +1,38 @@
+//! Environment variable management for command execution.
+//!
+//! This module handles extracting and loading environment variables from
+//! directives, including support for .env files and direct assignments.
+
 use super::ast::Directive;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+/// Manages environment variables for command execution.
+///
+/// This is a utility struct with static methods for environment variable handling.
 pub struct EnvironmentManager;
 
 impl EnvironmentManager {
+    /// Extracts environment variables from directives.
+    ///
+    /// This function processes `Directive::Env` directives and:
+    /// - Loads variables from .env files (if the value starts with '.' and the file exists)
+    /// - Parses direct assignments (if the value contains '=')
+    ///
+    /// # Arguments
+    ///
+    /// * `directives` - List of directives to process
+    ///
+    /// # Returns
+    ///
+    /// Returns a HashMap of environment variable names to values.
+    ///
+    /// # Example
+    ///
+    /// Directives like:
+    /// - `> env: .env.local` - Loads from file
+    /// - `> env: NODE_ENV=production` - Direct assignment
     pub fn extract_env_vars(directives: &[Directive]) -> HashMap<String, String> {
         let mut env_vars = HashMap::new();
 

@@ -1,3 +1,11 @@
+//! Core parsing and execution modules for Nest.
+//!
+//! This module contains all the functionality for:
+//! - Parsing Nestfile configuration files
+//! - Building dynamic CLI interfaces
+//! - Executing commands and scripts
+//! - Managing environment variables and templates
+
 pub mod args;
 pub mod ast;
 pub mod cli;

@@ -1,11 +1,35 @@
+//! Argument extraction from parsed CLI arguments.
+//!
+//! This module handles extracting command arguments from clap's ArgMatches
+//! and converting them into a format suitable for script execution.
+
 use super::ast::Parameter;
 use super::cli::CliGenerator;
 use clap::ArgMatches;
 use std::collections::HashMap;
 
+/// Extracts arguments from parsed CLI matches.
+///
+/// This is a utility struct with static methods for argument extraction.
 pub struct ArgumentExtractor;
 
 impl ArgumentExtractor {
+    /// Extracts arguments from clap matches for a regular command.
+    ///
+    /// This function processes all parameters and extracts their values from
+    /// the parsed CLI arguments. For parameters without provided values,
+    /// it uses default values if available.
+    ///
+    /// # Arguments
+    ///
+    /// * `matches` - The parsed CLI arguments from clap
+    /// * `parameters` - List of parameters to extract
+    /// * `generator` - CLI generator for parameter ID resolution
+    ///
+    /// # Returns
+    ///
+    /// Returns a HashMap of parameter names to their string values.
+    /// Boolean parameters are converted to "true" or "false".
     pub fn extract_from_matches(
         matches: &ArgMatches,
         parameters: &[Parameter],
@@ -31,6 +55,21 @@ impl ArgumentExtractor {
         args
     }
 
+    /// Extracts arguments from clap matches for a default subcommand.
+    ///
+    /// This is similar to `extract_from_matches`, but handles the special case
+    /// where arguments are passed to a parent group command but should be
+    /// applied to the default subcommand.
+    ///
+    /// # Arguments
+    ///
+    /// * `matches` - The parsed CLI arguments from clap (for the parent group)
+    /// * `parameters` - List of parameters from the default subcommand
+    /// * `generator` - CLI generator for parameter ID resolution
+    ///
+    /// # Returns
+    ///
+    /// Returns a HashMap of parameter names to their string values.
     pub fn extract_for_default_command(
         matches: &ArgMatches,
         parameters: &[Parameter],

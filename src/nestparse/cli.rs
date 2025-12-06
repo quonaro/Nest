@@ -1,3 +1,9 @@
+//! Dynamic CLI generation from parsed commands.
+//!
+//! This module builds a clap-based CLI interface dynamically from the parsed
+//! command structure. It handles nested commands, parameters, flags, and
+//! special cases like default subcommands.
+
 use super::ast::{Command, Directive, Parameter, Value};
 use super::env::EnvironmentManager;
 use super::executor::CommandExecutor;
@@ -5,12 +11,37 @@ use super::template::TemplateProcessor;
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
 
+/// Generates a CLI interface from parsed commands.
+///
+/// This struct builds a clap `Command` structure dynamically based on
+/// the commands parsed from the configuration file. It handles:
+/// - Nested command hierarchies
+/// - Parameter and flag definitions
+/// - Default subcommands
+/// - Special flags (--version, --show)
+///
+/// # Lifetime Management
+///
+/// Uses `Box::leak` to create `&'static str` values required by clap.
+/// This is necessary because clap requires static string references for
+/// argument IDs and names.
 pub struct CliGenerator {
+    /// The parsed commands from the configuration file
     commands: Vec<Command>,
+    /// Pre-allocated static strings for default command parameters
     default_param_ids: std::collections::HashMap<String, &'static str>,
 }
 
 impl CliGenerator {
+    /// Creates a new CLI generator from parsed commands.
+    ///
+    /// # Arguments
+    ///
+    /// * `commands` - The list of commands parsed from the configuration file
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `CliGenerator` instance ready to build CLI interfaces.
     pub fn new(commands: Vec<Command>) -> Self {
         let default_param_ids = Self::preallocate_default_param_ids(&commands);
         Self {
@@ -37,6 +68,19 @@ impl CliGenerator {
         ids
     }
 
+    /// Gets a static string reference for a parameter name.
+    ///
+    /// This is used to satisfy clap's requirement for `&'static str` references.
+    /// If the parameter ID was pre-allocated (for default commands), it returns
+    /// that. Otherwise, it leaks a new string.
+    ///
+    /// # Arguments
+    ///
+    /// * `param_name` - The parameter name
+    ///
+    /// # Returns
+    ///
+    /// Returns a `&'static str` reference to the parameter name.
     pub fn get_param_id(&self, param_name: &str) -> &'static str {
         self.default_param_ids
             .get(param_name)
@@ -46,6 +90,14 @@ impl CliGenerator {
             })
     }
 
+    /// Builds a complete clap CLI structure from the parsed commands.
+    ///
+    /// This function creates the root CLI command and recursively adds all
+    /// commands and subcommands with their parameters and flags.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `ClapCommand` ready to be used with `get_matches()`.
     pub fn build_cli(&self) -> ClapCommand {
         let mut app = Self::create_base_cli();
 
@@ -196,6 +248,18 @@ impl CliGenerator {
             .action(ArgAction::Set);
     }
 
+    /// Converts a Value to its string representation.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value to convert
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(string)` with the string representation,
+    /// or `None` if conversion is not possible.
+    ///
+    /// Arrays are joined with commas.
     pub fn value_to_string(&self, value: &Value) -> Option<String> {
         match value {
             Value::String(s) => Some(s.clone()),
@@ -215,6 +279,15 @@ impl CliGenerator {
         })
     }
 
+    /// Finds a command by its path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The command path (e.g., ["dev", "default"])
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(command)` if found, `None` otherwise.
     pub fn find_command(&self, path: &[String]) -> Option<&Command> {
         let mut current = &self.commands;
         let mut found: Option<&Command> = None;
@@ -231,10 +304,43 @@ impl CliGenerator {
         found
     }
 
+    /// Checks if a command has a default subcommand.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command to check
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the command has a child named "default", `false` otherwise.
     pub fn has_default_command(&self, command: &Command) -> bool {
         command.children.iter().any(|c| c.name == "default")
     }
 
+    /// Executes a command with the provided arguments.
+    ///
+    /// This function:
+    /// 1. Extracts the script from the command's directives
+    /// 2. Processes template variables in the script
+    /// 3. Extracts environment variables from directives
+    /// 4. Executes the script with the configured environment
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command to execute
+    /// * `args` - Arguments to pass to the command
+    /// * `command_path` - Full path to the command (for error reporting)
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if execution succeeded,
+    /// `Err(message)` if execution failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Command has no script directive
+    /// - Script execution fails
     pub fn execute_command(
         &self,
         command: &Command,
@@ -264,6 +370,17 @@ pub fn handle_version() {
     std::process::exit(0);
 }
 
+/// Handles the --show json flag.
+///
+/// Converts commands to JSON format and prints them.
+///
+/// # Arguments
+///
+/// * `commands` - The list of commands to serialize
+///
+/// # Returns
+///
+/// Returns `Ok(())` if successful, `Err(error)` if serialization fails.
 pub fn handle_json(commands: &[Command]) -> Result<(), Box<dyn std::error::Error>> {
     use super::json::to_json;
     let json = to_json(commands)?;
@@ -271,6 +388,13 @@ pub fn handle_json(commands: &[Command]) -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
+/// Handles the --show ast flag.
+///
+/// Prints commands in a tree format showing the AST structure.
+///
+/// # Arguments
+///
+/// * `commands` - The list of commands to display
 pub fn handle_show_ast(commands: &[Command]) {
     use super::display::print_command;
     println!("🌳 AST Structure:\n");

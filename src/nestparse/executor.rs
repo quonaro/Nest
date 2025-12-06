@@ -1,10 +1,54 @@
+//! Script execution and error reporting.
+//!
+//! This module handles the actual execution of shell scripts defined in commands,
+//! including environment variable setup, working directory configuration,
+//! and detailed error reporting with beautiful formatting.
+
 use super::ast::Command;
 use std::collections::HashMap;
 use std::process::{Command as ProcessCommand, Stdio};
 
+/// Executes shell scripts for commands.
+///
+/// This is a utility struct with static methods for script execution.
 pub struct CommandExecutor;
 
 impl CommandExecutor {
+    /// Executes a shell script with the provided arguments and environment.
+    ///
+    /// This function:
+    /// 1. Sets up the working directory (if specified)
+    /// 2. Configures environment variables from directives and arguments
+    /// 3. Executes the script using `sh -c`
+    /// 4. Captures and displays stdout/stderr
+    /// 5. Formats detailed error messages if execution fails
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command being executed (for error reporting)
+    /// * `args` - Command arguments as key-value pairs (also set as env vars)
+    /// * `script` - The shell script to execute
+    /// * `env_vars` - Environment variables from directives
+    /// * `cwd` - Optional working directory for script execution
+    /// * `command_path` - Full path to command (for error reporting)
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if execution succeeded,
+    /// `Err(message)` with a formatted error message if execution failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Script execution fails to start
+    /// - Script exits with non-zero status code
+    ///
+    /// The error message includes:
+    /// - Command path and arguments
+    /// - Working directory
+    /// - Script preview
+    /// - Exit code
+    /// - Helpful suggestions (e.g., missing commands)
     pub fn execute(
         command: &Command,
         args: &HashMap<String, String>,

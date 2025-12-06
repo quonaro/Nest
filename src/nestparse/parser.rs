@@ -1,21 +1,44 @@
+//! Parser for Nestfile configuration files.
+//!
+//! This module parses the Nestfile syntax into an Abstract Syntax Tree (AST).
+//! It handles nested commands, parameters, directives, and multiline constructs.
+
 use crate::constants::INDENT_SIZE;
 use super::ast::{Command, Parameter, Value, Directive};
 
-// Parser state
+/// Parser state for processing Nestfile content.
+///
+/// The parser maintains its position in the file and processes commands
+/// recursively based on indentation levels.
 pub struct Parser {
+    /// All lines of the configuration file
     lines: Vec<String>,
+    /// Current position in the file (line index)
     current_index: usize,
 }
 
+/// Errors that can occur during parsing.
 #[derive(Debug)]
 pub enum ParseError {
+    /// Unexpected end of file (e.g., incomplete command definition)
     UnexpectedEndOfFile,
+    /// Invalid syntax in the configuration file
     #[allow(dead_code)]
     InvalidSyntax(String),
+    /// Invalid indentation (e.g., child command not properly indented)
     InvalidIndent,
 }
 
 impl Parser {
+    /// Creates a new parser from file content.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - The entire content of the configuration file
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `Parser` instance ready to parse the content.
     pub fn new(content: &str) -> Self {
         let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         Self {
@@ -24,6 +47,22 @@ impl Parser {
         }
     }
 
+    /// Parses the entire configuration file into a list of commands.
+    ///
+    /// This is the main entry point for parsing. It processes all top-level
+    /// commands and their nested structure.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(commands)` with the parsed command structure,
+    /// or `Err(error)` if parsing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - File structure is invalid
+    /// - Indentation is incorrect
+    /// - Unexpected end of file
     pub fn parse(&mut self) -> Result<Vec<Command>, ParseError> {
         let mut commands = Vec::new();
         

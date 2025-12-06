@@ -1,3 +1,9 @@
+//! Nest - A task runner and CLI generator based on declarative configuration files.
+//!
+//! This is the main entry point for the Nest application. It loads and parses
+//! the configuration file (nestfile), builds a CLI interface dynamically,
+//! and executes commands based on user input.
+
 mod constants;
 mod nestparse;
 
@@ -8,6 +14,21 @@ use nestparse::parser::Parser;
 use nestparse::path::find_config_file;
 use std::process;
 
+/// Main entry point of the application.
+///
+/// This function:
+/// 1. Loads and parses the configuration file (nestfile)
+/// 2. Builds a dynamic CLI using clap based on the parsed commands
+/// 3. Handles special flags (--version, --show)
+/// 4. Executes the requested command or shows help
+///
+/// # Errors
+///
+/// Exits with code 1 if:
+/// - Configuration file is not found
+/// - Configuration file cannot be read
+/// - Parsing fails
+/// - Command execution fails
 fn main() {
     let commands = match load_and_parse_config() {
         Ok(commands) => commands,
@@ -40,6 +61,24 @@ fn main() {
     }
 }
 
+/// Loads and parses the configuration file.
+///
+/// This function:
+/// 1. Searches for a configuration file in the current directory
+/// 2. Reads the file content
+/// 3. Parses it into a list of Command structures
+///
+/// # Returns
+///
+/// - `Ok(commands)` - Successfully parsed list of commands
+/// - `Err(message)` - Error message describing what went wrong
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - No configuration file is found
+/// - File cannot be read
+/// - Parsing fails
 fn load_and_parse_config() -> Result<Vec<nestparse::ast::Command>, String> {
     let config_path =
         find_config_file().ok_or_else(|| "Configuration file not found".to_string())?;
@@ -51,6 +90,22 @@ fn load_and_parse_config() -> Result<Vec<nestparse::ast::Command>, String> {
     parser.parse().map_err(|e| format!("Parse error: {:?}", e))
 }
 
+/// Handles special global flags that don't execute commands.
+///
+/// Special flags include:
+/// - `--version` / `-V` - Prints version information
+/// - `--show json` - Outputs commands in JSON format
+/// - `--show ast` - Outputs commands as an Abstract Syntax Tree
+///
+/// # Arguments
+///
+/// * `matches` - The parsed CLI arguments from clap
+/// * `commands` - The list of parsed commands from the configuration file
+///
+/// # Returns
+///
+/// Returns `true` if a special flag was handled (and execution should stop),
+/// `false` otherwise.
 fn handle_special_flags(matches: &clap::ArgMatches, commands: &[nestparse::ast::Command]) -> bool {
     if matches.get_flag("version") {
         handle_version();
@@ -80,6 +135,19 @@ fn handle_special_flags(matches: &clap::ArgMatches, commands: &[nestparse::ast::
     false
 }
 
+/// Extracts the command path from parsed CLI arguments.
+///
+/// For nested commands like `nest dev build`, this returns `["dev", "build"]`.
+/// For top-level commands like `nest build`, this returns `["build"]`.
+///
+/// # Arguments
+///
+/// * `matches` - The parsed CLI arguments from clap
+///
+/// # Returns
+///
+/// A vector of command names representing the path to the command.
+/// Returns an empty vector if no command was specified.
 fn extract_command_path(matches: &clap::ArgMatches) -> Vec<String> {
     let mut path = Vec::new();
     let mut current_matches = matches;
@@ -92,6 +160,23 @@ fn extract_command_path(matches: &clap::ArgMatches) -> Vec<String> {
     path
 }
 
+/// Handles the execution of a command.
+///
+/// This function determines the type of command and routes execution accordingly:
+/// - Group commands without a default subcommand: shows help
+/// - Group commands with a default subcommand: executes the default
+/// - Regular commands: executes the command's script
+///
+/// # Arguments
+///
+/// * `matches` - The parsed CLI arguments from clap
+/// * `command` - The command to execute
+/// * `command_path` - The full path to the command (e.g., ["dev", "default"])
+/// * `generator` - The CLI generator used to find and execute commands
+///
+/// # Errors
+///
+/// Exits with code 1 if command execution fails.
 fn handle_command_execution(
     matches: &clap::ArgMatches,
     command: &nestparse::ast::Command,

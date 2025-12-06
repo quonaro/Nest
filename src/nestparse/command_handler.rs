@@ -1,12 +1,37 @@
+//! Command execution orchestration.
+//!
+//! This module handles routing and executing different types of commands:
+//! - Group commands without default subcommands (show help)
+//! - Group commands with default subcommands (execute default)
+//! - Regular commands (execute directly)
+
 use super::ast::Command;
 use super::args::ArgumentExtractor;
 use super::cli::CliGenerator;
 use super::help::HelpFormatter;
 use clap::ArgMatches;
 
+/// Handles command execution routing and orchestration.
+///
+/// This is a utility struct with static methods for command handling.
 pub struct CommandHandler;
 
 impl CommandHandler {
+    /// Handles a group command that doesn't have a default subcommand.
+    ///
+    /// When a user calls a group command (like `nest dev`) without specifying
+    /// a subcommand and there's no default subcommand, this shows the help
+    /// message for the group.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The group command
+    /// * `command_path` - The full path to the command
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if help was displayed successfully,
+    /// `Err(())` otherwise.
     pub fn handle_group_without_default(
         command: &Command,
         command_path: &[String],
@@ -15,6 +40,28 @@ impl CommandHandler {
         Ok(())
     }
 
+    /// Handles execution of a default subcommand.
+    ///
+    /// When a user calls a group command (like `nest dev`) that has a
+    /// `default` subcommand, this function finds and executes that default
+    /// subcommand with the arguments passed to the parent group.
+    ///
+    /// # Arguments
+    ///
+    /// * `matches` - The parsed CLI arguments from clap
+    /// * `command_path` - The path to the parent group command
+    /// * `generator` - CLI generator for finding and executing commands
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if execution succeeded,
+    /// `Err(message)` if execution failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The default subcommand is not found
+    /// - Command execution fails
     pub fn handle_default_command(
         matches: &ArgMatches,
         command_path: &[String],
@@ -40,6 +87,28 @@ impl CommandHandler {
         generator.execute_command(default_cmd, &args, Some(&default_path))
     }
 
+    /// Handles execution of a regular (non-group) command.
+    ///
+    /// This function extracts arguments from the CLI matches and executes
+    /// the command's script with those arguments.
+    ///
+    /// # Arguments
+    ///
+    /// * `matches` - The parsed CLI arguments from clap
+    /// * `command` - The command to execute
+    /// * `generator` - CLI generator for executing commands
+    /// * `command_path` - The full path to the command
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if execution succeeded,
+    /// `Err(message)` if execution failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Command has no script directive
+    /// - Script execution fails
     pub fn handle_regular_command(
         matches: &ArgMatches,
         command: &Command,

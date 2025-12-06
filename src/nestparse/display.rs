@@ -1,5 +1,19 @@
+//! Display utilities for printing command structures.
+//!
+//! This module provides functions for displaying commands in a human-readable
+//! tree format, used by `nest --show ast`.
+
 use super::ast::{Command, Directive};
 
+/// Prints a command and its children in a tree format.
+///
+/// This function recursively prints the command structure with indentation,
+/// showing directives and child commands in a visual tree.
+///
+/// # Arguments
+///
+/// * `command` - The command to print
+/// * `indent` - The indentation level (number of spaces)
 pub fn print_command(command: &Command, indent: usize) {
     let indent_str = "  ".repeat(indent);
     println!("{}└─ {}", indent_str, command);
