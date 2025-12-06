@@ -82,10 +82,10 @@ export default {
     featureTemplateProcessing: 'Template Processing - Parameter substitution, special variables ([[now]], [[user]])',
     featureCLIFeatures: 'CLI Features - Dynamic CLI generation, help system, JSON/AST output',
     featureExecution: 'Execution - Script execution with environment variables and working directory support',
-    futureFunctions: 'Functions (@func) - Reusable script blocks',
-    futureLifecycle: 'Lifecycle hooks (@before, @after, @fallback)',
-    futureDependencies: 'Command dependencies (@depends)',
-    futureFunctionCalls: 'Function calls (@call)'
+    futureFunctions: 'Functions (@@func) - Reusable script blocks',
+    futureLifecycle: 'Lifecycle hooks (@@before, @@after, @@fallback)',
+    futureDependencies: 'Command dependencies (@@depends)',
+    futureFunctionCalls: 'Function calls (@@call)'
   },
   concepts: {
     title: 'Concepts',
