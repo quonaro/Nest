@@ -101,18 +101,72 @@ jobs:
       - name: Create archive (Unix)
         if: matrix.os != 'windows-latest'
         run: |
+          BINARY_PATH="target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
+          ARCHIVE_NAME="nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz"
+          CHECKSUM_NAME="${ARCHIVE_NAME}.sha256"
+          
+          if [ ! -f "$BINARY_PATH" ]; then
+            echo "Error: Binary not found at $BINARY_PATH"
+            exit 1
+          fi
+          
           cd target/${{ matrix.target }}/release
-          tar czf ../../../../nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz ${{ matrix.binary_name }}
+          tar czf ../../../../${ARCHIVE_NAME} ${{ matrix.binary_name }}
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to create archive ${ARCHIVE_NAME}"
+            exit 1
+          fi
           cd ../../../..
-          sha256sum nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz > nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz.sha256 || shasum -a 256 nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz > nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz.sha256
+          
+          if [ ! -f "${ARCHIVE_NAME}" ]; then
+            echo "Error: Archive ${ARCHIVE_NAME} was not created"
+            exit 1
+          fi
+          
+          sha256sum ${ARCHIVE_NAME} > ${CHECKSUM_NAME} || shasum -a 256 ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to create checksum ${CHECKSUM_NAME}"
+            exit 1
+          fi
+          
+          echo "Created archive: ${ARCHIVE_NAME}"
+          echo "Created checksum: ${CHECKSUM_NAME}"
+          ls -lh ${ARCHIVE_NAME} ${CHECKSUM_NAME}
 
       - name: Create archive (Windows)
         if: matrix.os == 'windows-latest'
         run: |
+          $BINARY_PATH = "target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
+          $ARCHIVE_NAME = "nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip"
+          $CHECKSUM_NAME = "${ARCHIVE_NAME}.sha256"
+          
+          if (-not (Test-Path $BINARY_PATH)) {
+            Write-Error "Error: Binary not found at $BINARY_PATH"
+            exit 1
+          }
+          
           cd target/${{ matrix.target }}/release
-          powershell Compress-Archive -Path ${{ matrix.binary_name }} -DestinationPath ../../../../nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip -Force
+          Compress-Archive -Path ${{ matrix.binary_name }} -DestinationPath ../../../../${ARCHIVE_NAME} -Force
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Failed to create archive ${ARCHIVE_NAME}"
+            exit 1
+          }
           cd ../../../..
-          powershell Get-FileHash -Algorithm SHA256 nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip.sha256
+          
+          if (-not (Test-Path ${ARCHIVE_NAME})) {
+            Write-Error "Error: Archive ${ARCHIVE_NAME} was not created"
+            exit 1
+          }
+          
+          Get-FileHash -Algorithm SHA256 ${ARCHIVE_NAME} | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 ${CHECKSUM_NAME}
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Failed to create checksum ${CHECKSUM_NAME}"
+            exit 1
+          }
+          
+          Write-Host "Created archive: ${ARCHIVE_NAME}"
+          Write-Host "Created checksum: ${CHECKSUM_NAME}"
+          Get-ChildItem ${ARCHIVE_NAME}, ${CHECKSUM_NAME} | Format-Table Name, Length
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
