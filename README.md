@@ -1,198 +1,214 @@
-Certainly! Here's the English version of your `DSL.md` documentation:
+# 🪺 Nest - Task Runner for CLI Commands
 
----
+**⚠️ MVP Version** - This is a Minimum Viable Product. I actively use this tool in my daily work and will continue to maintain and improve it. This project also serves as my learning journey in Rust programming.
 
-# 📜 Nestfile DSL Specification (v0.1)
+## 📋 About
 
-A `Nestfile` is a declarative configuration file for defining hierarchical, parameterized, and dependency-aware CLI commands with full support for hooks, templating, environment variables, and reusable functions.
+Nest is a declarative task runner that replaces brittle `Makefile`s and scattered shell scripts with a unified, readable, and maintainable task orchestration system. It's especially suited for polyglot, self-hosted, or automation-heavy projects.
 
-## 🌲 Example Command Tree
+## 🚀 Quick Start
 
-```text
-deploy <version> [--push] [--force]
-build
-test
-migrate
-├── up
-└── down
-nest
-└── cli
-    ├── run <name> [--dry]
-    └── build <name>
+1. Build the project:
+```bash
+cargo build --release
 ```
 
-## 🧩 Nestfile Structure
+2. Create a `Nestfile` in your project root (see `nestfile.example` for reference)
 
-### 1. Functions (`@func`)
-
-Reusable script blocks with parameters.
-
-```nest
-@func build_project(target):
-    @desc "Builds the project for the specified target platform"
-    @before echo "Building project for {{target}}..."
-    script:
-        cargo build --release --target {{target}}
-    @after echo "Build finished for {{target}}"
-    @fallback echo "Build failed for {{target}}"
+3. Run commands:
+```bash
+./target/release/nest <command>
 ```
 
-Features:
-- Named parameters (`target`)
-- Jinja-like templating via `{{var}}`
-- Lifecycle hooks: `@before`, `@after`, `@fallback`
-- Invokable via `@call func_name(args)`
+## 📝 Writing Nestfile
 
----
+### Basic Command Structure
 
-### 2. Top-Level Commands
-
-Standalone commands supporting arguments, flags, dependencies, and environment control.
+A Nestfile consists of commands with parameters, directives, and nested subcommands:
 
 ```nest
-deploy(version, push=false):
-    @desc "Deploys the application"
-    @args
-        -p, --push
-        version
-    @flags
-        --force
-    @env-file .env
-    @env
-        APP_ENV=prod
-    @defaults
-        push=false
-    @cwd ./project
-    @depends build test
-    @before
-        echo "Preparing deployment..."
-        @call notify("Deploy started")
-    @after
-        @call notify("Deploy finished")
-        echo "Deployment completed."
-    @fallback
-        echo "Deploy failed! Rolling back..."
-        ./rollback.sh
-    script:
-        @call build_project("x86_64-unknown-linux-gnu")
+command_name(param: type = default):
+    > desc: Description of the command
+    > cwd: ./working/directory
+    > env: VARIABLE_NAME=value
+    > env: .env.local
+    > script: |
+        #!/bin/sh
+        echo "Running command..."
+        ./script.sh {{param}}
+```
+
+### Command Parameters
+
+Parameters are defined in the function signature:
+
+```nest
+build(target: str = "x86_64", release: bool = false):
+    > desc: Build the project
+    > script: cargo build --target {{target}} ${release:+--release}
+```
+
+**Parameter Types:**
+- `str` - String value
+- `bool` - Boolean flag (true/false)
+- `num` - Numeric value
+- `arr` - Array of strings
+
+**Parameter Features:**
+- Required parameters: `name: str` (no default value)
+- Optional parameters: `name: str = "default"` (with default value)
+- Aliases: `force|f: bool = false` (use `--force` or `-f`)
+
+**Usage:**
+```bash
+nest build --target aarch64-apple-darwin --release true
+nest build --target x86_64  # release defaults to false
+```
+
+### Directives
+
+Directives control command behavior:
+
+- **`> desc:`** - Command description (shown in help)
+- **`> cwd:`** - Working directory for script execution
+- **`> env:`** - Environment variables:
+  - Direct assignment: `> env: NODE_ENV=production`
+  - Load from file: `> env: .env.local`
+- **`> script:`** - Script to execute:
+  - Single line: `> script: echo "Hello"`
+  - Multiline: `> script: |` (followed by indented script block)
+
+### Nested Commands
+
+Group related commands under a namespace:
+
+```nest
+dev:
+    > desc: Development tools
+
+    default(hot: bool = false):
+        > desc: Start dev server
+        > env: NODE_ENV=development
+        > script: |
+            #!/bin/sh
+            if [ "$hot" = "true" ]; then
+                nodemon src/index.js
+            else
+                node src/index.js
+            fi
+
+    lint(fix|f: bool = false):
+        > desc: Lint code
+        > script: eslint src/ ${fix:+--fix}
+```
+
+**Usage:**
+```bash
+nest dev                    # Runs default subcommand
+nest dev --hot true         # Pass arguments to default
+nest dev lint               # Run lint subcommand
+nest dev lint --fix true    # Run lint with fix flag
+```
+
+### Template Variables
+
+Use `{{variable}}` syntax in scripts:
+
+- **Parameters**: `{{param}}` - Replaced with parameter value
+- **Special variables**:
+  - `{{now}}` - Current UTC time in RFC3339 format
+  - `{{user}}` - Current user (from `$USER` environment variable)
+
+**Example:**
+```nest
+deploy(version: str):
+    > desc: Deploy application
+    > env: DEPLOYER={{user}}
+    > env: BUILD_TIME={{now}}
+    > script: |
+        #!/bin/sh
+        echo "Deploying {{version}} by {{user}} at {{now}}"
         ./deploy.sh {{version}}
-        if [ "{{push}}" = "true" ]; then
-            git push origin main
-        fi
 ```
 
-Features:
-- Required and optional arguments
-- Boolean flags (`--flag`)
-- Default values (`@defaults`)
-- Command dependencies (`@depends` — run *before* the main command)
-- Working directory (`@cwd`)
-- Environment control (`@env`, `@env-file`)
-- Embedded scripts and function calls
+### Complete Example
 
----
+See `nestfile.example` for a complete working example with:
+- Multiple command types
+- Nested command groups
+- Parameter types (str, bool, num, arr)
+- Environment variable management
+- Multiline scripts
 
-### 3. Nested Commands
+## ✨ Supported Features
 
-Group related subcommands under a namespace using the `cli` block.
+### Currently Implemented
 
-```nest
-nest:
-    cli:
-        @desc "Example of a nested CLI command"
+✅ **Command Structure**
+- Top-level commands
+- Nested subcommands
+- Default subcommands for groups
+- Command parameters with types (str, bool, num, arr)
+- Parameter aliases
+- Default parameter values
 
-        run(name):
-            @desc "Runs a named task"
-            @args
-                name
-            @flags
-                --dry
-            @env
-                DEBUG=true
-            script:
-                echo "Running {{name}}..."
-                if [ "{{dry}}" = "true" ]; then
-                    echo "(dry run)"
-                fi
+✅ **Directives**
+- `> desc:` - Command descriptions
+- `> cwd:` - Working directory
+- `> env:` - Environment variables (direct assignment and .env files)
+- `> script:` - Single-line and multiline scripts
 
-        build(name):
-            @desc "Builds using the nested CLI"
-            script:
-                @call build_project({{name}})
-```
+✅ **Template Processing**
+- Parameter substitution: `{{param}}`
+- Special variables: `{{now}}`, `{{user}}`
+- Template processing in scripts
 
-Usage:
-```sh
-nest nest cli run my-service --dry
-nest nest cli build aarch64-apple-darwin
-```
+✅ **CLI Features**
+- Dynamic CLI generation from Nestfile
+- Help system
+- JSON output (`--show json`)
+- AST output (`--show ast`)
+- Version info (`--version`)
 
-> Note: The double `nest` in the command reflects the top-level command `nest` and its subcommand `cli`. You may simplify this in your CLI design (e.g., `nest cli run …`).
+✅ **Execution**
+- Script execution with environment variables
+- Working directory support
+- Environment variable loading from .env files
 
----
+### Not Yet Implemented (Future Plans)
 
-### 4. Helper Functions
-
-```nest
-@func notify(msg, user="{{NOTIFY_USER}}"):
-    @desc "Sends a notification to a user"
-    script:
-        echo "Notify {{user}}: {{msg}}"
-```
-
-Can be used in `@before`, `@after`, `@fallback`, or `script` blocks.
-
----
-
-## 🔁 Lifecycle Hooks
-
-- `@before` — runs **before** the main script
-- `@after` — runs **after** successful completion
-- `@fallback` — runs on **failure** (non-zero exit code)
-
-All hooks share the same variable context as the main `script`.
-
----
-
-## 🔄 Dependencies
-
-```nest
-@depends build test
-```
-
-Ensures `build` and `test` commands complete successfully before the current command starts.
-
----
-
-## 🌐 Variables and Templating
-
-- Command/function parameters: `{{param}}`
-- Environment variables: `{{ENV_VAR}}`
-- Default/fallback values (e.g., `{{NOTIFY_USER}}`) can be set via `.env` or `@env`
-
----
+❌ Functions (`@func`) - Reusable script blocks
+❌ Lifecycle hooks (`@before`, `@after`, `@fallback`)
+❌ Command dependencies (`@depends`)
+❌ Function calls (`@call`)
+❌ Advanced templating (environment variable fallbacks)
 
 ## 📁 File Convention
 
-- Filename: `Nestfile` (no extension)
-- Location: Project root
+- **Filename**: `Nestfile` (no extension)
+- **Location**: Project root directory
+- **Example**: See `nestfile.example` in this repository
+
+## 🛠️ Development Status
+
+This is an **MVP (Minimum Viable Product)** version. I actively use this tool in my projects and will continue to maintain and improve it. This project also serves as my learning journey in Rust programming.
+
+**Current Focus:**
+- Stability and bug fixes
+- Learning Rust best practices
+- Adding features as needed for my use cases
+
+## 📄 License
+
+This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)**.
+
+This means:
+- ✅ You can use, modify, and distribute this software
+- ✅ You must give appropriate credit
+- ❌ **You cannot use this software for commercial purposes** (selling, commercial products, etc.)
+
+For full license details, see the [LICENSE](LICENSE) file.
 
 ---
 
-## 🚀 Usage
-
-Assuming a CLI tool named `nest`:
-
-```sh
-nest deploy v1.2.3 --push
-nest migrate up
-nest nest cli run worker --dry
-```
-
-(You may adjust the CLI routing to avoid repetition, e.g., `nest cli run …` directly.)
-
----
-
-> 💡 **Goal of this DSL**: Replace brittle `Makefile`s and scattered shell scripts with a unified, readable, composable, and maintainable task orchestration system—especially suited for polyglot, self-hosted, or automation-heavy projects.
-
----
+> 💡 **Goal**: Replace brittle `Makefile`s and scattered shell scripts with a unified, readable, composable, and maintainable task orchestration system.

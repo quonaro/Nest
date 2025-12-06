@@ -2,6 +2,7 @@
 name = "nest"
 version = "0.0.1"
 edition = "2021"
+license = "CC-BY-NC-4.0"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
