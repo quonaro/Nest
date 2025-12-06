@@ -57,7 +57,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -86,7 +86,17 @@ jobs:
 
       - name: Strip binary (Unix)
         if: matrix.os != 'windows-latest'
-        run: strip target/${{ matrix.target }}/release/${{ matrix.binary_name }}
+        run: |
+          BINARY_PATH="target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
+          if [ ! -f "$BINARY_PATH" ]; then
+            echo "Error: Binary not found at $BINARY_PATH"
+            exit 1
+          fi
+          if [ "${{ matrix.arch }}" == "aarch64" ] && [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            aarch64-linux-gnu-strip "$BINARY_PATH"
+          else
+            strip "$BINARY_PATH"
+          fi
 
       - name: Create archive (Unix)
         if: matrix.os != 'windows-latest'
