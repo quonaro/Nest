@@ -168,6 +168,52 @@ jobs:
           Write-Host "Created checksum: ${CHECKSUM_NAME}"
           Get-ChildItem ${ARCHIVE_NAME}, ${CHECKSUM_NAME} | Format-Table Name, Length
 
+      - name: Verify files before upload (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          ARCHIVE="nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz"
+          CHECKSUM="${ARCHIVE}.sha256"
+          
+          echo "Checking for files:"
+          echo "  Archive: ${ARCHIVE}"
+          echo "  Checksum: ${CHECKSUM}"
+          
+          if [ ! -f "${ARCHIVE}" ]; then
+            echo "Error: Archive ${ARCHIVE} not found"
+            exit 1
+          fi
+          
+          if [ ! -f "${CHECKSUM}" ]; then
+            echo "Error: Checksum ${CHECKSUM} not found"
+            exit 1
+          fi
+          
+          echo "Files verified:"
+          ls -lh ${ARCHIVE} ${CHECKSUM}
+
+      - name: Verify files before upload (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $ARCHIVE = "nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip"
+          $CHECKSUM = "${ARCHIVE}.sha256"
+          
+          Write-Host "Checking for files:"
+          Write-Host "  Archive: $ARCHIVE"
+          Write-Host "  Checksum: $CHECKSUM"
+          
+          if (-not (Test-Path $ARCHIVE)) {
+            Write-Error "Error: Archive $ARCHIVE not found"
+            exit 1
+          }
+          
+          if (-not (Test-Path $CHECKSUM)) {
+            Write-Error "Error: Checksum $CHECKSUM not found"
+            exit 1
+          }
+          
+          Write-Host "Files verified:"
+          Get-ChildItem $ARCHIVE, $CHECKSUM | Format-Table Name, Length
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -175,15 +221,20 @@ jobs:
           path: |
             nest-${{ matrix.platform_name }}-${{ matrix.arch }}.*
           retention-days: 30
+          if-no-files-found: error
 
   release:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get version from Cargo.toml
         id: get_version
@@ -197,19 +248,58 @@ jobs:
         with:
           path: artifacts
 
-      - name: Verify checksums exist
+      - name: List downloaded artifacts
         run: |
+          echo "=== Checking artifacts structure ==="
           if [ ! -d "artifacts" ]; then
             echo "Error: artifacts directory does not exist. No artifacts were downloaded."
             echo "This usually means all build jobs failed. Cannot create release."
             exit 1
           fi
-          cd artifacts
-          if [ -z "$(ls -A)" ]; then
+          
+          echo "=== Artifacts directory contents ==="
+          find artifacts -type f -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" | sort || echo "No artifacts found"
+          
+          echo "=== Artifacts by platform ==="
+          for dir in artifacts/*/; do
+            if [ -d "$dir" ]; then
+              echo "Platform: $(basename $dir)"
+              ls -lh "$dir" || echo "  No files in this directory"
+            fi
+          done
+          
+          # Check if we have any files at all
+          if [ -z "$(find artifacts -type f)" ]; then
             echo "Error: artifacts directory is empty. Cannot create release."
             exit 1
           fi
-          ls -la *.sha256 || echo "Checksums already created during build"
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          
+          # Copy all archives and checksums to release-files directory
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec cp {} release-files/ \;
+          
+          echo "=== Release files prepared ==="
+          ls -lh release-files/
+          
+          # Verify we have files
+          if [ -z "$(ls -A release-files)" ]; then
+            echo "Error: No files prepared for release."
+            exit 1
+          fi
+          
+          # Count files
+          ARCHIVE_COUNT=$(find release-files -name "*.tar.gz" -o -name "*.zip" | wc -l)
+          CHECKSUM_COUNT=$(find release-files -name "*.sha256" | wc -l)
+          echo "Archives: $ARCHIVE_COUNT"
+          echo "Checksums: $CHECKSUM_COUNT"
+          
+          if [ "$ARCHIVE_COUNT" -eq 0 ]; then
+            echo "Error: No archives found for release."
+            exit 1
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -238,13 +328,15 @@ jobs:
             ### Checksums
 
             All files include SHA256 checksums for verification.
-          files: |
-            artifacts/nest-*.tar.gz
-            artifacts/nest-*.tar.gz.sha256
-            artifacts/nest-*.zip
-            artifacts/nest-*.zip.sha256
+          files: release-files/*
+          generate_release_notes: false
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.NEST_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup artifacts
+        if: always()
+        run: |
+          rm -rf artifacts/ release-files/
 
