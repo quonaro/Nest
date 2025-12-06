@@ -7,7 +7,8 @@ export function useTemplateText(key: string) {
   return computed(() => {
     const text = t(key) as string
     // Replace [[...]] with {{...}} for display
-    return text.replace(/\[\[/g, '{{').replace(/\]\]/g, '}}')
+    // Escape braces as HTML entities to prevent Vue from interpreting them as expressions
+    return text.replace(/\[\[/g, '&#123;&#123;').replace(/\]\]/g, '&#125;&#125;')
   })
 }
 

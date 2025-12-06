@@ -64,7 +64,7 @@ $ nest greet --help</code></pre>
           <li>✅ <strong>Command Structure</strong> - Top-level commands, nested subcommands, default subcommands</li>
           <li>✅ <strong>Parameters</strong> - Types (str, bool, num, arr), positional and named arguments, aliases, defaults</li>
           <li>✅ <strong>Directives</strong> - Descriptions, working directory, environment variables, scripts</li>
-          <li>✅ <strong>{{ featureTemplateProcessing }}</strong></li>
+          <li>✅ <strong><span v-html="featureTemplateProcessing"></span></strong></li>
           <li>✅ <strong>CLI Features</strong> - Dynamic CLI generation, help system, JSON/AST output</li>
           <li>✅ <strong>Execution</strong> - Script execution with environment variables and working directory support</li>
         </ul>

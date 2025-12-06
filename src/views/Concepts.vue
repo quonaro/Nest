@@ -49,8 +49,8 @@
 
         <h3>{{ $t('concepts.templates.specialVariables') }}</h3>
         <ul>
-          <li><code v-pre>{{now}}</code> - {{ templatesNow }}</li>
-          <li><code v-pre>{{user}}</code> - {{ templatesUser }}</li>
+          <li><code v-pre>{{now}}</code> - <span v-html="templatesNow"></span></li>
+          <li><code v-pre>{{user}}</code> - <span v-html="templatesUser"></span></li>
         </ul>
 
         <h3>{{ $t('concepts.templates.example') }}</h3>
