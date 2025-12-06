@@ -130,7 +130,7 @@ impl ArgumentExtractor {
     ) -> bool {
         let param_id = generator.get_param_id(&param.name);
         
-        // Check if flag is present
+        // Check if flag is present by param_id (works for both --flag and -f)
         if matches.contains_id(param_id) {
             // If value is provided, parse it
             if let Some(value_str) = matches.get_one::<String>(param_id) {
@@ -140,24 +140,8 @@ impl ArgumentExtractor {
                 true
             }
         } else {
-            // Check alias
-            param
-                .alias
-                .as_ref()
-                .and_then(|a| a.chars().next())
-                .map(|c| {
-                    let alias_str = c.to_string();
-                    if matches.contains_id(&alias_str) {
-                        if let Some(value_str) = matches.get_one::<String>(&alias_str) {
-                            value_str == BOOL_TRUE
-                        } else {
-                            true
-                        }
-                    } else {
-                        false
-                    }
-                })
-                .unwrap_or(false)
+            // If not found, use default value
+            false
         }
     }
 
@@ -168,7 +152,7 @@ impl ArgumentExtractor {
     ) -> bool {
         let param_id = generator.get_param_id(&param.name);
         
-        // Check if flag is present
+        // Check if flag is present by param_id (works for both --flag and -f)
         if matches.contains_id(param_id) {
             // If value is provided, parse it
             if let Some(value_str) = matches.get_one::<String>(param_id) {
@@ -178,24 +162,8 @@ impl ArgumentExtractor {
                 true
             }
         } else {
-            // Check alias
-            param
-                .alias
-                .as_ref()
-                .and_then(|a| a.chars().next())
-                .map(|c| {
-                    let alias_str = c.to_string();
-                    if matches.contains_id(&alias_str) {
-                        if let Some(value_str) = matches.get_one::<String>(&alias_str) {
-                            value_str == BOOL_TRUE
-                        } else {
-                            true
-                        }
-                    } else {
-                        false
-                    }
-                })
-                .unwrap_or(false)
+            // If not found, use default value
+            false
         }
     }
 

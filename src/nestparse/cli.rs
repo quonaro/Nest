@@ -252,7 +252,8 @@ impl CliGenerator {
 
     fn add_command_to_clap(&self, mut app: ClapCommand, command: &Command) -> ClapCommand {
         let cmd_name: &'static str = Box::leak(command.name.clone().into_boxed_str());
-        let mut subcmd = ClapCommand::new(cmd_name);
+        let mut subcmd = ClapCommand::new(cmd_name)
+            .arg_required_else_help(false);
 
         subcmd = Self::add_description(subcmd, &command.directives);
         subcmd = Self::add_parameters(subcmd, &command.parameters, self);
@@ -354,20 +355,18 @@ impl CliGenerator {
             "bool" => {
                 // Positional bool arguments are not common, but we'll support them
                 let help_text = format!("Positional argument: {} (bool)", param.name);
-                if param.default.is_some() {
-                    arg = arg.required(false).help(help_text);
-                } else {
-                    arg = arg.required(true).help(help_text);
-                }
+                // Make positional args optional to allow subcommand recognition
+                arg = arg.required(false).help(help_text);
             }
             _ => {
-                if param.default.is_some() {
-                    let help_text = format!("Positional argument: {} ({})", param.name, param.param_type);
-                    arg = arg.required(false).help(help_text);
+                let help_text = if param.default.is_some() {
+                    format!("Positional argument: {} ({})", param.name, param.param_type)
                 } else {
-                    let help_text = format!("Required positional argument: {} ({})", param.name, param.param_type);
-                    arg = arg.required(true).help(help_text);
-                }
+                    format!("Required positional argument: {} ({})", param.name, param.param_type)
+                };
+                // Make positional args optional to allow subcommand recognition
+                // Validation will happen during execution
+                arg = arg.required(false).help(help_text);
             }
         }
 

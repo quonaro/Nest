@@ -7,14 +7,13 @@
 mod constants;
 mod nestparse;
 
-use constants::{FLAG_EXAMPLE, FLAG_SHOW, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
+use constants::{FLAG_SHOW, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
 use nestparse::cli::{handle_example, handle_json, handle_show_ast, handle_version, CliGenerator};
 use nestparse::command_handler::CommandHandler;
 use nestparse::file::read_config_file;
 use nestparse::parser::Parser;
 use nestparse::path::find_config_file;
 use std::process;
-use clap::Command as ClapCommand;
 
 /// Main entry point of the application.
 ///
@@ -32,44 +31,19 @@ use clap::Command as ClapCommand;
 /// - Parsing fails
 /// - Command execution fails
 fn main() {
-    // Build a minimal CLI first to check for special flags that don't need config
-    let minimal_cli = ClapCommand::new("nest")
-        .arg(
-            clap::Arg::new(FLAG_VERSION)
-                .long(FLAG_VERSION)
-                .short('V')
-                .action(clap::ArgAction::SetTrue)
-                .hide(true),
-        )
-        .arg(
-            clap::Arg::new(FLAG_SHOW)
-                .long(FLAG_SHOW)
-                .value_name("FORMAT")
-                .value_parser([FORMAT_JSON, FORMAT_AST])
-                .hide(true),
-        )
-        .arg(
-            clap::Arg::new(FLAG_EXAMPLE)
-                .long(FLAG_EXAMPLE)
-                .action(clap::ArgAction::SetTrue)
-                .hide(true),
-        );
-    let minimal_matches = minimal_cli.get_matches();
-
-    // Handle special flags before loading config (they don't need config)
-    if minimal_matches.get_flag(FLAG_VERSION) {
+    // Check for special flags that don't need config by parsing args manually
+    let args: Vec<String> = std::env::args().collect();
+    
+    // Check for --version or -V
+    if args.iter().any(|a| a == "--version" || a == "-V") {
         handle_version();
         return;
     }
-
-    if minimal_matches.get_flag(FLAG_EXAMPLE) {
+    
+    // Check for --example
+    if args.iter().any(|a| a == "--example") {
         handle_example();
         return;
-    }
-
-    // --show needs config, but we need to parse it early to avoid errors
-    if minimal_matches.contains_id(FLAG_SHOW) {
-        // Will be handled after config is loaded
     }
 
     let commands = match load_and_parse_config() {
