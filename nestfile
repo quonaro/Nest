@@ -1,109 +1,87 @@
-# ===========================
-# Functions
-# ===========================
+build(target: str = "x86_64", release: bool = false):
+    > desc: Собрать проект с помощью Cargo
+    > cwd: ./app
+    > env: .env
+    > env: BUILD_TIME={{now}}
+    > script: |
+        #!/bin/sh
+        echo "🔨 Building $target (release=${release})"
+        cargo build --target "$target" ${release:+--release}
 
-@func build_project(target):
-    @desc "Builds the project for the specified target platform"
-    @before echo "Building project for {{target}}..."
-    script:
-        cargo build --release --target {{target}}
-    @after echo "Build finished for {{target}}"
-    @fallback echo "Build failed for {{target}}"
+dev:
+    > desc: Инструменты для локальной разработки
 
-@func notify(msg, user="{{NOTIFY_USER}}"):
-    @desc "Sends a notification to a user"
-    script:
-        echo "Notify {{user}}: {{msg}}"
+    default(hot: bool = false):
+        > desc: Запустить dev-сервер
+        > env: .env.local
+        > env: NODE_ENV=development
+        > script: |
+            #!/bin/sh
+            if [ "$hot" = "true" ]; then
+                nodemon src/index.js
+            else
+                node src/index.js
+            fi
 
-@func migrate_up():
-    @before echo "Starting migration"
-    script: ./migrate_up.sh
-    @after echo "Migration finished"
-    @fallback ./rollback_up.sh
+    lint(fix|f: bool = false):
+        > desc: Проверить и исправить код
+        > script: |
+            #!/bin/sh
+            eslint src/ ${fix:+--fix}
 
-# ===========================
-# Top-Level CLI Commands
-# ===========================
+db:
+    > desc: Управление базой данных
 
-deploy(version, push=false):
-    @desc "Deploys the application"
-    @args
-        -p, --push
-        version
-    @flags
-        --force
-    @env-file .env
-    @env
-        APP_ENV=prod
-    @defaults
-        push=false
-    @cwd ./project
-    @depends build test
-    @before
-        echo "Preparing deployment..."
-        @call notify("Deploy started")
-    @after
-        @call notify("Deploy finished")
-        echo "Deployment completed."
-    @fallback
-        echo "Deploy failed! Rolling back..."
-        ./rollback.sh
-    script:
-        @call build_project("x86_64-unknown-linux-gnu")
-        ./deploy.sh {{version}}
-        if [ "{{push}}" = "true" ]; then
-            git push origin main
-        fi
+    default():
+        > desc: Справка по командам БД
+        > script: |
+            #!/bin/sh
+            echo "Доступные команды:"
+            echo "  nest db up     — накатить миграции"
+            echo "  nest db down   — откатить миграции"
 
-build:
-    @desc "Builds the project for multiple targets"
-    @flags
-        --release
-    script:
-        @call build_project("x86_64-unknown-linux-gnu")
-        @call build_project("arm64-apple-darwin")
+    up():
+        > desc: Применить миграции
+        > env: DATABASE_URL=postgresql://localhost/dev
+        > script: ./scripts/migrate_up.sh
 
-test:
-    @desc "Runs project tests"
-    script:
-        cargo test
+    down(force|f: bool = false):
+        > desc: Откатить последнюю миграцию
+        > script: |
+            #!/bin/sh
+            if [ "$force" = "true" ]; then
+                ./migrate down --force
+            else
+                ./migrate down
+            fi
 
-migrate:
-    @desc "Manages database migrations"
+deploy:
+    > desc: Деплой приложения
 
-    up:
-        @desc "Applies pending migrations"
-        script:
-            @call migrate_up
+    prod(
+        version: str,
+        confirm|c: bool = false,
+        retries: num = 3,
+        tags: arr = []
+    ):
+        > desc: Задеплоить в production
+        > env: .env.prod
+        > env: DEPLOYER={{user}}
+        > script: |
+            #!/bin/sh
+            if [ "$confirm" != "true" ]; then
+                echo "🛑 Используй --confirm или -c"
+                exit 1
+            fi
+            cmd="./deploy.sh $version --retries $retries"
+            for tag in $(echo "$tags" | tr ',' ' '); do
+                cmd="$cmd --tag $tag"
+            done
+            eval "$cmd"
 
-    down:
-        @desc "Rolls back the last migration"
-        script: ./migrate_down.sh
-        @fallback ./rollback_down.sh
-
-# ===========================
-# Nested CLI Command
-# ===========================
-
-nest:
-    cli:
-        @desc "Example of a nested CLI command group"
-
-        run(name):
-            @desc "Executes a named task"66
-            @args
-                name
-            @flags
-                --dry
-            @env
-                DEBUG=true
-            script:
-                echo "Running {{name}}..."
-                if [ "{{dry}}" = "true" ]; then
-                    echo "(dry run)"
-                fi
-
-        build(name):
-            @desc "Builds the project using the nested CLI"
-            script:
-                @call build_project({{name}})
+    staging(version: str):
+        > desc: Деплой в staging-среду
+        > env: .env.staging
+        > script: |
+            #!/bin/sh
+            ./deploy.sh "$version" --env staging
