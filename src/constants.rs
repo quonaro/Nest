@@ -43,6 +43,9 @@ pub const FLAG_VERSION: &str = "version";
 /// Flag name for showing commands in different formats.
 pub const FLAG_SHOW: &str = "show";
 
+/// Flag name for copying example nestfile.
+pub const FLAG_EXAMPLE: &str = "example";
+
 /// Format option for JSON output.
 pub const FORMAT_JSON: &str = "json";
 

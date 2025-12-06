@@ -9,9 +9,9 @@ use super::env::EnvironmentManager;
 use super::executor::CommandExecutor;
 use super::template::TemplateProcessor;
 use crate::constants::{
-    APP_DESCRIPTION, APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_SHOW, FLAG_VERSION,
-    FORMAT_AST, FORMAT_JSON, RESERVED_FLAG_HELP, RESERVED_FLAG_VERSION, RESERVED_SHORT_HELP,
-    RESERVED_SHORT_OPTIONS, RESERVED_SHORT_VERSION, SHORT_VERSION,
+    APP_DESCRIPTION, APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_EXAMPLE, FLAG_SHOW,
+    FLAG_VERSION, FORMAT_AST, FORMAT_JSON, RESERVED_FLAG_HELP, RESERVED_FLAG_VERSION,
+    RESERVED_SHORT_HELP, RESERVED_SHORT_OPTIONS, RESERVED_SHORT_VERSION, SHORT_VERSION,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
@@ -240,6 +240,13 @@ impl CliGenerator {
                     .value_parser([FORMAT_JSON, FORMAT_AST])
                     .hide(true)
                     .help("Show commands in different formats (json, ast)"),
+            )
+            .arg(
+                Arg::new(FLAG_EXAMPLE)
+                    .long(FLAG_EXAMPLE)
+                    .action(ArgAction::SetTrue)
+                    .hide(true)
+                    .help("Copy example nestfile to current directory"),
             )
     }
 
@@ -579,5 +586,99 @@ pub fn handle_show_ast(commands: &[Command]) {
     for command in commands {
         print_command(command, 0);
         println!();
+    }
+}
+
+/// Handles the --example flag.
+///
+/// Downloads the example nestfile from GitHub and saves it as "nestfile" in the current directory.
+///
+/// # Errors
+///
+/// Exits with code 1 if:
+/// - curl or wget is not available
+/// - Download fails
+/// - The file cannot be written to the current directory
+/// - Nestfile already exists in the current directory
+pub fn handle_example() {
+    use std::env;
+    use std::fs;
+    use std::process::Command;
+
+    // Get current directory
+    let current_dir = match env::current_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("Error getting current directory: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Write to nestfile in current directory
+    let target_path = current_dir.join("nestfile");
+    
+    // Check if nestfile already exists
+    if target_path.exists() {
+        eprintln!("Error: nestfile already exists in the current directory");
+        eprintln!("Please remove it first or choose a different location.");
+        std::process::exit(1);
+    }
+
+    // GitHub raw URL for nestfile.example
+    let url = "https://raw.githubusercontent.com/quonaro/nest/main/nestfile.example";
+
+    println!("Downloading nestfile.example from GitHub...");
+
+    // Try curl first, then wget
+    let content = match Command::new("curl").args(&["-fsSL", url]).output() {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).to_string()
+        }
+        Ok(_) => {
+            // curl exists but failed, try wget
+            match Command::new("wget").args(&["-qO-", url]).output() {
+                Ok(output) if output.status.success() => {
+                    String::from_utf8_lossy(&output.stdout).to_string()
+                }
+                Ok(_) => {
+                    eprintln!("Error: Both curl and wget failed to download file");
+                    std::process::exit(1);
+                }
+                Err(_) => {
+                    eprintln!("Error: Neither curl nor wget is available");
+                    eprintln!("Please install curl or wget to use this feature.");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Err(_) => {
+            // curl not found, try wget
+            match Command::new("wget").args(&["-qO-", url]).output() {
+                Ok(output) if output.status.success() => {
+                    String::from_utf8_lossy(&output.stdout).to_string()
+                }
+                Ok(_) => {
+                    eprintln!("Error: wget failed to download file");
+                    std::process::exit(1);
+                }
+                Err(_) => {
+                    eprintln!("Error: Neither curl nor wget is available");
+                    eprintln!("Please install curl or wget to use this feature.");
+                    std::process::exit(1);
+                }
+            }
+        }
+    };
+
+    // Write content to nestfile
+    match fs::write(&target_path, content) {
+        Ok(_) => {
+            println!("✓ Created nestfile in current directory");
+            println!("  Location: {}", target_path.display());
+        }
+        Err(e) => {
+            eprintln!("Error writing nestfile: {}", e);
+            std::process::exit(1);
+        }
     }
 }

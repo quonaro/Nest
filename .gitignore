@@ -5,3 +5,7 @@ nestfile
 *.zip
 *.sha256
 .cargo/config.toml
+node_modules/
+dist/
+package.json
+_metadata.json

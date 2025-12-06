@@ -7,13 +7,14 @@
 mod constants;
 mod nestparse;
 
-use constants::{FLAG_SHOW, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
-use nestparse::cli::{handle_json, handle_show_ast, handle_version, CliGenerator};
+use constants::{FLAG_EXAMPLE, FLAG_SHOW, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
+use nestparse::cli::{handle_example, handle_json, handle_show_ast, handle_version, CliGenerator};
 use nestparse::command_handler::CommandHandler;
 use nestparse::file::read_config_file;
 use nestparse::parser::Parser;
 use nestparse::path::find_config_file;
 use std::process;
+use clap::Command as ClapCommand;
 
 /// Main entry point of the application.
 ///
@@ -31,6 +32,22 @@ use std::process;
 /// - Parsing fails
 /// - Command execution fails
 fn main() {
+    // Build a minimal CLI first to check for special flags that don't need config
+    let minimal_cli = ClapCommand::new("nest")
+        .arg(
+            clap::Arg::new(FLAG_EXAMPLE)
+                .long(FLAG_EXAMPLE)
+                .action(clap::ArgAction::SetTrue)
+                .hide(true),
+        );
+    let minimal_matches = minimal_cli.get_matches();
+
+    // Handle --example flag before loading config (it doesn't need config)
+    if minimal_matches.get_flag(FLAG_EXAMPLE) {
+        handle_example();
+        return;
+    }
+
     let commands = match load_and_parse_config() {
         Ok(commands) => commands,
         Err(e) => {
