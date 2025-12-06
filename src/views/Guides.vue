@@ -134,13 +134,13 @@ $ nest dev lint -f true       # Use short alias</code></pre>
 
       <section id="templates">
         <h2>{{ $t('guides.templates.title') }}</h2>
-        <p v-html="$t('guides.templates.desc')"></p>
+        <p>{{ templatesDesc }}</p>
         <ul>
-          <li><strong>{{ $t('guides.templates.parameters') }}</strong></li>
+          <li><strong>{{ templatesParameters }}</strong></li>
           <li><strong>{{ $t('guides.templates.special') }}</strong>:
             <ul>
-              <li><code v-pre>{{now}}</code> - <span v-html="$t('guides.templates.now')"></span></li>
-              <li><code v-pre>{{user}}</code> - <span v-html="$t('guides.templates.user')"></span></li>
+              <li><code v-pre>{{now}}</code> - {{ templatesNow }}</li>
+              <li><code v-pre>{{user}}</code> - {{ templatesUser }}</li>
             </ul>
           </li>
         </ul>
@@ -161,6 +161,12 @@ $ nest dev lint -f true       # Use short alias</code></pre>
 
 <script setup lang="ts">
 import Layout from '../components/Layout.vue'
+import { useTemplateText } from '../composables/useTemplateText'
+
+const templatesDesc = useTemplateText('guides.templates.desc')
+const templatesParameters = useTemplateText('guides.templates.parameters')
+const templatesNow = useTemplateText('guides.templates.now')
+const templatesUser = useTemplateText('guides.templates.user')
 </script>
 
 <style scoped>

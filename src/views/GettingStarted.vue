@@ -64,7 +64,7 @@ $ nest greet --help</code></pre>
           <li>✅ <strong>Command Structure</strong> - Top-level commands, nested subcommands, default subcommands</li>
           <li>✅ <strong>Parameters</strong> - Types (str, bool, num, arr), positional and named arguments, aliases, defaults</li>
           <li>✅ <strong>Directives</strong> - Descriptions, working directory, environment variables, scripts</li>
-          <li>✅ <strong v-html="$t('gettingStarted.featureTemplateProcessing')"></strong></li>
+          <li>✅ <strong>{{ featureTemplateProcessing }}</strong></li>
           <li>✅ <strong>CLI Features</strong> - Dynamic CLI generation, help system, JSON/AST output</li>
           <li>✅ <strong>Execution</strong> - Script execution with environment variables and working directory support</li>
         </ul>
@@ -83,6 +83,9 @@ $ nest greet --help</code></pre>
 
 <script setup lang="ts">
 import Layout from '../components/Layout.vue'
+import { useTemplateText } from '../composables/useTemplateText'
+
+const featureTemplateProcessing = useTemplateText('gettingStarted.featureTemplateProcessing')
 </script>
 
 <style scoped>

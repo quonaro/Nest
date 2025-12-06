@@ -40,19 +40,17 @@
 
       <section id="templates">
         <h2>{{ $t('concepts.templates.title') }}</h2>
-        <p>
-          {{ $t('concepts.templates.desc') }}
-        </p>
+        <p>{{ $t('concepts.templates.desc') }}</p>
 
         <h3>{{ $t('concepts.templates.parameterSubstitution') }}</h3>
-        <p v-html="$t('concepts.templates.useParamName')"></p>
+        <p>{{ useParamName }}</p>
         <pre v-pre><code>greet(name: str):
     > script: echo "Hello {{name}}!"</code></pre>
 
         <h3>{{ $t('concepts.templates.specialVariables') }}</h3>
         <ul>
-          <li><code v-pre>{{now}}</code> - <span v-html="$t('concepts.templates.now')"></span></li>
-          <li><code v-pre>{{user}}</code> - <span v-html="$t('concepts.templates.user')"></span></li>
+          <li><code v-pre>{{now}}</code> - {{ templatesNow }}</li>
+          <li><code v-pre>{{user}}</code> - {{ templatesUser }}</li>
         </ul>
 
         <h3>{{ $t('concepts.templates.example') }}</h3>
@@ -91,6 +89,11 @@
 
 <script setup lang="ts">
 import Layout from '../components/Layout.vue'
+import { useTemplateText } from '../composables/useTemplateText'
+
+const useParamName = useTemplateText('concepts.templates.useParamName')
+const templatesNow = useTemplateText('concepts.templates.now')
+const templatesUser = useTemplateText('concepts.templates.user')
 </script>
 
 <style scoped>
