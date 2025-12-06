@@ -45,14 +45,14 @@
         </p>
 
         <h3>{{ $t('concepts.templates.parameterSubstitution') }}</h3>
-        <p>{{ $t('concepts.templates.useParamName') }}</p>
+        <p v-html="$t('concepts.templates.useParamName')"></p>
         <pre v-pre><code>greet(name: str):
     > script: echo "Hello {{name}}!"</code></pre>
 
         <h3>{{ $t('concepts.templates.specialVariables') }}</h3>
         <ul>
-          <li><code v-pre>{{now}}</code> - {{ $t('concepts.templates.now') }}</li>
-          <li><code v-pre>{{user}}</code> - {{ $t('concepts.templates.user') }}</li>
+          <li><code v-pre>{{now}}</code> - <span v-html="$t('concepts.templates.now')"></span></li>
+          <li><code v-pre>{{user}}</code> - <span v-html="$t('concepts.templates.user')"></span></li>
         </ul>
 
         <h3>{{ $t('concepts.templates.example') }}</h3>

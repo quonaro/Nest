@@ -134,13 +134,13 @@ $ nest dev lint -f true       # Use short alias</code></pre>
 
       <section id="templates">
         <h2>{{ $t('guides.templates.title') }}</h2>
-        <p>{{ $t('guides.templates.desc') }}</p>
+        <p v-html="$t('guides.templates.desc')"></p>
         <ul>
           <li><strong>{{ $t('guides.templates.parameters') }}</strong></li>
           <li><strong>{{ $t('guides.templates.special') }}</strong>:
             <ul>
-              <li><code v-pre>{{now}}</code> - {{ $t('guides.templates.now') }}</li>
-              <li><code v-pre>{{user}}</code> - {{ $t('guides.templates.user') }}</li>
+              <li><code v-pre>{{now}}</code> - <span v-html="$t('guides.templates.now')"></span></li>
+              <li><code v-pre>{{user}}</code> - <span v-html="$t('guides.templates.user')"></span></li>
             </ul>
           </li>
         </ul>

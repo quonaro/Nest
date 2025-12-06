@@ -86,7 +86,7 @@ Hello Alice, welcome!</code></pre>
           <li>✅ <strong>{{ $t('home.featureCommandStructure') }}</strong></li>
           <li>✅ <strong>{{ $t('home.featureParameters') }}</strong></li>
           <li>✅ <strong>{{ $t('home.featureDirectives') }}</strong></li>
-          <li>✅ <strong>{{ $t('home.featureTemplateProcessing') }}</strong></li>
+          <li>✅ <strong v-html="$t('home.featureTemplateProcessing')"></strong></li>
           <li>✅ <strong>{{ $t('home.featureDynamicCLI') }}</strong></li>
           <li>✅ <strong>{{ $t('home.featureEnvironmentManagement') }}</strong></li>
         </ul>
