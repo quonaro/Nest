@@ -101,66 +101,130 @@ jobs:
       - name: Create archive (Unix)
         if: matrix.os != 'windows-latest'
         run: |
+          set -e
           BINARY_PATH="target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
           ARCHIVE_NAME="nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz"
           CHECKSUM_NAME="${ARCHIVE_NAME}.sha256"
+          WORKING_DIR=$(pwd)
+          
+          echo "=== Creating archive ==="
+          echo "Working directory: ${WORKING_DIR}"
+          echo "Binary path: ${BINARY_PATH}"
+          echo "Archive name: ${ARCHIVE_NAME}"
+          echo "Checksum name: ${CHECKSUM_NAME}"
           
           if [ ! -f "$BINARY_PATH" ]; then
             echo "Error: Binary not found at $BINARY_PATH"
+            echo "Checking target directory:"
+            ls -la "target/${{ matrix.target }}/release/" || echo "Directory does not exist"
             exit 1
           fi
           
+          echo "Binary found, size: $(ls -lh "$BINARY_PATH" | awk '{print $5}')"
+          
+          # Create archive from binary directory
           cd target/${{ matrix.target }}/release
-          tar czf ../../../../${ARCHIVE_NAME} ${{ matrix.binary_name }}
+          ARCHIVE_FULL_PATH="${WORKING_DIR}/${ARCHIVE_NAME}"
+          echo "Creating archive at: ${ARCHIVE_FULL_PATH}"
+          tar czf "${ARCHIVE_FULL_PATH}" ${{ matrix.binary_name }}
           if [ $? -ne 0 ]; then
-            echo "Error: Failed to create archive ${ARCHIVE_NAME}"
+            echo "Error: tar command failed"
             exit 1
           fi
-          cd ../../../..
+          cd "${WORKING_DIR}"
           
           if [ ! -f "${ARCHIVE_NAME}" ]; then
-            echo "Error: Archive ${ARCHIVE_NAME} was not created"
+            echo "Error: Archive ${ARCHIVE_NAME} was not created in ${WORKING_DIR}"
+            echo "Current directory contents:"
+            ls -la | head -20
             exit 1
           fi
           
-          sha256sum ${ARCHIVE_NAME} > ${CHECKSUM_NAME} || shasum -a 256 ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
-          if [ $? -ne 0 ]; then
-            echo "Error: Failed to create checksum ${CHECKSUM_NAME}"
+          echo "Archive created successfully, size: $(ls -lh "${ARCHIVE_NAME}" | awk '{print $5}')"
+          
+          # Create checksum
+          if command -v sha256sum > /dev/null 2>&1; then
+            sha256sum ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
+          elif command -v shasum > /dev/null 2>&1; then
+            shasum -a 256 ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
+          else
+            echo "Error: Neither sha256sum nor shasum found"
             exit 1
           fi
           
-          echo "Created archive: ${ARCHIVE_NAME}"
-          echo "Created checksum: ${CHECKSUM_NAME}"
+          if [ ! -f "${CHECKSUM_NAME}" ]; then
+            echo "Error: Checksum ${CHECKSUM_NAME} was not created"
+            exit 1
+          fi
+          
+          echo "=== Archive and checksum created successfully ==="
           ls -lh ${ARCHIVE_NAME} ${CHECKSUM_NAME}
+          echo "Checksum content:"
+          cat ${CHECKSUM_NAME}
 
       - name: Create archive (Windows)
         if: matrix.os == 'windows-latest'
         run: |
+          $ErrorActionPreference = "Stop"
+          
           $BINARY_PATH = "target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
           $ARCHIVE_NAME = "nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip"
           $CHECKSUM_NAME = "${ARCHIVE_NAME}.sha256"
+          $WORKING_DIR = Get-Location
+          
+          Write-Host "Working directory: $WORKING_DIR"
+          Write-Host "Binary path: $BINARY_PATH"
+          Write-Host "Archive name: $ARCHIVE_NAME"
           
           if (-not (Test-Path $BINARY_PATH)) {
             Write-Error "Error: Binary not found at $BINARY_PATH"
+            Write-Host "Current directory contents:"
+            Get-ChildItem -Recurse -Filter "nest.exe" | Select-Object FullName
             exit 1
           }
           
-          cd target/${{ matrix.target }}/release
-          Compress-Archive -Path ${{ matrix.binary_name }} -DestinationPath ../../../../${ARCHIVE_NAME} -Force
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Error: Failed to create archive ${ARCHIVE_NAME}"
+          # Get absolute path for archive
+          $ARCHIVE_FULL_PATH = Join-Path $WORKING_DIR $ARCHIVE_NAME
+          Write-Host "Archive full path: $ARCHIVE_FULL_PATH"
+          
+          # Change to binary directory
+          $BINARY_DIR = Split-Path -Parent (Resolve-Path $BINARY_PATH)
+          $BINARY_FILE = Split-Path -Leaf $BINARY_PATH
+          Write-Host "Binary directory: $BINARY_DIR"
+          Write-Host "Binary file: $BINARY_FILE"
+          
+          Push-Location $BINARY_DIR
+          try {
+            # Create archive from binary directory
+            Compress-Archive -Path $BINARY_FILE -DestinationPath $ARCHIVE_FULL_PATH -Force
+            if (-not $?) {
+              Write-Error "Error: Compress-Archive failed"
+              exit 1
+            }
+          } catch {
+            Write-Error "Error creating archive: $_"
+            exit 1
+          } finally {
+            Pop-Location
+          }
+          
+          if (-not (Test-Path $ARCHIVE_FULL_PATH)) {
+            Write-Error "Error: Archive ${ARCHIVE_NAME} was not created at $ARCHIVE_FULL_PATH"
             exit 1
           }
-          cd ../../../..
           
-          if (-not (Test-Path ${ARCHIVE_NAME})) {
-            Write-Error "Error: Archive ${ARCHIVE_NAME} was not created"
-            exit 1
-          }
+          Write-Host "Archive created successfully"
           
-          Get-FileHash -Algorithm SHA256 ${ARCHIVE_NAME} | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 ${CHECKSUM_NAME}
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Error: Failed to create checksum ${CHECKSUM_NAME}"
+          # Create checksum
+          try {
+            $HASH = Get-FileHash -Algorithm SHA256 $ARCHIVE_FULL_PATH
+            "$($HASH.Hash)  $($ARCHIVE_NAME)" | Out-File -Encoding utf8 $CHECKSUM_NAME
+            if (-not $?) {
+              Write-Error "Error: Failed to create checksum ${CHECKSUM_NAME}"
+              exit 1
+            }
+          } catch {
+            Write-Error "Error creating checksum: $_"
             exit 1
           }
           
@@ -171,47 +235,67 @@ jobs:
       - name: Verify files before upload (Unix)
         if: matrix.os != 'windows-latest'
         run: |
+          set -e
           ARCHIVE="nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz"
           CHECKSUM="${ARCHIVE}.sha256"
           
-          echo "Checking for files:"
+          echo "=== Verifying files before upload ==="
+          echo "Current directory: $(pwd)"
+          echo "Looking for:"
           echo "  Archive: ${ARCHIVE}"
           echo "  Checksum: ${CHECKSUM}"
           
+          echo "=== Files in current directory ==="
+          ls -la | head -20
+          
           if [ ! -f "${ARCHIVE}" ]; then
-            echo "Error: Archive ${ARCHIVE} not found"
+            echo "Error: Archive ${ARCHIVE} not found in $(pwd)"
+            echo "Searching for archive files:"
+            find . -name "*.tar.gz" -type f 2>/dev/null || echo "No .tar.gz files found"
             exit 1
           fi
           
           if [ ! -f "${CHECKSUM}" ]; then
-            echo "Error: Checksum ${CHECKSUM} not found"
+            echo "Error: Checksum ${CHECKSUM} not found in $(pwd)"
+            echo "Searching for checksum files:"
+            find . -name "*.sha256" -type f 2>/dev/null || echo "No .sha256 files found"
             exit 1
           fi
           
-          echo "Files verified:"
+          echo "=== Files verified successfully ==="
           ls -lh ${ARCHIVE} ${CHECKSUM}
 
       - name: Verify files before upload (Windows)
         if: matrix.os == 'windows-latest'
         run: |
+          $ErrorActionPreference = "Stop"
           $ARCHIVE = "nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip"
           $CHECKSUM = "${ARCHIVE}.sha256"
           
-          Write-Host "Checking for files:"
+          Write-Host "=== Verifying files before upload ==="
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Looking for:"
           Write-Host "  Archive: $ARCHIVE"
           Write-Host "  Checksum: $CHECKSUM"
           
+          Write-Host "=== Files in current directory ==="
+          Get-ChildItem | Select-Object Name, Length | Format-Table
+          
           if (-not (Test-Path $ARCHIVE)) {
-            Write-Error "Error: Archive $ARCHIVE not found"
+            Write-Error "Error: Archive $ARCHIVE not found in $(Get-Location)"
+            Write-Host "Searching for archive files:"
+            Get-ChildItem -Recurse -Filter "*.zip" -ErrorAction SilentlyContinue | Select-Object FullName
             exit 1
           }
           
           if (-not (Test-Path $CHECKSUM)) {
-            Write-Error "Error: Checksum $CHECKSUM not found"
+            Write-Error "Error: Checksum $CHECKSUM not found in $(Get-Location)"
+            Write-Host "Searching for checksum files:"
+            Get-ChildItem -Recurse -Filter "*.sha256" -ErrorAction SilentlyContinue | Select-Object FullName
             exit 1
           }
           
-          Write-Host "Files verified:"
+          Write-Host "=== Files verified successfully ==="
           Get-ChildItem $ARCHIVE, $CHECKSUM | Format-Table Name, Length
 
       - name: Upload artifact
