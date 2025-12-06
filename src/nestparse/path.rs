@@ -11,7 +11,7 @@ pub fn find_config_file() -> Option<PathBuf> {
     let current_dir = match current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            eprintln!("Ошибка получения текущей директории: {}", e);
+            eprintln!("Error getting current directory: {}", e);
             return None;
         }
     };
@@ -19,7 +19,7 @@ pub fn find_config_file() -> Option<PathBuf> {
     let entries = match fs::read_dir(&current_dir) {
         Ok(entries) => entries,
         Err(e) => {
-            eprintln!("Ошибка чтения директории {}: {}", current_dir.display(), e);
+            eprintln!("Error reading directory {}: {}", current_dir.display(), e);
             return None;
         }
     };
