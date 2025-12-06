@@ -19,7 +19,7 @@
                 <span v-if="theme === 'light'">🌙</span>
                 <span v-else>☀️</span>
               </button>
-              <select v-model="locale" @change="changeLocale" class="locale-select">
+              <select v-model="selectedLocale" @change="changeLocale" class="locale-select">
                 <option value="en">EN</option>
                 <option value="ru">RU</option>
               </select>
@@ -71,16 +71,37 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTheme } from '../composables/useTheme'
 
-const { locale } = useI18n()
+const { locale, setLocale } = useI18n()
 const { theme, toggleTheme } = useTheme()
 
 const logoPath = `${import.meta.env.BASE_URL}Nest.png`
 
+// Initialize locale from localStorage or use current locale
+const savedLocale = localStorage.getItem('locale')
+const initialLocale = (savedLocale && (savedLocale === 'en' || savedLocale === 'ru')) 
+  ? savedLocale 
+  : (locale.value as string)
+
+// Create a local ref for the select element
+const selectedLocale = ref(initialLocale)
+
+// Sync with i18n if localStorage had a different value
+if (savedLocale && savedLocale !== locale.value) {
+  setLocale(savedLocale)
+}
+
+// Watch for changes in selectedLocale and update i18n
+watch(selectedLocale, (newLocale) => {
+  setLocale(newLocale)
+  localStorage.setItem('locale', newLocale)
+})
+
 const changeLocale = () => {
-  localStorage.setItem('locale', locale.value as string)
+  // This is handled by the watch above
 }
 </script>
 
