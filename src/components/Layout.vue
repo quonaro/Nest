@@ -4,7 +4,7 @@
       <div class="container">
         <div class="header-content">
           <router-link to="/" class="logo">
-            <img src="/Nest.png" alt="Nest" class="logo-icon" />
+            <img :src="logoPath" alt="Nest" class="logo-icon" />
             <span class="logo-text">Nest</span>
           </router-link>
           <div class="header-right">
@@ -76,6 +76,8 @@ import { useTheme } from '../composables/useTheme'
 
 const { locale } = useI18n()
 const { theme, toggleTheme } = useTheme()
+
+const logoPath = `${import.meta.env.BASE_URL}Nest.png`
 
 const changeLocale = () => {
   localStorage.setItem('locale', locale.value as string)

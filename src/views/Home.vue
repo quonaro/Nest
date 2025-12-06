@@ -3,7 +3,7 @@
     <div class="home">
       <div class="hero">
         <h1 class="hero-title">
-          <img src="/Nest.png" alt="Nest" class="hero-icon" />
+          <img :src="logoPath" alt="Nest" class="hero-icon" />
           {{ $t('home.title') }}
         </h1>
         <p class="hero-subtitle">
@@ -100,10 +100,11 @@ import { ref } from 'vue'
 import Layout from '../components/Layout.vue'
 
 const activeTab = ref<'unix' | 'windows'>('unix')
+const logoPath = `${import.meta.env.BASE_URL}Nest.png`
 
-const unixInstall = `$ curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash`
+const unixInstall = '$ curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash'
 
-const windowsInstall = `PS> irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex`
+const windowsInstall = 'PS> irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex'
 </script>
 
 <style scoped>
