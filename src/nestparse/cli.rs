@@ -355,8 +355,12 @@ impl CliGenerator {
             "bool" => {
                 // Positional bool arguments are not common, but we'll support them
                 let help_text = format!("Positional argument: {} (bool)", param.name);
-                // Make positional args optional to allow subcommand recognition
-                arg = arg.required(false).help(help_text);
+                // If no default value, make it required
+                if param.default.is_none() {
+                    arg = arg.required(true).help(help_text);
+                } else {
+                    arg = arg.required(false).help(help_text);
+                }
             }
             _ => {
                 let help_text = if param.default.is_some() {
@@ -364,9 +368,12 @@ impl CliGenerator {
                 } else {
                     format!("Required positional argument: {} ({})", param.name, param.param_type)
                 };
-                // Make positional args optional to allow subcommand recognition
-                // Validation will happen during execution
-                arg = arg.required(false).help(help_text);
+                // If no default value, make it required
+                if param.default.is_none() {
+                    arg = arg.required(true).help(help_text);
+                } else {
+                    arg = arg.required(false).help(help_text);
+                }
             }
         }
 
