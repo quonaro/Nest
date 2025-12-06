@@ -8,16 +8,47 @@ Nest is a declarative task runner that replaces brittle `Makefile`s and scattere
 
 ## 🚀 Quick Start
 
-1. Build the project:
+### Installation
+
+> **Note:** The install scripts are configured for the `quonaro/nest` repository. If you're using a fork, update the `REPO` variable in `install.sh` and `install.ps1`.
+
+The install scripts will:
+- Detect your OS and architecture automatically
+- Download the latest release binary
+- Install it to `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
+- Provide instructions if the install directory is not in your PATH
+
+**Linux/macOS:**
 ```bash
-cargo build --release
+curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | sh
 ```
 
-2. Create a `Nestfile` in your project root (see `nestfile.example` for reference)
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex
+```
 
-3. Run commands:
+**Manual Installation:**
+
+1. Download the latest release for your platform from [Releases](https://github.com/quonaro/nest/releases)
+2. Extract the binary
+3. Add it to your PATH
+
+**From Source:**
 ```bash
-./target/release/nest <command>
+git clone https://github.com/quonaro/nest.git
+cd nest
+cargo build --release
+sudo cp target/release/nest /usr/local/bin/
+```
+
+### Usage
+
+1. Create a `Nestfile` in your project root (see `nestfile.example` for reference)
+
+2. Run commands:
+```bash
+nest <command>
 ```
 
 ## 📝 Writing Nestfile
@@ -253,6 +284,35 @@ This is an **MVP (Minimum Viable Product)** version. I actively use this tool in
 - Stability and bug fixes
 - Learning Rust best practices
 - Adding features as needed for my use cases
+
+## 🔧 CI/CD Setup
+
+### GitHub Actions Configuration
+
+This project uses GitHub Actions for automated releases. To enable automatic builds and releases:
+
+1. **Create a Personal Access Token (PAT):**
+   - Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
+   - Click "Generate new token (classic)"
+   - Give it a descriptive name (e.g., "Nest Release Token")
+   - Select scope: `repo` (full control of private repositories)
+   - Click "Generate token"
+   - **Copy the token immediately** (you won't be able to see it again)
+
+2. **Add Token to Repository Secrets:**
+   - Go to your repository → Settings → Secrets and variables → Actions
+   - Click "New repository secret"
+   - Name: `NEST_TOKEN`
+   - Value: Paste your personal access token
+   - Click "Add secret"
+
+3. **Workflow Triggers:**
+   - The workflow automatically runs on push to `main` or `master` branch
+   - It builds binaries for all platforms (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64)
+   - Creates a release with version from `Cargo.toml`
+   - Uploads all binaries and SHA256 checksums
+
+**Note:** The workflow uses `NEST_TOKEN` secret instead of the default `GITHUB_TOKEN` to have full control over releases. Make sure the token has `repo` scope enabled.
 
 ## 📄 License
 

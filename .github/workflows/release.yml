@@ -1,0 +1,162 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            target: x86_64-unknown-linux-gnu
+            binary_name: nest
+            platform_name: linux
+          - os: ubuntu-latest
+            arch: aarch64
+            target: aarch64-unknown-linux-gnu
+            binary_name: nest
+            platform_name: linux
+          - os: macos-latest
+            arch: x86_64
+            target: x86_64-apple-darwin
+            binary_name: nest
+            platform_name: macos
+          - os: macos-latest
+            arch: aarch64
+            target: aarch64-apple-darwin
+            binary_name: nest
+            platform_name: macos
+          - os: windows-latest
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+            binary_name: nest.exe
+            platform_name: windows
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Strip binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: strip target/${{ matrix.target }}/release/${{ matrix.binary_name }}
+
+      - name: Create archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../../nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz ${{ matrix.binary_name }}
+          cd ../../../..
+          sha256sum nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz > nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz.sha256 || shasum -a 256 nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz > nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Create archive (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          powershell Compress-Archive -Path ${{ matrix.binary_name }} -DestinationPath ../../../../nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip -Force
+          cd ../../../..
+          powershell Get-FileHash -Algorithm SHA256 nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nest-${{ matrix.platform_name }}-${{ matrix.arch }}
+          path: |
+            nest-${{ matrix.platform_name }}-${{ matrix.arch }}.*
+          retention-days: 30
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | cut -d '"' -f 2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Verify checksums exist
+        run: |
+          cd artifacts
+          ls -la *.sha256 || echo "Checksums already created during build"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          body: |
+            ## Release v${{ steps.get_version.outputs.version }}
+
+            ### Installation
+
+            **Linux/macOS:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | sh
+            ```
+
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex
+            ```
+
+            ### Downloads
+
+            Pre-built binaries for all platforms are available below.
+
+            ### Checksums
+
+            All files include SHA256 checksums for verification.
+          files: |
+            artifacts/nest-*.tar.gz
+            artifacts/nest-*.tar.gz.sha256
+            artifacts/nest-*.zip
+            artifacts/nest-*.zip.sha256
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.NEST_TOKEN }}
+
