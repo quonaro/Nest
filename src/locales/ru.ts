@@ -82,10 +82,10 @@ export default {
     featureTemplateProcessing: 'Обработка шаблонов - Подстановка параметров, специальные переменные ([now], [user])',
     featureCLIFeatures: 'Возможности CLI - Динамическая генерация CLI, система справки, вывод JSON/AST',
     featureExecution: 'Выполнение - Выполнение скриптов с переменными окружения и поддержкой рабочей директории',
-    futureFunctions: 'Функции (@func) - Переиспользуемые блоки скриптов',
-    futureLifecycle: 'Хуки жизненного цикла (@before, @after, @fallback)',
-    futureDependencies: 'Зависимости команд (@depends)',
-    futureFunctionCalls: 'Вызовы функций (@call)'
+    futureFunctions: 'Функции (#func) - Переиспользуемые блоки скриптов',
+    futureLifecycle: 'Хуки жизненного цикла (#before, #after, #fallback)',
+    futureDependencies: 'Зависимости команд (#depends)',
+    futureFunctionCalls: 'Вызовы функций (#call)'
   },
   concepts: {
     title: 'Концепции',
