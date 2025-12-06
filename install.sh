@@ -182,7 +182,7 @@ echo "   ${CHECK} Binary installed to ${BINARY_PATH}"
 # Cleanup
 rm -rf "${TEMP_DIR}"
 
-# Check if ~/.local/bin is in PATH and add to shell configs
+# Check if ~/.local/bin is in PATH and add to shell config
 echo ""
 PATH_EXPORT="export PATH=\"\${HOME}/.local/bin:\${PATH}\""
 
@@ -193,73 +193,138 @@ if ! echo "${PATH}" | grep -q "${HOME}/.local/bin"; then
     export PATH="${HOME}/.local/bin:${PATH}"
     echo "   ${CHECK} Added to PATH for current session"
     
-    # Detect shell and add to appropriate config files
-    SHELL_NAME=$(basename "${SHELL:-sh}")
+    # Detect current shell
+    # Try multiple methods to detect the shell
+    CURRENT_SHELL=""
+    
+    # Method 1: Check $SHELL environment variable
+    if [ -n "${SHELL}" ]; then
+        CURRENT_SHELL=$(basename "${SHELL}")
+    fi
+    
+    # Method 2: Check parent process (more reliable)
+    PARENT_CMD=$(ps -p $PPID -o comm= 2>/dev/null | xargs basename 2>/dev/null || echo "")
+    if [ -n "${PARENT_CMD}" ]; then
+        case "${PARENT_CMD}" in
+            zsh|bash|fish|sh|dash|ksh)
+                CURRENT_SHELL="${PARENT_CMD}"
+                ;;
+        esac
+    fi
+    
+    # Method 3: Check $0 (script runner)
+    SCRIPT_RUNNER=$(basename "$0" 2>/dev/null || echo "sh")
+    if [ "${SCRIPT_RUNNER}" = "bash" ] || [ "${SCRIPT_RUNNER}" = "zsh" ] || [ "${SCRIPT_RUNNER}" = "fish" ]; then
+        CURRENT_SHELL="${SCRIPT_RUNNER}"
+    fi
+    
+    # Default fallback
+    if [ -z "${CURRENT_SHELL}" ] || [ "${CURRENT_SHELL}" = "sh" ]; then
+        # Try to detect from common shells
+        if command -v zsh > /dev/null 2>&1 && [ -f "${HOME}/.zshrc" ]; then
+            CURRENT_SHELL="zsh"
+        elif command -v bash > /dev/null 2>&1 && [ -f "${HOME}/.bashrc" ]; then
+            CURRENT_SHELL="bash"
+        elif command -v fish > /dev/null 2>&1; then
+            CURRENT_SHELL="fish"
+        else
+            CURRENT_SHELL="sh"
+        fi
+    fi
+    
+    echo "   ${INFO} Detected shell: ${BOLD}${CURRENT_SHELL}${RESET}"
+    
+    # Add to appropriate config file based on detected shell
     ADDED_TO_CONFIG=0
+    CONFIG_FILE=""
+    RELOAD_CMD=""
     
-    # Try to add to zshrc
-    if [ -f "${HOME}/.zshrc" ]; then
-        if ! grep -q "${HOME}/.local/bin" "${HOME}/.zshrc" 2>/dev/null; then
-            echo "" >> "${HOME}/.zshrc"
-            echo "# Added by Nest CLI installer" >> "${HOME}/.zshrc"
-            echo "${PATH_EXPORT}" >> "${HOME}/.zshrc"
-            echo "   ${CHECK} Added to ~/.zshrc"
-            ADDED_TO_CONFIG=1
-        fi
-    fi
-    
-    # Try to add to bashrc
-    if [ -f "${HOME}/.bashrc" ]; then
-        if ! grep -q "${HOME}/.local/bin" "${HOME}/.bashrc" 2>/dev/null; then
-            echo "" >> "${HOME}/.bashrc"
-            echo "# Added by Nest CLI installer" >> "${HOME}/.bashrc"
-            echo "${PATH_EXPORT}" >> "${HOME}/.bashrc"
-            echo "   ${CHECK} Added to ~/.bashrc"
-            ADDED_TO_CONFIG=1
-        fi
-    fi
-    
-    # Try to add to fish config
-    if command -v fish > /dev/null 2>&1; then
-        FISH_CONFIG_DIR="${HOME}/.config/fish"
-        FISH_CONFIG_FILE="${FISH_CONFIG_DIR}/config.fish"
-        if [ -d "${FISH_CONFIG_DIR}" ] || mkdir -p "${FISH_CONFIG_DIR}" 2>/dev/null; then
-            if ! grep -q "${HOME}/.local/bin" "${FISH_CONFIG_FILE}" 2>/dev/null; then
-                echo "" >> "${FISH_CONFIG_FILE}"
-                echo "# Added by Nest CLI installer" >> "${FISH_CONFIG_FILE}"
-                echo "set -gx PATH \"\${HOME}/.local/bin\" \$PATH" >> "${FISH_CONFIG_FILE}"
+    case "${CURRENT_SHELL}" in
+        zsh)
+            CONFIG_FILE="${HOME}/.zshrc"
+            RELOAD_CMD="source ~/.zshrc"
+            if [ ! -f "${CONFIG_FILE}" ]; then
+                touch "${CONFIG_FILE}"
+            fi
+            if ! grep -q "${HOME}/.local/bin" "${CONFIG_FILE}" 2>/dev/null; then
+                echo "" >> "${CONFIG_FILE}"
+                echo "# Added by Nest CLI installer" >> "${CONFIG_FILE}"
+                echo "${PATH_EXPORT}" >> "${CONFIG_FILE}"
+                echo "   ${CHECK} Added to ~/.zshrc"
+                ADDED_TO_CONFIG=1
+            else
+                echo "   ${CHECK} Already in ~/.zshrc"
+                ADDED_TO_CONFIG=1
+            fi
+            ;;
+        bash)
+            CONFIG_FILE="${HOME}/.bashrc"
+            RELOAD_CMD="source ~/.bashrc"
+            if [ ! -f "${CONFIG_FILE}" ]; then
+                touch "${CONFIG_FILE}"
+            fi
+            if ! grep -q "${HOME}/.local/bin" "${CONFIG_FILE}" 2>/dev/null; then
+                echo "" >> "${CONFIG_FILE}"
+                echo "# Added by Nest CLI installer" >> "${CONFIG_FILE}"
+                echo "${PATH_EXPORT}" >> "${CONFIG_FILE}"
+                echo "   ${CHECK} Added to ~/.bashrc"
+                ADDED_TO_CONFIG=1
+            else
+                echo "   ${CHECK} Already in ~/.bashrc"
+                ADDED_TO_CONFIG=1
+            fi
+            ;;
+        fish)
+            CONFIG_FILE="${HOME}/.config/fish/config.fish"
+            RELOAD_CMD="source ~/.config/fish/config.fish"
+            FISH_CONFIG_DIR="${HOME}/.config/fish"
+            if [ ! -d "${FISH_CONFIG_DIR}" ]; then
+                mkdir -p "${FISH_CONFIG_DIR}" 2>/dev/null || true
+            fi
+            if [ ! -f "${CONFIG_FILE}" ]; then
+                touch "${CONFIG_FILE}"
+            fi
+            if ! grep -q "${HOME}/.local/bin" "${CONFIG_FILE}" 2>/dev/null; then
+                echo "" >> "${CONFIG_FILE}"
+                echo "# Added by Nest CLI installer" >> "${CONFIG_FILE}"
+                echo "set -gx PATH \"\${HOME}/.local/bin\" \$PATH" >> "${CONFIG_FILE}"
                 echo "   ${CHECK} Added to ~/.config/fish/config.fish"
                 ADDED_TO_CONFIG=1
-            fi
-        fi
-    fi
-    
-    # Try to add to profile as fallback
-    if [ $ADDED_TO_CONFIG -eq 0 ]; then
-        PROFILE_FILE="${HOME}/.profile"
-        if [ -f "${PROFILE_FILE}" ]; then
-            if ! grep -q "${HOME}/.local/bin" "${PROFILE_FILE}" 2>/dev/null; then
-                echo "" >> "${PROFILE_FILE}"
-                echo "# Added by Nest CLI installer" >> "${PROFILE_FILE}"
-                echo "${PATH_EXPORT}" >> "${PROFILE_FILE}"
-                echo "   ${CHECK} Added to ~/.profile"
+            else
+                echo "   ${CHECK} Already in ~/.config/fish/config.fish"
                 ADDED_TO_CONFIG=1
             fi
-        else
-            # Create .profile if it doesn't exist
-            echo "${PATH_EXPORT}" > "${PROFILE_FILE}"
-            chmod 644 "${PROFILE_FILE}"
-            echo "   ${CHECK} Created ~/.profile with PATH"
-            ADDED_TO_CONFIG=1
-        fi
-    fi
+            ;;
+        *)
+            # Fallback to .profile for other shells
+            CONFIG_FILE="${HOME}/.profile"
+            RELOAD_CMD="source ~/.profile"
+            if [ ! -f "${CONFIG_FILE}" ]; then
+                echo "${PATH_EXPORT}" > "${CONFIG_FILE}"
+                chmod 644 "${CONFIG_FILE}"
+                echo "   ${CHECK} Created ~/.profile with PATH"
+                ADDED_TO_CONFIG=1
+            elif ! grep -q "${HOME}/.local/bin" "${CONFIG_FILE}" 2>/dev/null; then
+                echo "" >> "${CONFIG_FILE}"
+                echo "# Added by Nest CLI installer" >> "${CONFIG_FILE}"
+                echo "${PATH_EXPORT}" >> "${CONFIG_FILE}"
+                echo "   ${CHECK} Added to ~/.profile"
+                ADDED_TO_CONFIG=1
+            else
+                echo "   ${CHECK} Already in ~/.profile"
+                ADDED_TO_CONFIG=1
+            fi
+            ;;
+    esac
     
     if [ $ADDED_TO_CONFIG -eq 1 ]; then
         echo ""
-        echo "   ${INFO} PATH has been added to your shell configuration files."
-        echo "   ${INFO} Run ${BOLD}source ~/.${SHELL_NAME}rc${RESET} or restart your terminal to use 'nest' command."
+        echo "   ${INFO} PATH has been added to ${BOLD}${CONFIG_FILE}${RESET}"
+        echo "   ${INFO} Run ${BOLD}${RELOAD_CMD}${RESET} or restart your terminal to use 'nest' command."
     else
-        echo "   ${WARN} Could not automatically add to shell config. Please add manually:"
+        echo ""
+        echo "   ${WARN} Could not automatically add to shell config."
+        echo "   ${WARN} Please add this line manually to your shell configuration:"
         echo "   ${BOLD}${GREEN}${PATH_EXPORT}${RESET}"
     fi
     echo ""
