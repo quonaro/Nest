@@ -124,51 +124,76 @@ try {
 
 # Check if install directory is in PATH
 Write-Host ""
+Write-ColorOutput Cyan "$INFO Configuring PATH..."
 $CurrentPath = $env:Path
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 $IsInCurrentPath = $CurrentPath -like "*$INSTALL_DIR*"
 $IsInUserPath = $UserPath -like "*$INSTALL_DIR*"
 
+# Add to current session PATH
 if (-not $IsInCurrentPath) {
-    Write-ColorOutput Yellow "$WARN Note: ${INSTALL_DIR} is not in your PATH"
-    Write-Host ""
     Write-Host "   Adding to PATH for current session..." -NoNewline
     $env:Path += ";$INSTALL_DIR"
     Write-ColorOutput Green " $CHECK"
-    Write-Host ""
-    
-    if (-not $IsInUserPath) {
-        Write-Host "   To make this permanent, add this to your PowerShell profile:"
-        Write-Host ""
-        Write-ColorOutput Green "   `$env:Path += `";`$env:USERPROFILE\.local\bin`""
-        Write-Host ""
-        Write-Host "   Or add it permanently via:"
-        Write-Host "   System Properties > Environment Variables > User variables > Path"
-        Write-Host ""
-        
-        # Offer to add to PATH permanently (only if running interactively)
-        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-            try {
-                $Response = Read-Host "   Would you like to add it to your user PATH permanently? (Y/N)"
-                if ($Response -eq "Y" -or $Response -eq "y") {
-                    $NewUserPath = $UserPath
-                    if ($NewUserPath -and -not $NewUserPath.EndsWith(";")) {
-                        $NewUserPath += ";"
-                    }
-                    $NewUserPath += $INSTALL_DIR
-                    [Environment]::SetEnvironmentVariable("Path", $NewUserPath, "User")
-                    Write-ColorOutput Green "   $CHECK Added to user PATH permanently"
-                    Write-Host "   Note: You may need to restart your terminal for this to take effect."
-                }
-            } catch {
-                Write-ColorOutput Yellow "   $WARN Could not add to PATH automatically. Please add it manually."
-            }
+} else {
+    Write-ColorOutput Green "   $CHECK Already in current session PATH"
+}
+
+# Add to PowerShell profile
+$ProfilePath = $PROFILE.CurrentUserAllHosts
+$ProfileContent = ""
+$PathLine = "`$env:Path += `";`$env:USERPROFILE\.local\bin`""
+
+if (Test-Path $ProfilePath) {
+    $ProfileContent = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+} else {
+    # Create profile directory if it doesn't exist
+    $ProfileDir = Split-Path -Parent $ProfilePath
+    if (-not (Test-Path $ProfileDir)) {
+        New-Item -ItemType Directory -Path $ProfileDir -Force | Out-Null
+    }
+    $ProfileContent = ""
+}
+
+# Check if PATH line already exists in profile
+$PathLineEscaped = [regex]::Escape($PathLine)
+$PathInProfile = $ProfileContent -match $PathLineEscaped
+
+if (-not $PathInProfile) {
+    Write-Host "   Adding to PowerShell profile..." -NoNewline
+    try {
+        if ($ProfileContent -and -not $ProfileContent.EndsWith("`n") -and -not $ProfileContent.EndsWith("`r`n")) {
+            $ProfileContent += "`r`n"
         }
-    } else {
-        Write-ColorOutput Green "   $CHECK Already in user PATH (restart terminal to use)"
+        $ProfileContent += "$PathLine`r`n"
+        Set-Content -Path $ProfilePath -Value $ProfileContent -Encoding UTF8 -ErrorAction Stop
+        Write-ColorOutput Green " $CHECK"
+        Write-Host "      Profile: $ProfilePath"
+    } catch {
+        Write-ColorOutput Yellow " $WARN"
+        Write-Host "      Could not write to profile: $_"
     }
 } else {
-    Write-ColorOutput Green "   $CHECK Already in PATH"
+    Write-ColorOutput Green "   $CHECK Already in PowerShell profile"
+}
+
+# Add to user PATH environment variable
+if (-not $IsInUserPath) {
+    Write-Host "   Adding to user PATH environment variable..." -NoNewline
+    try {
+        $NewUserPath = $UserPath
+        if ($NewUserPath -and -not $NewUserPath.EndsWith(";")) {
+            $NewUserPath += ";"
+        }
+        $NewUserPath += $INSTALL_DIR
+        [Environment]::SetEnvironmentVariable("Path", $NewUserPath, "User")
+        Write-ColorOutput Green " $CHECK"
+    } catch {
+        Write-ColorOutput Yellow " $WARN"
+        Write-Host "      Could not add to user PATH: $_"
+    }
+} else {
+    Write-ColorOutput Green "   $CHECK Already in user PATH environment variable"
 }
 
 # Success message

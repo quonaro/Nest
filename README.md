@@ -20,7 +20,7 @@ The install scripts will:
 
 **Linux/macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
