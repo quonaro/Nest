@@ -182,24 +182,89 @@ echo "   ${CHECK} Binary installed to ${BINARY_PATH}"
 # Cleanup
 rm -rf "${TEMP_DIR}"
 
-# Check if ~/.local/bin is in PATH
+# Check if ~/.local/bin is in PATH and add to shell configs
 echo ""
+PATH_EXPORT="export PATH=\"\${HOME}/.local/bin:\${PATH}\""
+
 if ! echo "${PATH}" | grep -q "${HOME}/.local/bin"; then
-    echo "${WARN} ${BOLD}${YELLOW}Note: ${INSTALL_DIR} is not in your PATH${RESET}"
-    echo ""
-    echo "   To use 'nest' command, add this to your shell config:"
-    echo ""
-    echo "   ${BOLD}${GREEN}export PATH=\"\${HOME}/.local/bin:\${PATH}\"${RESET}"
-    echo ""
-    # Detect shell and suggest the right file
+    echo "${INFO} ${BOLD}Configuring PATH...${RESET}"
+    
+    # Add to current session
+    export PATH="${HOME}/.local/bin:${PATH}"
+    echo "   ${CHECK} Added to PATH for current session"
+    
+    # Detect shell and add to appropriate config files
     SHELL_NAME=$(basename "${SHELL:-sh}")
-    case "$SHELL_NAME" in
-        zsh)  CONFIG_FILE="~/.zshrc" ;;
-        bash) CONFIG_FILE="~/.bashrc" ;;
-        *)    CONFIG_FILE="~/.profile" ;;
-    esac
-    echo "   Add it to ${BOLD}${CONFIG_FILE}${RESET} and run:"
-    echo "   ${BOLD}source ${CONFIG_FILE}${RESET}"
+    ADDED_TO_CONFIG=0
+    
+    # Try to add to zshrc
+    if [ -f "${HOME}/.zshrc" ]; then
+        if ! grep -q "${HOME}/.local/bin" "${HOME}/.zshrc" 2>/dev/null; then
+            echo "" >> "${HOME}/.zshrc"
+            echo "# Added by Nest CLI installer" >> "${HOME}/.zshrc"
+            echo "${PATH_EXPORT}" >> "${HOME}/.zshrc"
+            echo "   ${CHECK} Added to ~/.zshrc"
+            ADDED_TO_CONFIG=1
+        fi
+    fi
+    
+    # Try to add to bashrc
+    if [ -f "${HOME}/.bashrc" ]; then
+        if ! grep -q "${HOME}/.local/bin" "${HOME}/.bashrc" 2>/dev/null; then
+            echo "" >> "${HOME}/.bashrc"
+            echo "# Added by Nest CLI installer" >> "${HOME}/.bashrc"
+            echo "${PATH_EXPORT}" >> "${HOME}/.bashrc"
+            echo "   ${CHECK} Added to ~/.bashrc"
+            ADDED_TO_CONFIG=1
+        fi
+    fi
+    
+    # Try to add to fish config
+    if command -v fish > /dev/null 2>&1; then
+        FISH_CONFIG_DIR="${HOME}/.config/fish"
+        FISH_CONFIG_FILE="${FISH_CONFIG_DIR}/config.fish"
+        if [ -d "${FISH_CONFIG_DIR}" ] || mkdir -p "${FISH_CONFIG_DIR}" 2>/dev/null; then
+            if ! grep -q "${HOME}/.local/bin" "${FISH_CONFIG_FILE}" 2>/dev/null; then
+                echo "" >> "${FISH_CONFIG_FILE}"
+                echo "# Added by Nest CLI installer" >> "${FISH_CONFIG_FILE}"
+                echo "set -gx PATH \"\${HOME}/.local/bin\" \$PATH" >> "${FISH_CONFIG_FILE}"
+                echo "   ${CHECK} Added to ~/.config/fish/config.fish"
+                ADDED_TO_CONFIG=1
+            fi
+        fi
+    fi
+    
+    # Try to add to profile as fallback
+    if [ $ADDED_TO_CONFIG -eq 0 ]; then
+        PROFILE_FILE="${HOME}/.profile"
+        if [ -f "${PROFILE_FILE}" ]; then
+            if ! grep -q "${HOME}/.local/bin" "${PROFILE_FILE}" 2>/dev/null; then
+                echo "" >> "${PROFILE_FILE}"
+                echo "# Added by Nest CLI installer" >> "${PROFILE_FILE}"
+                echo "${PATH_EXPORT}" >> "${PROFILE_FILE}"
+                echo "   ${CHECK} Added to ~/.profile"
+                ADDED_TO_CONFIG=1
+            fi
+        else
+            # Create .profile if it doesn't exist
+            echo "${PATH_EXPORT}" > "${PROFILE_FILE}"
+            chmod 644 "${PROFILE_FILE}"
+            echo "   ${CHECK} Created ~/.profile with PATH"
+            ADDED_TO_CONFIG=1
+        fi
+    fi
+    
+    if [ $ADDED_TO_CONFIG -eq 1 ]; then
+        echo ""
+        echo "   ${INFO} PATH has been added to your shell configuration files."
+        echo "   ${INFO} Run ${BOLD}source ~/.${SHELL_NAME}rc${RESET} or restart your terminal to use 'nest' command."
+    else
+        echo "   ${WARN} Could not automatically add to shell config. Please add manually:"
+        echo "   ${BOLD}${GREEN}${PATH_EXPORT}${RESET}"
+    fi
+    echo ""
+else
+    echo "${CHECK} ${BOLD}${GREEN}Already in PATH${RESET}"
     echo ""
 fi
 
