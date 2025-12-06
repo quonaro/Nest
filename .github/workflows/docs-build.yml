@@ -36,7 +36,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          destination_branch: docs-build
+          publish_branch: docs-build
           keep_files: false
           force_orphan: true
 
