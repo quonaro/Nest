@@ -86,7 +86,7 @@ Hello Alice, welcome!</code></pre>
           <li>✅ <strong>{{ $t('home.featureCommandStructure') }}</strong></li>
           <li>✅ <strong>{{ $t('home.featureParameters') }}</strong></li>
           <li>✅ <strong>{{ $t('home.featureDirectives') }}</strong></li>
-          <li>✅ <strong><span v-html="featureTemplateProcessing"></span></strong></li>
+          <li>✅ <strong>{{ $t('home.featureTemplateProcessing') }}</strong></li>
           <li>✅ <strong>{{ $t('home.featureDynamicCLI') }}</strong></li>
           <li>✅ <strong>{{ $t('home.featureEnvironmentManagement') }}</strong></li>
         </ul>
@@ -98,11 +98,8 @@ Hello Alice, welcome!</code></pre>
 <script setup lang="ts">
 import { ref } from 'vue'
 import Layout from '../components/Layout.vue'
-import { useTemplateText } from '../composables/useTemplateText'
-
 const activeTab = ref<'unix' | 'windows'>('unix')
 const logoPath = `${import.meta.env.BASE_URL}Nest.png`
-const featureTemplateProcessing = useTemplateText('home.featureTemplateProcessing')
 
 const unixInstall = '$ curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash'
 

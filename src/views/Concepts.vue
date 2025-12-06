@@ -43,14 +43,14 @@
         <p>{{ $t('concepts.templates.desc') }}</p>
 
         <h3>{{ $t('concepts.templates.parameterSubstitution') }}</h3>
-        <p>{{ useParamName }}</p>
+        <p>{{ $t('concepts.templates.useParamName') }}</p>
         <pre v-pre><code>greet(name: str):
     > script: echo "Hello {{name}}!"</code></pre>
 
         <h3>{{ $t('concepts.templates.specialVariables') }}</h3>
         <ul>
-          <li><code v-pre>{{now}}</code> - <span v-html="templatesNow"></span></li>
-          <li><code v-pre>{{user}}</code> - <span v-html="templatesUser"></span></li>
+          <li><code v-pre>{{now}}</code> - {{ $t('concepts.templates.now') }}</li>
+          <li><code v-pre>{{user}}</code> - {{ $t('concepts.templates.user') }}</li>
         </ul>
 
         <h3>{{ $t('concepts.templates.example') }}</h3>
@@ -89,11 +89,6 @@
 
 <script setup lang="ts">
 import Layout from '../components/Layout.vue'
-import { useTemplateText } from '../composables/useTemplateText'
-
-const useParamName = useTemplateText('concepts.templates.useParamName')
-const templatesNow = useTemplateText('concepts.templates.now')
-const templatesUser = useTemplateText('concepts.templates.user')
 </script>
 
 <style scoped>

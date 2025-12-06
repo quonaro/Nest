@@ -47,7 +47,7 @@ export default {
     featureCommandStructure: 'Структура команд - Команды верхнего уровня и вложенные подкоманды',
     featureParameters: 'Параметры - Позиционные и именованные аргументы с типами (str, bool, num, arr)',
     featureDirectives: 'Директивы - Управление рабочей директорией, переменными окружения и скриптами',
-    featureTemplateProcessing: 'Обработка шаблонов - Подстановка переменных с синтаксисом [[param]]',
+    featureTemplateProcessing: 'Обработка шаблонов - Подстановка переменных с синтаксисом [param]',
     featureDynamicCLI: 'Динамический CLI - Автоматически генерируется из вашего Nestfile',
     featureEnvironmentManagement: 'Управление окружением - Загрузка из .env файлов или прямое назначение'
   },
@@ -79,13 +79,13 @@ export default {
     featureCommandStructure: 'Структура команд - Команды верхнего уровня, вложенные подкоманды, подкоманды по умолчанию',
     featureParameters: 'Параметры - Типы (str, bool, num, arr), позиционные и именованные аргументы, алиасы, значения по умолчанию',
     featureDirectives: 'Директивы - Описания, рабочая директория, переменные окружения, скрипты',
-    featureTemplateProcessing: 'Обработка шаблонов - Подстановка параметров, специальные переменные ([[now]], [[user]])',
+    featureTemplateProcessing: 'Обработка шаблонов - Подстановка параметров, специальные переменные ([now], [user])',
     featureCLIFeatures: 'Возможности CLI - Динамическая генерация CLI, система справки, вывод JSON/AST',
     featureExecution: 'Выполнение - Выполнение скриптов с переменными окружения и поддержкой рабочей директории',
-    futureFunctions: 'Функции (@@func) - Переиспользуемые блоки скриптов',
-    futureLifecycle: 'Хуки жизненного цикла (@@before, @@after, @@fallback)',
-    futureDependencies: 'Зависимости команд (@@depends)',
-    futureFunctionCalls: 'Вызовы функций (@@call)'
+    futureFunctions: 'Функции (@func) - Переиспользуемые блоки скриптов',
+    futureLifecycle: 'Хуки жизненного цикла (@before, @after, @fallback)',
+    futureDependencies: 'Зависимости команд (@depends)',
+    futureFunctionCalls: 'Вызовы функций (@call)'
   },
   concepts: {
     title: 'Концепции',
@@ -111,10 +111,10 @@ export default {
       title: 'Шаблоны',
       desc: 'Nest использует переменные шаблонов для вставки значений в скрипты. Переменные заменяются их фактическими значениями перед выполнением скрипта.',
       parameterSubstitution: 'Подстановка параметров',
-      useParamName: 'Используйте [[param_name]] для ссылки на параметры команды:',
+      useParamName: 'Используйте [param_name] для ссылки на параметры команды:',
       specialVariables: 'Специальные переменные',
-      now: '[[now]] - Текущее UTC время в формате RFC3339',
-      user: '[[user]] - Текущий пользователь из переменной окружения $USER',
+      now: '[now] - Текущее UTC время в формате RFC3339',
+      user: '[user] - Текущий пользователь из переменной окружения $USER',
       example: 'Пример'
     },
     execution: {
@@ -177,11 +177,11 @@ export default {
     },
     templates: {
       title: 'Переменные шаблонов',
-      desc: 'Используйте синтаксис [[variable]] в скриптах:',
-      parameters: 'Параметры: [[param]] - Заменяется значением параметра',
+      desc: 'Используйте синтаксис [variable] в скриптах:',
+      parameters: 'Параметры: [param] - Заменяется значением параметра',
       special: 'Специальные переменные:',
-      now: '[[now]] - Текущее UTC время в формате RFC3339',
-      user: '[[user]] - Текущий пользователь (из переменной окружения $USER)',
+      now: '[now] - Текущее UTC время в формате RFC3339',
+      user: '[user] - Текущий пользователь (из переменной окружения $USER)',
       example: 'Пример:'
     }
   },

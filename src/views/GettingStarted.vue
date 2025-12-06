@@ -64,7 +64,7 @@ $ nest greet --help</code></pre>
           <li>✅ <strong>{{ $t('gettingStarted.featureCommandStructure') }}</strong></li>
           <li>✅ <strong>{{ $t('gettingStarted.featureParameters') }}</strong></li>
           <li>✅ <strong>{{ $t('gettingStarted.featureDirectives') }}</strong></li>
-          <li>✅ <strong><span v-html="featureTemplateProcessing"></span></strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureTemplateProcessing') }}</strong></li>
           <li>✅ <strong>{{ $t('gettingStarted.featureCLIFeatures') }}</strong></li>
           <li>✅ <strong>{{ $t('gettingStarted.featureExecution') }}</strong></li>
         </ul>
@@ -83,9 +83,6 @@ $ nest greet --help</code></pre>
 
 <script setup lang="ts">
 import Layout from '../components/Layout.vue'
-import { useTemplateText } from '../composables/useTemplateText'
-
-const featureTemplateProcessing = useTemplateText('gettingStarted.featureTemplateProcessing')
 </script>
 
 <style scoped>

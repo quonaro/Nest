@@ -47,7 +47,7 @@ export default {
     featureCommandStructure: 'Command Structure - Top-level and nested subcommands',
     featureParameters: 'Parameters - Positional and named arguments with types (str, bool, num, arr)',
     featureDirectives: 'Directives - Control working directory, environment variables, and scripts',
-    featureTemplateProcessing: 'Template Processing - Variable substitution with [[param]] syntax',
+    featureTemplateProcessing: 'Template Processing - Variable substitution with [param] syntax',
     featureDynamicCLI: 'Dynamic CLI - Automatically generated from your Nestfile',
     featureEnvironmentManagement: 'Environment Management - Load from .env files or direct assignment'
   },
@@ -79,13 +79,13 @@ export default {
     featureCommandStructure: 'Command Structure - Top-level commands, nested subcommands, default subcommands',
     featureParameters: 'Parameters - Types (str, bool, num, arr), positional and named arguments, aliases, defaults',
     featureDirectives: 'Directives - Descriptions, working directory, environment variables, scripts',
-    featureTemplateProcessing: 'Template Processing - Parameter substitution, special variables ([[now]], [[user]])',
+    featureTemplateProcessing: 'Template Processing - Parameter substitution, special variables ([now], [user])',
     featureCLIFeatures: 'CLI Features - Dynamic CLI generation, help system, JSON/AST output',
     featureExecution: 'Execution - Script execution with environment variables and working directory support',
-    futureFunctions: 'Functions (@@func) - Reusable script blocks',
-    futureLifecycle: 'Lifecycle hooks (@@before, @@after, @@fallback)',
-    futureDependencies: 'Command dependencies (@@depends)',
-    futureFunctionCalls: 'Function calls (@@call)'
+    futureFunctions: 'Functions (@func) - Reusable script blocks',
+    futureLifecycle: 'Lifecycle hooks (@before, @after, @fallback)',
+    futureDependencies: 'Command dependencies (@depends)',
+    futureFunctionCalls: 'Function calls (@call)'
   },
   concepts: {
     title: 'Concepts',
@@ -111,10 +111,10 @@ export default {
       title: 'Templates',
       desc: 'Nest uses template variables to inject values into scripts. Variables are replaced with their actual values before script execution.',
       parameterSubstitution: 'Parameter Substitution',
-      useParamName: 'Use [[param_name]] to reference command parameters:',
+      useParamName: 'Use [param_name] to reference command parameters:',
       specialVariables: 'Special Variables',
-      now: '[[now]] - Current UTC time in RFC3339 format',
-      user: '[[user]] - Current user from $USER environment variable',
+      now: '[now] - Current UTC time in RFC3339 format',
+      user: '[user] - Current user from $USER environment variable',
       example: 'Example'
     },
     execution: {
@@ -177,11 +177,11 @@ export default {
     },
     templates: {
       title: 'Template Variables',
-      desc: 'Use [[variable]] syntax in scripts:',
-      parameters: 'Parameters: [[param]] - Replaced with parameter value',
+      desc: 'Use [variable] syntax in scripts:',
+      parameters: 'Parameters: [param] - Replaced with parameter value',
       special: 'Special variables:',
-      now: '[[now]] - Current UTC time in RFC3339 format',
-      user: '[[user]] - Current user (from $USER environment variable)',
+      now: '[now] - Current UTC time in RFC3339 format',
+      user: '[user] - Current user (from $USER environment variable)',
       example: 'Example:'
     }
   },
