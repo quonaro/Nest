@@ -145,7 +145,16 @@ jobs:
 
       - name: Verify checksums exist
         run: |
+          if [ ! -d "artifacts" ]; then
+            echo "Error: artifacts directory does not exist. No artifacts were downloaded."
+            echo "This usually means all build jobs failed. Cannot create release."
+            exit 1
+          fi
           cd artifacts
+          if [ -z "$(ls -A)" ]; then
+            echo "Error: artifacts directory is empty. Cannot create release."
+            exit 1
+          fi
           ls -la *.sha256 || echo "Checksums already created during build"
 
       - name: Create Release
