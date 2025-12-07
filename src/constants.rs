@@ -33,6 +33,7 @@ pub const DATA_TYPES: [&str; 4] = ["str", "bool", "num", "arr"];
 pub const APP_NAME: &str = "nest";
 
 /// Description of the CLI application.
+#[allow(dead_code)]
 pub const APP_DESCRIPTION: &str = "Nest task runner";
 
 // CLI Special Flags
@@ -45,6 +46,12 @@ pub const FLAG_SHOW: &str = "show";
 
 /// Flag name for copying example nestfile.
 pub const FLAG_EXAMPLE: &str = "example";
+
+/// Flag name for dry-run mode.
+pub const FLAG_DRY_RUN: &str = "dry-run";
+
+/// Flag name for verbose output.
+pub const FLAG_VERBOSE: &str = "verbose";
 
 /// Format option for JSON output.
 pub const FORMAT_JSON: &str = "json";

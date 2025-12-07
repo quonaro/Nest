@@ -9,8 +9,8 @@ use super::env::EnvironmentManager;
 use super::executor::CommandExecutor;
 use super::template::TemplateProcessor;
 use crate::constants::{
-    APP_DESCRIPTION, APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_EXAMPLE, FLAG_SHOW,
-    FLAG_VERSION, FORMAT_AST, FORMAT_JSON, RESERVED_FLAG_HELP, RESERVED_FLAG_VERSION,
+    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
+    FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON, RESERVED_FLAG_HELP, RESERVED_FLAG_VERSION,
     RESERVED_SHORT_HELP, RESERVED_SHORT_OPTIONS, RESERVED_SHORT_VERSION, SHORT_VERSION,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
@@ -68,10 +68,13 @@ impl CliGenerator {
         let mut ids = std::collections::HashMap::new();
 
         for command in commands {
-            if let Some(default_cmd) = command.children.iter().find(|c| c.name == DEFAULT_SUBCOMMAND) {
+            if let Some(default_cmd) = command
+                .children
+                .iter()
+                .find(|c| c.name == DEFAULT_SUBCOMMAND)
+            {
                 for param in &default_cmd.parameters {
-                    let static_str: &'static str =
-                        Box::leak(param.name.clone().into_boxed_str());
+                    let static_str: &'static str = Box::leak(param.name.clone().into_boxed_str());
                     ids.insert(param.name.clone(), static_str);
                 }
             }
@@ -97,9 +100,7 @@ impl CliGenerator {
         self.default_param_ids
             .get(param_name)
             .copied()
-            .unwrap_or_else(|| {
-                Box::leak(param_name.to_string().into_boxed_str())
-            })
+            .unwrap_or_else(|| Box::leak(param_name.to_string().into_boxed_str()))
     }
 
     /// Builds a complete clap CLI structure from the parsed commands.
@@ -179,7 +180,6 @@ impl CliGenerator {
         path: &[String],
         conflicts: &mut Vec<ShortAliasConflict>,
     ) {
-
         // Check parameters of this command
         for param in &command.parameters {
             if let Some(alias) = &param.alias {
@@ -196,7 +196,11 @@ impl CliGenerator {
         }
 
         // Check default subcommand parameters
-        if let Some(default_cmd) = command.children.iter().find(|c| c.name == DEFAULT_SUBCOMMAND) {
+        if let Some(default_cmd) = command
+            .children
+            .iter()
+            .find(|c| c.name == DEFAULT_SUBCOMMAND)
+        {
             for param in &default_cmd.parameters {
                 if let Some(alias) = &param.alias {
                     if let Some(short) = alias.chars().next() {
@@ -223,8 +227,10 @@ impl CliGenerator {
     }
 
     fn create_base_cli() -> ClapCommand {
+        let version = env!("CARGO_PKG_VERSION");
+        let about = format!("Nest {}", version);
         ClapCommand::new(APP_NAME)
-            .about(APP_DESCRIPTION)
+            .about(about)
             .arg(
                 Arg::new(FLAG_VERSION)
                     .long(FLAG_VERSION)
@@ -248,12 +254,25 @@ impl CliGenerator {
                     .hide(true)
                     .help("Copy example nestfile to current directory"),
             )
+            .arg(
+                Arg::new(FLAG_DRY_RUN)
+                    .long(FLAG_DRY_RUN)
+                    .short('n')
+                    .action(ArgAction::SetTrue)
+                    .help("Show what would be executed without actually running it"),
+            )
+            .arg(
+                Arg::new(FLAG_VERBOSE)
+                    .long(FLAG_VERBOSE)
+                    .short('v')
+                    .action(ArgAction::SetTrue)
+                    .help("Show detailed output including environment variables and working directory"),
+            )
     }
 
     fn add_command_to_clap(&self, mut app: ClapCommand, command: &Command) -> ClapCommand {
         let cmd_name: &'static str = Box::leak(command.name.clone().into_boxed_str());
-        let mut subcmd = ClapCommand::new(cmd_name)
-            .arg_required_else_help(false);
+        let mut subcmd = ClapCommand::new(cmd_name).arg_required_else_help(false);
 
         subcmd = Self::add_description(subcmd, &command.directives);
         subcmd = Self::add_parameters(subcmd, &command.parameters, self);
@@ -282,11 +301,13 @@ impl CliGenerator {
         // First, add all named arguments (they don't use indices)
         for param in parameters {
             if param.is_named {
-                let arg = generator.parameter_to_arg(param);
+                // Use parameter name directly as ID (same as used in extract_bool_flag)
+                let param_id: &'static str = Box::leak(param.name.clone().into_boxed_str());
+                let arg = generator.parameter_to_arg_with_id(param, param_id);
                 subcmd = subcmd.arg(arg);
             }
         }
-        
+
         // Then, add all positional arguments with sequential indices
         let mut positional_index = 1; // Start from 1 (0 is command name)
         for param in parameters {
@@ -296,7 +317,7 @@ impl CliGenerator {
                 positional_index += 1;
             }
         }
-        
+
         subcmd
     }
 
@@ -306,7 +327,11 @@ impl CliGenerator {
         generator: &CliGenerator,
     ) -> ClapCommand {
         if !command.children.is_empty() {
-            if let Some(default_cmd) = command.children.iter().find(|c| c.name == DEFAULT_SUBCOMMAND) {
+            if let Some(default_cmd) = command
+                .children
+                .iter()
+                .find(|c| c.name == DEFAULT_SUBCOMMAND)
+            {
                 // First, add all named arguments
                 for param in &default_cmd.parameters {
                     if param.is_named {
@@ -315,7 +340,7 @@ impl CliGenerator {
                         subcmd = subcmd.arg(arg);
                     }
                 }
-                
+
                 // Then, add all positional arguments with sequential indices
                 let mut positional_index = 1;
                 for param in &default_cmd.parameters {
@@ -328,11 +353,6 @@ impl CliGenerator {
             }
         }
         subcmd
-    }
-
-    fn parameter_to_arg(&self, param: &Parameter) -> Arg {
-        let param_name: &'static str = Box::leak(param.name.clone().into_boxed_str());
-        self.parameter_to_arg_with_id(param, param_name)
     }
 
     fn parameter_to_arg_with_id(&self, param: &Parameter, param_id: &'static str) -> Arg {
@@ -348,8 +368,7 @@ impl CliGenerator {
 
     fn parameter_to_arg_positional(&self, param: &Parameter, index: usize) -> Arg {
         let param_name: &'static str = Box::leak(param.name.clone().into_boxed_str());
-        let mut arg = Arg::new(param_name)
-            .index(index);
+        let mut arg = Arg::new(param_name).index(index);
 
         match param.param_type.as_str() {
             "bool" => {
@@ -366,7 +385,10 @@ impl CliGenerator {
                 let help_text = if param.default.is_some() {
                     format!("Positional argument: {} ({})", param.name, param.param_type)
                 } else {
-                    format!("Required positional argument: {} ({})", param.name, param.param_type)
+                    format!(
+                        "Required positional argument: {} ({})",
+                        param.name, param.param_type
+                    )
                 };
                 // If no default value, make it required
                 if param.default.is_none() {
@@ -388,7 +410,10 @@ impl CliGenerator {
             .action(ArgAction::Set)
             .value_parser([BOOL_TRUE, BOOL_FALSE])
             .num_args(0..=1)
-            .help(format!("Flag: {} (true/false, or use without value for true)", param.name));
+            .help(format!(
+                "Flag: {} (true/false, or use without value for true)",
+                param.name
+            ));
 
         if let Some(alias) = &param.alias {
             if let Some(short) = alias.chars().next() {
@@ -430,7 +455,7 @@ impl CliGenerator {
             .help(help_text)
             .required(true)
             .action(ArgAction::Set);
-        
+
         if let Some(alias) = &param.alias {
             if let Some(short) = alias.chars().next() {
                 new_arg = new_arg.short(short);
@@ -505,7 +530,10 @@ impl CliGenerator {
     ///
     /// Returns `true` if the command has a child named "default", `false` otherwise.
     pub fn has_default_command(&self, command: &Command) -> bool {
-        command.children.iter().any(|c| c.name == DEFAULT_SUBCOMMAND)
+        command
+            .children
+            .iter()
+            .any(|c| c.name == DEFAULT_SUBCOMMAND)
     }
 
     /// Executes a command with the provided arguments.
@@ -521,6 +549,8 @@ impl CliGenerator {
     /// * `command` - The command to execute
     /// * `args` - Arguments to pass to the command
     /// * `command_path` - Full path to the command (for error reporting)
+    /// * `dry_run` - If true, show what would be executed without running it
+    /// * `verbose` - If true, show detailed output
     ///
     /// # Returns
     ///
@@ -537,6 +567,8 @@ impl CliGenerator {
         command: &Command,
         args: &HashMap<String, String>,
         command_path: Option<&[String]>,
+        dry_run: bool,
+        verbose: bool,
     ) -> Result<(), String> {
         let script = Self::get_directive_value(&command.directives, "script")
             .ok_or_else(|| "Command has no script directive".to_string())?;
@@ -552,12 +584,21 @@ impl CliGenerator {
             &env_vars,
             cwd.as_deref(),
             command_path,
+            dry_run,
+            verbose,
         )
     }
 }
 
 pub fn handle_version() {
-    println!("nest {}", env!("CARGO_PKG_VERSION"));
+    use super::output::colors;
+    use super::output::OutputFormatter;
+    println!(
+        "{}nest{} {}",
+        colors::BRIGHT_BLUE,
+        colors::RESET,
+        OutputFormatter::value(env!("CARGO_PKG_VERSION"))
+    );
     std::process::exit(0);
 }
 
@@ -588,7 +629,14 @@ pub fn handle_json(commands: &[Command]) -> Result<(), Box<dyn std::error::Error
 /// * `commands` - The list of commands to display
 pub fn handle_show_ast(commands: &[Command]) {
     use super::display::print_command;
-    println!("🌳 AST Structure:\n");
+    use super::output::colors;
+    println!(
+        "{}🌳{} {}AST Structure:{}\n",
+        colors::BRIGHT_GREEN,
+        colors::RESET,
+        colors::BRIGHT_CYAN,
+        colors::RESET
+    );
     for command in commands {
         print_command(command, 0);
         println!();
@@ -611,29 +659,31 @@ pub fn handle_example() {
     use std::fs;
     use std::process::Command;
 
+    use super::output::OutputFormatter;
+
     // Get current directory
     let current_dir = match env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            eprintln!("Error getting current directory: {}", e);
+            OutputFormatter::error(&format!("Error getting current directory: {}", e));
             std::process::exit(1);
         }
     };
 
     // Write to nestfile in current directory
     let target_path = current_dir.join("nestfile");
-    
+
     // Check if nestfile already exists
     if target_path.exists() {
-        eprintln!("Error: nestfile already exists in the current directory");
-        eprintln!("Please remove it first or choose a different location.");
+        OutputFormatter::error("nestfile already exists in the current directory");
+        OutputFormatter::info("Please remove it first or choose a different location.");
         std::process::exit(1);
     }
 
     // GitHub raw URL for nestfile.example
     let url = "https://raw.githubusercontent.com/quonaro/nest/main/nestfile.example";
 
-    println!("Downloading nestfile.example from GitHub...");
+    OutputFormatter::info("Downloading nestfile.example from GitHub...");
 
     // Try curl first, then wget
     let content = match Command::new("curl").args(&["-fsSL", url]).output() {
@@ -647,12 +697,12 @@ pub fn handle_example() {
                     String::from_utf8_lossy(&output.stdout).to_string()
                 }
                 Ok(_) => {
-                    eprintln!("Error: Both curl and wget failed to download file");
+                    OutputFormatter::error("Both curl and wget failed to download file");
                     std::process::exit(1);
                 }
                 Err(_) => {
-                    eprintln!("Error: Neither curl nor wget is available");
-                    eprintln!("Please install curl or wget to use this feature.");
+                    OutputFormatter::error("Neither curl nor wget is available");
+                    OutputFormatter::info("Please install curl or wget to use this feature.");
                     std::process::exit(1);
                 }
             }
@@ -664,12 +714,12 @@ pub fn handle_example() {
                     String::from_utf8_lossy(&output.stdout).to_string()
                 }
                 Ok(_) => {
-                    eprintln!("Error: wget failed to download file");
+                    OutputFormatter::error("wget failed to download file");
                     std::process::exit(1);
                 }
                 Err(_) => {
-                    eprintln!("Error: Neither curl nor wget is available");
-                    eprintln!("Please install curl or wget to use this feature.");
+                    OutputFormatter::error("Neither curl nor wget is available");
+                    OutputFormatter::info("Please install curl or wget to use this feature.");
                     std::process::exit(1);
                 }
             }
@@ -677,13 +727,19 @@ pub fn handle_example() {
     };
 
     // Write content to nestfile
+    use super::output::colors;
     match fs::write(&target_path, content) {
         Ok(_) => {
-            println!("✓ Created nestfile in current directory");
-            println!("  Location: {}", target_path.display());
+            OutputFormatter::success("Created nestfile in current directory");
+            println!(
+                "  {}Location:{} {}",
+                OutputFormatter::help_label("Location:"),
+                colors::RESET,
+                OutputFormatter::path(&target_path.display().to_string())
+            );
         }
         Err(e) => {
-            eprintln!("Error writing nestfile: {}", e);
+            OutputFormatter::error(&format!("Error writing nestfile: {}", e));
             std::process::exit(1);
         }
     }

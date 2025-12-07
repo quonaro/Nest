@@ -19,7 +19,7 @@ impl CommandExecutor {
     /// This function:
     /// 1. Sets up the working directory (if specified)
     /// 2. Configures environment variables from directives and arguments
-    /// 3. Executes the script using `sh -c`
+    /// 3. Executes the script using `sh -c` (or shows preview if dry_run is true)
     /// 4. Captures and displays stdout/stderr
     /// 5. Formats detailed error messages if execution fails
     ///
@@ -31,10 +31,12 @@ impl CommandExecutor {
     /// * `env_vars` - Environment variables from directives
     /// * `cwd` - Optional working directory for script execution
     /// * `command_path` - Full path to command (for error reporting)
+    /// * `dry_run` - If true, show what would be executed without running it
+    /// * `verbose` - If true, show detailed output including env vars and cwd
     ///
     /// # Returns
     ///
-    /// Returns `Ok(())` if execution succeeded,
+    /// Returns `Ok(())` if execution succeeded (or dry-run completed),
     /// `Err(message)` with a formatted error message if execution failed.
     ///
     /// # Errors
@@ -56,7 +58,20 @@ impl CommandExecutor {
         env_vars: &HashMap<String, String>,
         cwd: Option<&str>,
         command_path: Option<&[String]>,
+        dry_run: bool,
+        verbose: bool,
     ) -> Result<(), String> {
+        // Show dry-run preview
+        if dry_run {
+            Self::show_dry_run_preview(command, command_path, args, env_vars, cwd, script, verbose);
+            return Ok(());
+        }
+
+        // Show verbose information if requested
+        if verbose {
+            Self::show_verbose_info(command, command_path, args, env_vars, cwd, script);
+        }
+
         let mut cmd = ProcessCommand::new("sh");
         cmd.arg("-c");
         cmd.arg(script);
@@ -112,6 +127,290 @@ impl CommandExecutor {
 
         Ok(())
     }
+
+    fn show_dry_run_preview(
+        command: &Command,
+        command_path: Option<&[String]>,
+        args: &HashMap<String, String>,
+        env_vars: &HashMap<String, String>,
+        cwd: Option<&str>,
+        script: &str,
+        verbose: bool,
+    ) {
+        use super::output::colors;
+        use std::fmt::Write;
+
+        let mut output = String::new();
+
+        // Header
+        writeln!(
+            output,
+            "\n{}╔═══════════════════════════════════════════════════════════════╗{}",
+            colors::BRIGHT_CYAN,
+            colors::RESET
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "{}║{}  {}🔍 Dry Run Preview{}",
+            colors::BRIGHT_CYAN,
+            colors::RESET,
+            colors::BRIGHT_BLUE,
+            colors::RESET
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "{}╚═══════════════════════════════════════════════════════════════╝{}\n",
+            colors::BRIGHT_CYAN,
+            colors::RESET
+        )
+        .unwrap();
+
+        // Command information
+        let command_display = if let Some(path) = command_path {
+            format!("nest {}", path.join(" "))
+        } else {
+            command.name.clone()
+        };
+
+        writeln!(
+            output,
+            "{}📋 Command:{} {}",
+            colors::CYAN,
+            colors::RESET,
+            command_display
+        )
+        .unwrap();
+
+        // Arguments
+        if !args.is_empty() {
+            let args_str: Vec<String> = args
+                .iter()
+                .map(|(k, v)| {
+                    format!(
+                        "{}{}{}={}{}{}",
+                        colors::YELLOW,
+                        k,
+                        colors::RESET,
+                        colors::CYAN,
+                        v,
+                        colors::RESET
+                    )
+                })
+                .collect();
+            writeln!(
+                output,
+                "{}🔧 Arguments:{} {}",
+                colors::CYAN,
+                colors::RESET,
+                args_str.join(", ")
+            )
+            .unwrap();
+        }
+
+        // Working directory
+        if let Some(cwd_path) = cwd {
+            writeln!(
+                output,
+                "{}📁 Working directory:{} {}",
+                colors::CYAN,
+                colors::RESET,
+                cwd_path
+            )
+            .unwrap();
+        }
+
+        // Environment variables (if verbose)
+        if verbose && !env_vars.is_empty() {
+            writeln!(
+                output,
+                "\n{}🌍 Environment variables:{}",
+                colors::CYAN,
+                colors::RESET
+            )
+            .unwrap();
+            for (key, value) in env_vars {
+                writeln!(
+                    output,
+                    "  {}{}{}={}{}{}",
+                    colors::YELLOW,
+                    key,
+                    colors::RESET,
+                    colors::CYAN,
+                    value,
+                    colors::RESET
+                )
+                .unwrap();
+            }
+        }
+
+        // Script preview
+        writeln!(
+            output,
+            "\n{}📜 Script to execute:{}",
+            colors::CYAN,
+            colors::RESET
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "{}┌─────────────────────────────────────────────────────────┐{}",
+            colors::GRAY,
+            colors::RESET
+        )
+        .unwrap();
+        for (i, line) in script.lines().enumerate() {
+            let line_num = format!("{:2}", i + 1);
+            writeln!(
+                output,
+                "{}│{} {} {}{}│{}",
+                colors::GRAY,
+                colors::RESET,
+                line_num,
+                line,
+                colors::RESET,
+                colors::GRAY
+            )
+            .unwrap();
+        }
+        writeln!(
+            output,
+            "{}└─────────────────────────────────────────────────────────┘{}",
+            colors::GRAY,
+            colors::RESET
+        )
+        .unwrap();
+
+        writeln!(
+            output,
+            "\n{}ℹ{} {}This is a dry run. The script was not executed.{}",
+            colors::BRIGHT_CYAN,
+            colors::RESET,
+            colors::GRAY,
+            colors::RESET
+        )
+        .unwrap();
+
+        eprint!("{}", output);
+    }
+
+    fn show_verbose_info(
+        command: &Command,
+        command_path: Option<&[String]>,
+        args: &HashMap<String, String>,
+        env_vars: &HashMap<String, String>,
+        cwd: Option<&str>,
+        script: &str,
+    ) {
+        use super::output::colors;
+
+        eprintln!(
+            "\n{}╔═══════════════════════════════════════════════════════════════╗{}",
+            colors::BRIGHT_BLUE,
+            colors::RESET
+        );
+        eprintln!(
+            "{}║{}  {}ℹ Verbose Mode{}",
+            colors::BRIGHT_BLUE,
+            colors::RESET,
+            colors::BRIGHT_CYAN,
+            colors::RESET
+        );
+        eprintln!(
+            "{}╚═══════════════════════════════════════════════════════════════╝{}\n",
+            colors::BRIGHT_BLUE,
+            colors::RESET
+        );
+
+        let command_display = if let Some(path) = command_path {
+            format!("nest {}", path.join(" "))
+        } else {
+            command.name.clone()
+        };
+
+        eprintln!(
+            "{}📋 Command:{} {}",
+            colors::CYAN,
+            colors::RESET,
+            command_display
+        );
+
+        if !args.is_empty() {
+            let args_str: Vec<String> = args
+                .iter()
+                .map(|(k, v)| {
+                    format!(
+                        "{}{}{}={}{}{}",
+                        colors::YELLOW,
+                        k,
+                        colors::RESET,
+                        colors::CYAN,
+                        v,
+                        colors::RESET
+                    )
+                })
+                .collect();
+            eprintln!(
+                "{}🔧 Arguments:{} {}",
+                colors::CYAN,
+                colors::RESET,
+                args_str.join(", ")
+            );
+        }
+
+        if let Some(cwd_path) = cwd {
+            eprintln!(
+                "{}📁 Working directory:{} {}",
+                colors::CYAN,
+                colors::RESET,
+                cwd_path
+            );
+        }
+
+        if !env_vars.is_empty() {
+            eprintln!(
+                "\n{}🌍 Environment variables:{}",
+                colors::CYAN,
+                colors::RESET
+            );
+            for (key, value) in env_vars {
+                eprintln!(
+                    "  {}{}{}={}{}{}",
+                    colors::YELLOW,
+                    key,
+                    colors::RESET,
+                    colors::CYAN,
+                    value,
+                    colors::RESET
+                );
+            }
+        }
+
+        eprintln!("\n{}📜 Script:{}", colors::CYAN, colors::RESET);
+        eprintln!(
+            "{}┌─────────────────────────────────────────────────────────┐{}",
+            colors::GRAY,
+            colors::RESET
+        );
+        for (i, line) in script.lines().enumerate() {
+            let line_num = format!("{:2}", i + 1);
+            eprintln!(
+                "{}│{} {} {}{}│{}",
+                colors::GRAY,
+                colors::RESET,
+                line_num,
+                line,
+                colors::RESET,
+                colors::GRAY
+            );
+        }
+        eprintln!(
+            "{}└─────────────────────────────────────────────────────────┘{}\n",
+            colors::GRAY,
+            colors::RESET
+        );
+    }
 }
 
 fn format_error_message(
@@ -123,15 +422,8 @@ fn format_error_message(
     exit_code: i32,
     stderr_str: &str,
 ) -> String {
+    use super::output::colors;
     use std::fmt::Write;
-
-    // ANSI color codes
-    const RESET: &str = "\x1b[0m";
-    const RED: &str = "\x1b[31m";
-    const YELLOW: &str = "\x1b[33m";
-    const CYAN: &str = "\x1b[36m";
-    const GRAY: &str = "\x1b[90m";
-    const BRIGHT_RED: &str = "\x1b[91m";
 
     let mut output = String::new();
 
@@ -139,19 +431,24 @@ fn format_error_message(
     writeln!(
         output,
         "\n{}╔═══════════════════════════════════════════════════════════════╗{}",
-        RED, RESET
+        colors::RED,
+        colors::RESET
     )
     .unwrap();
     writeln!(
         output,
         "{}║{}  {}❌ Execution Error{}",
-        RED, RESET, BRIGHT_RED, RESET
+        colors::RED,
+        colors::RESET,
+        colors::BRIGHT_RED,
+        colors::RESET
     )
     .unwrap();
     writeln!(
         output,
         "{}╚═══════════════════════════════════════════════════════════════╝{}\n",
-        RED, RESET
+        colors::RED,
+        colors::RESET
     )
     .unwrap();
 
@@ -162,19 +459,36 @@ fn format_error_message(
         command.name.clone()
     };
 
-    writeln!(output, "{}📋 Command:{} {}", CYAN, RESET, command_display).unwrap();
+    writeln!(
+        output,
+        "{}📋 Command:{} {}",
+        colors::CYAN,
+        colors::RESET,
+        command_display
+    )
+    .unwrap();
 
     // Arguments
     if !args.is_empty() {
         let args_str: Vec<String> = args
             .iter()
-            .map(|(k, v)| format!("{}{}{}={}{}{}", YELLOW, k, RESET, CYAN, v, RESET))
+            .map(|(k, v)| {
+                format!(
+                    "{}{}{}={}{}{}",
+                    colors::YELLOW,
+                    k,
+                    colors::RESET,
+                    colors::CYAN,
+                    v,
+                    colors::RESET
+                )
+            })
             .collect();
         writeln!(
             output,
             "{}🔧 Arguments:{} {}",
-            CYAN,
-            RESET,
+            colors::CYAN,
+            colors::RESET,
             args_str.join(", ")
         )
         .unwrap();
@@ -185,7 +499,9 @@ fn format_error_message(
         writeln!(
             output,
             "{}📁 Working directory:{} {}",
-            CYAN, RESET, cwd_path
+            colors::CYAN,
+            colors::RESET,
+            cwd_path
         )
         .unwrap();
     }
@@ -193,11 +509,18 @@ fn format_error_message(
     // Script preview
     let script_lines: Vec<&str> = script.lines().take(5).collect();
     if !script_lines.is_empty() {
-        writeln!(output, "\n{}📜 Script preview:{}", CYAN, RESET).unwrap();
+        writeln!(
+            output,
+            "\n{}📜 Script preview:{}",
+            colors::CYAN,
+            colors::RESET
+        )
+        .unwrap();
         writeln!(
             output,
             "{}┌─────────────────────────────────────────────────────────┐{}",
-            GRAY, RESET
+            colors::GRAY,
+            colors::RESET
         )
         .unwrap();
         for (i, line) in script_lines.iter().enumerate() {
@@ -205,7 +528,12 @@ fn format_error_message(
             writeln!(
                 output,
                 "{}│{} {} {}{}│{}",
-                GRAY, RESET, line_num, line, RESET, GRAY
+                colors::GRAY,
+                colors::RESET,
+                line_num,
+                line,
+                colors::RESET,
+                colors::GRAY
             )
             .unwrap();
         }
@@ -214,14 +542,19 @@ fn format_error_message(
             writeln!(
                 output,
                 "{}│{}   ... ({} more lines){}│{}",
-                GRAY, RESET, more_lines, RESET, GRAY
+                colors::GRAY,
+                colors::RESET,
+                more_lines,
+                colors::RESET,
+                colors::GRAY
             )
             .unwrap();
         }
         writeln!(
             output,
             "{}└─────────────────────────────────────────────────────────┘{}",
-            GRAY, RESET
+            colors::GRAY,
+            colors::RESET
         )
         .unwrap();
     }
@@ -230,7 +563,11 @@ fn format_error_message(
     writeln!(
         output,
         "\n{}⚠️  Exit code:{} {}{}{}",
-        YELLOW, RESET, BRIGHT_RED, exit_code, RESET
+        colors::YELLOW,
+        colors::RESET,
+        colors::BRIGHT_RED,
+        exit_code,
+        colors::RESET
     )
     .unwrap();
 
@@ -240,7 +577,11 @@ fn format_error_message(
             writeln!(
                 output,
                 "\n{}💡 Suggestion:{} Command {}{}{} not found.",
-                CYAN, RESET, YELLOW, cmd, RESET
+                colors::CYAN,
+                colors::RESET,
+                colors::YELLOW,
+                cmd,
+                colors::RESET
             )
             .unwrap();
             writeln!(
@@ -251,25 +592,38 @@ fn format_error_message(
         }
     } else if !stderr_str.trim().is_empty() {
         // Additional error output
-        writeln!(output, "\n{}📝 Error details:{}", CYAN, RESET).unwrap();
+        writeln!(
+            output,
+            "\n{}📝 Error details:{}",
+            colors::CYAN,
+            colors::RESET
+        )
+        .unwrap();
         writeln!(
             output,
             "{}┌─────────────────────────────────────────────────────────┐{}",
-            GRAY, RESET
+            colors::GRAY,
+            colors::RESET
         )
         .unwrap();
         for line in stderr_str.trim().lines() {
             writeln!(
                 output,
                 "{}│{} {}{}{}│{}",
-                GRAY, RESET, RED, line, RESET, GRAY
+                colors::GRAY,
+                colors::RESET,
+                colors::RED,
+                line,
+                colors::RESET,
+                colors::GRAY
             )
             .unwrap();
         }
         writeln!(
             output,
             "{}└─────────────────────────────────────────────────────────┘{}",
-            GRAY, RESET
+            colors::GRAY,
+            colors::RESET
         )
         .unwrap();
     }

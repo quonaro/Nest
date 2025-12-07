@@ -5,11 +5,11 @@
 //! - Group commands with default subcommands (execute default)
 //! - Regular commands (execute directly)
 
-use super::ast::Command;
 use super::args::ArgumentExtractor;
+use super::ast::Command;
 use super::cli::CliGenerator;
 use super::help::HelpFormatter;
-use crate::constants::DEFAULT_SUBCOMMAND;
+use crate::constants::{DEFAULT_SUBCOMMAND, FLAG_DRY_RUN, FLAG_VERBOSE};
 use clap::ArgMatches;
 
 /// Handles command execution routing and orchestration.
@@ -67,6 +67,7 @@ impl CommandHandler {
         matches: &ArgMatches,
         command_path: &[String],
         generator: &CliGenerator,
+        root_matches: &ArgMatches,
     ) -> Result<(), String> {
         let default_path = {
             let mut path = command_path.to_vec();
@@ -85,7 +86,11 @@ impl CommandHandler {
             generator,
         );
 
-        generator.execute_command(default_cmd, &args, Some(&default_path))
+        // Get flags from root matches (they're global)
+        let dry_run = root_matches.get_flag(FLAG_DRY_RUN);
+        let verbose = root_matches.get_flag(FLAG_VERBOSE);
+
+        generator.execute_command(default_cmd, &args, Some(&default_path), dry_run, verbose)
     }
 
     /// Handles execution of a regular (non-group) command.
@@ -115,9 +120,15 @@ impl CommandHandler {
         command: &Command,
         generator: &CliGenerator,
         command_path: &[String],
+        root_matches: &ArgMatches,
     ) -> Result<(), String> {
         let args = ArgumentExtractor::extract_from_matches(matches, &command.parameters, generator);
-        generator.execute_command(command, &args, Some(command_path))
+
+        // Get flags from root matches (they're global)
+        let dry_run = root_matches.get_flag(FLAG_DRY_RUN);
+        let verbose = root_matches.get_flag(FLAG_VERBOSE);
+
+        generator.execute_command(command, &args, Some(command_path), dry_run, verbose)
     }
 
     fn get_group_matches(matches: &ArgMatches) -> &ArgMatches {
@@ -127,4 +138,3 @@ impl CommandHandler {
             .unwrap_or(matches)
     }
 }
-

@@ -38,7 +38,8 @@ pub fn find_config_file() -> Option<PathBuf> {
     let current_dir = match current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            eprintln!("Error getting current directory: {}", e);
+            use super::output::OutputFormatter;
+            OutputFormatter::error(&format!("Error getting current directory: {}", e));
             return None;
         }
     };
@@ -46,7 +47,12 @@ pub fn find_config_file() -> Option<PathBuf> {
     let entries = match fs::read_dir(&current_dir) {
         Ok(entries) => entries,
         Err(e) => {
-            eprintln!("Error reading directory {}: {}", current_dir.display(), e);
+            use super::output::OutputFormatter;
+            OutputFormatter::error(&format!(
+                "Error reading directory {}: {}",
+                current_dir.display(),
+                e
+            ));
             return None;
         }
     };

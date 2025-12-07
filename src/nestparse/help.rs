@@ -4,6 +4,7 @@
 //! a group command is called without a subcommand and has no default.
 
 use super::ast::{Command, Directive};
+use super::output::OutputFormatter;
 
 /// Formats and prints help messages for command groups.
 ///
@@ -23,21 +24,29 @@ impl HelpFormatter {
     /// * `command` - The group command to show help for
     /// * `command_path` - The full path to the command (e.g., ["dev"])
     pub fn print_group_help(command: &Command, command_path: &[String]) {
-        println!("Usage: nest {} [COMMAND]", command_path.join(" "));
+        println!(
+            "{} nest {} [COMMAND]",
+            OutputFormatter::help_label("Usage:"),
+            OutputFormatter::help_command(&command_path.join(" "))
+        );
         println!();
 
         if let Some(desc) = Self::extract_description(&command.directives) {
-            println!("{}", desc);
+            println!("{}", OutputFormatter::help_description(desc));
             println!();
         }
 
-        println!("Available commands:");
+        println!("{}", OutputFormatter::help_label("Available commands:"));
         for child in &command.children {
             let child_desc = Self::extract_description(&child.directives);
             if let Some(desc) = child_desc {
-                println!("  {}  {}", child.name, desc);
+                println!(
+                    "  {}  {}",
+                    OutputFormatter::help_command(&child.name),
+                    OutputFormatter::help_description(desc)
+                );
             } else {
-                println!("  {}", child.name);
+                println!("  {}", OutputFormatter::help_command(&child.name));
             }
         }
     }
@@ -52,4 +61,3 @@ impl HelpFormatter {
         })
     }
 }
-

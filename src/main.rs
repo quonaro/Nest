@@ -33,13 +33,13 @@ use std::process;
 fn main() {
     // Check for special flags that don't need config by parsing args manually
     let args: Vec<String> = std::env::args().collect();
-    
+
     // Check for --version or -V
     if args.iter().any(|a| a == "--version" || a == "-V") {
         handle_version();
         return;
     }
-    
+
     // Check for --example
     if args.iter().any(|a| a == "--example") {
         handle_example();
@@ -49,7 +49,7 @@ fn main() {
     let commands = match load_and_parse_config() {
         Ok(commands) => commands,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            nestparse::output::OutputFormatter::error(&e.to_string());
             process::exit(1);
         }
     };
@@ -58,7 +58,7 @@ fn main() {
     let mut cli = match generator.build_cli() {
         Ok(cli) => cli,
         Err(e) => {
-            eprintln!("{}", e);
+            nestparse::output::OutputFormatter::error(&e.to_string());
             process::exit(1);
         }
     };
@@ -76,9 +76,12 @@ fn main() {
     }
 
     if let Some(command) = generator.find_command(&command_path) {
-        handle_command_execution(&matches, command, &command_path, &generator);
+        handle_command_execution(&matches, command, &command_path, &generator, &matches);
     } else {
-        eprintln!("Error: Command not found: {}", command_path.join(" "));
+        nestparse::output::OutputFormatter::error(&format!(
+            "Command not found: {}",
+            command_path.join(" ")
+        ));
         process::exit(1);
     }
 }
@@ -142,16 +145,19 @@ fn handle_special_flags(matches: &clap::ArgMatches, commands: &[nestparse::ast::
             }
             FORMAT_JSON => {
                 if let Err(e) = handle_json(commands) {
-                    eprintln!("Error: JSON generation failed: {}", e);
+                    nestparse::output::OutputFormatter::error(&format!(
+                        "JSON generation failed: {}",
+                        e
+                    ));
                     process::exit(1);
                 }
                 return true;
             }
             _ => {
-                eprintln!(
-                    "Error: Unknown format: {}. Available: {}, {}",
+                nestparse::output::OutputFormatter::error(&format!(
+                    "Unknown format: {}. Available: {}, {}",
                     format, FORMAT_JSON, FORMAT_AST
-                );
+                ));
                 process::exit(1);
             }
         }
@@ -207,32 +213,47 @@ fn handle_command_execution(
     command: &nestparse::ast::Command,
     command_path: &[String],
     generator: &CliGenerator,
+    root_matches: &clap::ArgMatches,
 ) {
     if !command.children.is_empty() {
         if !generator.has_default_command(command) {
-            if let Err(_) = CommandHandler::handle_group_without_default(command, command_path) {
+            if CommandHandler::handle_group_without_default(command, command_path).is_err() {
                 process::exit(1);
             }
             process::exit(0);
         } else {
-            if let Err(e) = CommandHandler::handle_default_command(matches, command_path, generator)
-            {
-                eprintln!("Execution error: {}", e);
+            if let Err(e) = CommandHandler::handle_default_command(
+                matches,
+                command_path,
+                generator,
+                root_matches,
+            ) {
+                // Error is already formatted in executor
+                eprint!("{}", e);
                 process::exit(1);
             }
             return;
         }
     }
 
-    let current_matches = matches
-        .subcommand()
-        .map(|(_, sub_matches)| sub_matches)
-        .unwrap_or(matches);
+    // Get matches for the deepest subcommand (e.g., for "nest db down", get matches for "down")
+    let current_matches = {
+        let mut current = matches;
+        while let Some((_, sub_matches)) = current.subcommand() {
+            current = sub_matches;
+        }
+        current
+    };
 
-    if let Err(e) =
-        CommandHandler::handle_regular_command(current_matches, command, generator, command_path)
-    {
-        eprintln!("Execution error: {}", e);
+    if let Err(e) = CommandHandler::handle_regular_command(
+        current_matches,
+        command,
+        generator,
+        command_path,
+        root_matches,
+    ) {
+        // Error is already formatted in executor
+        eprint!("{}", e);
         process::exit(1);
     }
 }

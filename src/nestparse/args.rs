@@ -126,9 +126,10 @@ impl ArgumentExtractor {
     fn extract_bool_flag(
         matches: &ArgMatches,
         param: &Parameter,
-        generator: &CliGenerator,
+        _generator: &CliGenerator,
     ) -> bool {
-        let param_id = generator.get_param_id(&param.name);
+        // Use parameter name directly as ID (same as used in parameter_to_arg_with_id)
+        let param_id = &param.name;
         
         // Check if flag is present by param_id (works for both --flag and -f)
         if matches.contains_id(param_id) {
@@ -148,9 +149,10 @@ impl ArgumentExtractor {
     fn extract_bool_flag_for_default(
         matches: &ArgMatches,
         param: &Parameter,
-        generator: &CliGenerator,
+        _generator: &CliGenerator,
     ) -> bool {
-        let param_id = generator.get_param_id(&param.name);
+        // Use parameter name directly as ID (same as used in parameter_to_arg_with_id)
+        let param_id = &param.name;
         
         // Check if flag is present by param_id (works for both --flag and -f)
         if matches.contains_id(param_id) {
