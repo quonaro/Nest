@@ -6,6 +6,7 @@
 use crate::constants::BOOL_TRUE;
 use super::ast::Parameter;
 use super::cli::CliGenerator;
+use super::type_validator;
 use clap::ArgMatches;
 use std::collections::HashMap;
 
@@ -26,16 +27,18 @@ impl ArgumentExtractor {
     /// * `matches` - The parsed CLI arguments from clap
     /// * `parameters` - List of parameters to extract
     /// * `generator` - CLI generator for parameter ID resolution
+    /// * `command_path` - Path to the command (for validation errors)
     ///
     /// # Returns
     ///
-    /// Returns a HashMap of parameter names to their string values.
-    /// Boolean parameters are converted to "true" or "false".
+    /// Returns `Ok(HashMap)` with validated parameter names to their string values,
+    /// or `Err(Vec<String>)` with validation error messages.
     pub fn extract_from_matches(
         matches: &ArgMatches,
         parameters: &[Parameter],
         generator: &CliGenerator,
-    ) -> HashMap<String, String> {
+        command_path: &[String],
+    ) -> Result<HashMap<String, String>, Vec<String>> {
         let mut args = HashMap::new();
 
         for param in parameters {
@@ -67,7 +70,8 @@ impl ArgumentExtractor {
             }
         }
 
-        args
+        // Validate all arguments against their types
+        type_validator::validate_all_arguments(&args, parameters, command_path)
     }
 
     /// Extracts arguments from clap matches for a default subcommand.
@@ -81,15 +85,18 @@ impl ArgumentExtractor {
     /// * `matches` - The parsed CLI arguments from clap (for the parent group)
     /// * `parameters` - List of parameters from the default subcommand
     /// * `generator` - CLI generator for parameter ID resolution
+    /// * `command_path` - Path to the command (for validation errors)
     ///
     /// # Returns
     ///
-    /// Returns a HashMap of parameter names to their string values.
+    /// Returns `Ok(HashMap)` with validated parameter names to their string values,
+    /// or `Err(Vec<String>)` with validation error messages.
     pub fn extract_for_default_command(
         matches: &ArgMatches,
         parameters: &[Parameter],
         generator: &CliGenerator,
-    ) -> HashMap<String, String> {
+        command_path: &[String],
+    ) -> Result<HashMap<String, String>, Vec<String>> {
         let mut args = HashMap::new();
 
         for param in parameters {
@@ -120,7 +127,8 @@ impl ArgumentExtractor {
             }
         }
 
-        args
+        // Validate all arguments against their types
+        type_validator::validate_all_arguments(&args, parameters, command_path)
     }
 
     fn extract_bool_flag(

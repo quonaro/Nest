@@ -80,11 +80,21 @@ impl CommandHandler {
             .ok_or_else(|| "Default command not found".to_string())?;
 
         let matches_for_args = Self::get_group_matches(matches);
-        let args = ArgumentExtractor::extract_for_default_command(
+        let args = match ArgumentExtractor::extract_for_default_command(
             matches_for_args,
             &default_cmd.parameters,
             generator,
-        );
+            &default_path,
+        ) {
+            Ok(args) => args,
+            Err(validation_errors) => {
+                use super::output::OutputFormatter;
+                for error in &validation_errors {
+                    OutputFormatter::error(error);
+                }
+                return Err("Type validation failed".to_string());
+            }
+        };
 
         // Get flags from root matches (they're global)
         let dry_run = root_matches.get_flag(FLAG_DRY_RUN);
@@ -122,7 +132,21 @@ impl CommandHandler {
         command_path: &[String],
         root_matches: &ArgMatches,
     ) -> Result<(), String> {
-        let args = ArgumentExtractor::extract_from_matches(matches, &command.parameters, generator);
+        let args = match ArgumentExtractor::extract_from_matches(
+            matches,
+            &command.parameters,
+            generator,
+            command_path,
+        ) {
+            Ok(args) => args,
+            Err(validation_errors) => {
+                use super::output::OutputFormatter;
+                for error in &validation_errors {
+                    OutputFormatter::error(error);
+                }
+                return Err("Type validation failed".to_string());
+            }
+        };
 
         // Get flags from root matches (they're global)
         let dry_run = root_matches.get_flag(FLAG_DRY_RUN);

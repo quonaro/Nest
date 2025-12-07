@@ -118,8 +118,8 @@ fn validate_command_recursive(
     if let Some(existing_paths) = command_names.get(&command.name) {
         for existing_path in existing_paths {
             // Extract parent from existing path
-            let existing_parent = if existing_path.contains(' ') {
-                existing_path.rsplitn(2, ' ').nth(1).unwrap_or("")
+            let existing_parent = if let Some((parent, _)) = existing_path.rsplit_once(' ') {
+                parent
             } else {
                 ""
             };
