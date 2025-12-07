@@ -1,108 +1,71 @@
-# Example with positional arguments
+# Nestfile Example
+# This is a simple example configuration file for Nest.
+# Copy this file to 'nestfile' in your project root and customize it.
+
+# Simple command with positional arguments
 greet(name: str, message: str):
-    > desc: Приветствие с позиционными аргументами
+    > desc: Greet someone with a message
     > script: |
-        #!/bin/sh
-        echo "Привет {{name}}, {{message}}!"
+        echo "Hello {{name}}, {{message}}!"
 
-# Example with named arguments (using ! prefix)
+# Command with named arguments and defaults
 build(!target|t: str = "x86_64", !release|r: bool = false):
-    > desc: Собрать проект с помощью Cargo (именованные аргументы)
-    > cwd: ./app
-    > env: .env
-    > env: BUILD_TIME={{now}}
+    > desc: Build the project
     > script: |
-        #!/bin/sh
-        echo "🔨 Building {{target}} (release={{release}})"
-        cargo build --target "{{target}}" ${release:+--release}
-
-# Example with mixed positional and named arguments
-copy(source: str, !destination|d: str, !overwrite|o: bool = false):
-    > desc: Копировать файл (позиционный + именованные аргументы)
-    > script: |
-        #!/bin/sh
-        if [ "{{overwrite}}" = "true" ]; then
-            cp -f "{{source}}" "{{destination}}"
-            echo "Файл {{source}} скопирован в {{destination}} (с перезаписью)"
+        echo "Building for {{target}}"
+        if [ "{{release}}" = "true" ]; then
+            echo "Release mode enabled"
         else
-            cp "{{source}}" "{{destination}}"
-            echo "Файл {{source}} скопирован в {{destination}}"
+            echo "Debug mode"
         fi
 
+# Command with mixed positional and named arguments
+copy(source: str, !destination|d: str, !overwrite|o: bool = false):
+    > desc: Copy a file
+    > script: |
+        if [ "{{overwrite}}" = "true" ]; then
+            echo "Copying {{source}} to {{destination}} (with overwrite)"
+        else
+            echo "Copying {{source}} to {{destination}}"
+        fi
+
+# Group command with subcommands
 dev:
-    > desc: Инструменты для локальной разработки
+    > desc: Development tools
 
-    default(hot: bool = false):
-        > desc: Запустить dev-сервер
-        > env: .env.local
-        > env: NODE_ENV=development
+    default(!watch|w: bool = false):
+        > desc: Start development server
         > script: |
-            #!/bin/sh
-            if [ "$hot" = "true" ]; then
-                nodemon src/index.js
+            if [ "{{watch}}" = "true" ]; then
+                echo "Starting dev server with watch mode"
             else
-                node src/index.js
+                echo "Starting dev server"
             fi
 
-    lint(fix|f: bool = false):
-        > desc: Проверить и исправить код
+    lint(!fix|f: bool = false):
+        > desc: Run linter
         > script: |
-            #!/bin/sh
-            eslint src/ ${fix:+--fix}
-
-db:
-    > desc: Управление базой данных
-
-    default():
-        > desc: Справка по командам БД
-        > script: |
-            #!/bin/sh
-            echo "Доступные команды:"
-            echo "  nest db up     — накатить миграции"
-            echo "  nest db down   — откатить миграции"
-
-    up():
-        > desc: Применить миграции
-        > env: DATABASE_URL=postgresql://localhost/dev
-        > script: ./scripts/migrate_up.sh
-
-    down(force|f: bool = false):
-        > desc: Откатить последнюю миграцию
-        > script: |
-            #!/bin/sh
-            if [ "$force" = "true" ]; then
-                ./migrate down --force
+            if [ "{{fix}}" = "true" ]; then
+                echo "Running linter with --fix"
             else
-                ./migrate down
+                echo "Running linter"
             fi
 
-deploy:
-    > desc: Деплой приложения
+# Command with numeric and array parameters
+deploy(version: str, !retries|r: num = 3, !tags|t: arr = []):
+    > desc: Deploy application
+    > script: |
+        echo "Deploying version {{version}}"
+        echo "Retries: {{retries}}"
+        if [ -n "{{tags}}" ]; then
+            echo "Tags: {{tags}}"
+        else
+            echo "No tags specified"
+        fi
 
-    prod(
-        version: str,
-        !confirm|c: bool = false,
-        !retries|r: num = 3,
-        !tags|t: arr = []
-    ):
-        > desc: Задеплоить в production (позиционный version + именованные опции)
-        > env: .env.prod
-        > env: DEPLOYER={{user}}
-        > script: |
-            #!/bin/sh
-            if [ "{{confirm}}" != "true" ]; then
-                echo "🛑 Используй --confirm или -c"
-                exit 1
-            fi
-            cmd="./deploy.sh {{version}} --retries {{retries}}"
-            for tag in $(echo "{{tags}}" | tr ',' ' '); do
-                cmd="$cmd --tag $tag"
-            done
-            eval "$cmd"
-
-    staging(version: str):
-        > desc: Деплой в staging-среду (позиционный аргумент)
-        > env: .env.staging
-        > script: |
-            #!/bin/sh
-            ./deploy.sh "{{version}}" --env staging
+# Simple command with working directory
+test():
+    > desc: Run tests
+    > cwd: .
+    > script: |
+        echo "Running tests in current directory"
