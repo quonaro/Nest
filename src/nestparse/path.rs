@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Returns `true` if the file name is a valid configuration file name,
 /// `false` otherwise.
 pub fn is_config_file(file_name: &str) -> bool {
-    CONFIG_NAMES.iter().any(|&name| name == file_name)
+    CONFIG_NAMES.contains(&file_name)
 }
 
 /// Searches for a configuration file in the current directory.

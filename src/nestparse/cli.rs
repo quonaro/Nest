@@ -10,18 +10,12 @@ use super::executor::CommandExecutor;
 use super::template::TemplateProcessor;
 use crate::constants::{
     APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
-    FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON, RESERVED_FLAG_HELP, RESERVED_FLAG_VERSION,
-    RESERVED_SHORT_HELP, RESERVED_SHORT_OPTIONS, RESERVED_SHORT_VERSION, SHORT_VERSION,
+    FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON, SHORT_VERSION,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
 
-/// Represents a conflict with a reserved short option.
-struct ShortAliasConflict {
-    short: char,
-    param_name: String,
-    command_path: String,
-}
+// Removed: ShortAliasConflict - validation is now done in validator module
 
 /// Generates a CLI interface from parsed commands.
 ///
@@ -115,10 +109,12 @@ impl CliGenerator {
     /// # Errors
     ///
     /// Returns an error if there are conflicts with reserved short option names.
+    /// Note: This validation is also done in the validator module.
+    /// This check is kept for backward compatibility and early error detection.
     pub fn build_cli(&self) -> Result<ClapCommand, String> {
-        // Check for reserved short option conflicts
-        self.validate_short_aliases()?;
-
+        // Note: Reserved alias validation is also done in validator module
+        // This check is kept for early error detection before CLI building
+        // If validator is called first, this should not be needed
         let mut app = Self::create_base_cli();
 
         for command in &self.commands {
@@ -128,103 +124,8 @@ impl CliGenerator {
         Ok(app)
     }
 
-    /// Validates that no parameter aliases conflict with reserved short options.
-    ///
-    /// Reserved short options:
-    /// - `h` - reserved for `--help`
-    /// - `V` - reserved for `--version`
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if no conflicts found, `Err(message)` with a user-friendly error message otherwise.
-    fn validate_short_aliases(&self) -> Result<(), String> {
-        let mut conflicts = Vec::new();
-
-        self.collect_short_aliases(&mut conflicts);
-
-        for conflict in conflicts {
-            let reserved_for = match conflict.short {
-                RESERVED_SHORT_HELP => RESERVED_FLAG_HELP,
-                RESERVED_SHORT_VERSION => RESERVED_FLAG_VERSION,
-                _ => unreachable!(),
-            };
-
-            return Err(format!(
-                "❌ Error: Short option '-{}' is reserved for '--{}'\n\n\
-                 Parameter '{}' in command '{}' uses reserved alias '-{}'.\n\
-                 Please use a different alias (e.g., change '{}|{}' to '{}|i').",
-                conflict.short,        // 1: -{}
-                reserved_for,          // 2: --{}
-                conflict.param_name,   // 3: '{}'
-                conflict.command_path, // 4: '{}'
-                conflict.short,        // 5: -{}
-                conflict.param_name,   // 6: '{}|{}' first
-                conflict.short,        // 7: '{}|{}' second
-                conflict.param_name    // 8: '{}|i'
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Collects all short aliases from all commands and checks for conflicts.
-    fn collect_short_aliases(&self, conflicts: &mut Vec<ShortAliasConflict>) {
-        for command in &self.commands {
-            self.collect_short_aliases_recursive(command, &[command.name.clone()], conflicts);
-        }
-    }
-
-    fn collect_short_aliases_recursive(
-        &self,
-        command: &Command,
-        path: &[String],
-        conflicts: &mut Vec<ShortAliasConflict>,
-    ) {
-        // Check parameters of this command
-        for param in &command.parameters {
-            if let Some(alias) = &param.alias {
-                if let Some(short) = alias.chars().next() {
-                    if RESERVED_SHORT_OPTIONS.contains(&short) {
-                        conflicts.push(ShortAliasConflict {
-                            short,
-                            param_name: param.name.clone(),
-                            command_path: path.join(" "),
-                        });
-                    }
-                }
-            }
-        }
-
-        // Check default subcommand parameters
-        if let Some(default_cmd) = command
-            .children
-            .iter()
-            .find(|c| c.name == DEFAULT_SUBCOMMAND)
-        {
-            for param in &default_cmd.parameters {
-                if let Some(alias) = &param.alias {
-                    if let Some(short) = alias.chars().next() {
-                        if RESERVED_SHORT_OPTIONS.contains(&short) {
-                            let mut path = path.to_vec();
-                            path.push(DEFAULT_SUBCOMMAND.to_string());
-                            conflicts.push(ShortAliasConflict {
-                                short,
-                                param_name: param.name.clone(),
-                                command_path: path.join(" "),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        // Recursively check child commands
-        for child in &command.children {
-            let mut child_path = path.to_vec();
-            child_path.push(child.name.clone());
-            self.collect_short_aliases_recursive(child, &child_path, conflicts);
-        }
-    }
+    // Removed: validate_short_aliases, collect_short_aliases, collect_short_aliases_recursive
+    // Validation is now done in the validator module before CLI building
 
     fn create_base_cli() -> ClapCommand {
         let version = env!("CARGO_PKG_VERSION");

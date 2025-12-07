@@ -87,9 +87,13 @@ pub const RESERVED_SHORT_VERSION: char = 'V';
 pub const RESERVED_SHORT_OPTIONS: &[char] = &[RESERVED_SHORT_HELP, RESERVED_SHORT_VERSION];
 
 /// Name of the help flag (reserved).
+/// Note: Currently not used, kept for future reference
+#[allow(dead_code)]
 pub const RESERVED_FLAG_HELP: &str = "help";
 
 /// Name of the version flag (reserved).
+/// Note: Currently not used, kept for future reference
+#[allow(dead_code)]
 pub const RESERVED_FLAG_VERSION: &str = "version";
 
 // Template Variables
