@@ -213,7 +213,7 @@ impl CliGenerator {
                 subcmd = subcmd.arg(arg);
             }
         }
-        
+
         // Then, add all positional arguments with sequential indices
         let mut positional_index = 1; // Start from 1 (0 is command name)
         for param in parameters {
@@ -223,7 +223,7 @@ impl CliGenerator {
                 positional_index += 1;
             }
         }
-        
+
         subcmd
     }
 
@@ -246,7 +246,7 @@ impl CliGenerator {
                         subcmd = subcmd.arg(arg);
                     }
                 }
-                
+
                 // Then, add all positional arguments with sequential indices
                 let mut positional_index = 1;
                 for param in &default_cmd.parameters {
@@ -361,7 +361,7 @@ impl CliGenerator {
             .help(help_text)
             .required(true)
             .action(ArgAction::Set);
-        
+
         if let Some(alias) = &param.alias {
             if let Some(short) = alias.chars().next() {
                 new_arg = new_arg.short(short);
@@ -578,7 +578,7 @@ pub fn handle_example() {
 
     // Write to nestfile in current directory
     let target_path = current_dir.join("nestfile");
-    
+
     // Check if nestfile already exists
     if target_path.exists() {
         OutputFormatter::error("nestfile already exists in the current directory");
@@ -667,9 +667,11 @@ pub fn handle_example() {
 pub fn handle_update() {
     use std::env;
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
     use std::process::Command;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     use super::output::colors;
     use super::output::OutputFormatter;
@@ -757,7 +759,7 @@ pub fn handle_update() {
                 // HTTP code is in stdout (last line)
                 let stdout = String::from_utf8_lossy(&result.stdout);
                 let http_code = stdout.trim();
-                
+
                 if http_code == "200" {
                     true
                 } else {
@@ -840,7 +842,12 @@ pub fn handle_update() {
     }
 
     let extract_output = Command::new("tar")
-        .args(&["-xzf", temp_file.to_str().unwrap(), "-C", extract_dir.to_str().unwrap()])
+        .args(&[
+            "-xzf",
+            temp_file.to_str().unwrap(),
+            "-C",
+            extract_dir.to_str().unwrap(),
+        ])
         .output();
 
     match extract_output {
@@ -860,17 +867,14 @@ pub fn handle_update() {
     // Check if binary exists in extracted archive
     let extracted_binary = extract_dir.join(binary_name);
     if !extracted_binary.exists() {
-        OutputFormatter::error(&format!(
-            "Binary '{}' not found in archive",
-            binary_name
-        ));
+        OutputFormatter::error(&format!("Binary '{}' not found in archive", binary_name));
         let _ = fs::remove_dir_all(&temp_dir);
         std::process::exit(1);
     }
 
     // Replace binary using atomic rename to avoid "Text file busy" error
     OutputFormatter::info("Installing binary...");
-    
+
     // Copy new binary to temporary file in the same directory as target
     // This allows atomic rename operation
     let new_binary_path = binary_path.with_extension("new");
@@ -881,21 +885,25 @@ pub fn handle_update() {
     }
 
     // Make new binary executable before renaming
-    let mut perms = match fs::metadata(&new_binary_path) {
-        Ok(meta) => meta.permissions(),
-        Err(e) => {
-            OutputFormatter::error(&format!("Failed to get file permissions: {}", e));
+    // On Unix systems, set explicit permissions; on Windows, permissions are handled automatically
+    #[cfg(unix)]
+    {
+        let mut perms = match fs::metadata(&new_binary_path) {
+            Ok(meta) => meta.permissions(),
+            Err(e) => {
+                OutputFormatter::error(&format!("Failed to get file permissions: {}", e));
+                let _ = fs::remove_dir_all(&temp_dir);
+                let _ = fs::remove_file(&new_binary_path);
+                std::process::exit(1);
+            }
+        };
+        perms.set_mode(0o755);
+        if let Err(e) = fs::set_permissions(&new_binary_path, perms) {
+            OutputFormatter::error(&format!("Failed to set executable permissions: {}", e));
             let _ = fs::remove_dir_all(&temp_dir);
             let _ = fs::remove_file(&new_binary_path);
             std::process::exit(1);
         }
-    };
-    perms.set_mode(0o755);
-    if let Err(e) = fs::set_permissions(&new_binary_path, perms) {
-        OutputFormatter::error(&format!("Failed to set executable permissions: {}", e));
-        let _ = fs::remove_dir_all(&temp_dir);
-        let _ = fs::remove_file(&new_binary_path);
-        std::process::exit(1);
     }
 
     // Try to remove old binary first (if it exists and is not in use)
@@ -909,11 +917,13 @@ pub fn handle_update() {
     if let Err(e) = fs::rename(&new_binary_path, &binary_path) {
         // If rename fails, try to restore the new binary and give helpful error
         let error_msg = format!("Failed to install binary: {}", e);
-        
+
         // Check if it's the "Text file busy" error
         if error_msg.contains("Text file busy") || error_msg.contains("os error 26") {
             OutputFormatter::error("Cannot update binary while it is running.");
-            OutputFormatter::info("Please close this terminal session and run the update command again.");
+            OutputFormatter::info(
+                "Please close this terminal session and run the update command again.",
+            );
             OutputFormatter::info("Alternatively, you can manually replace the binary:");
             println!(
                 "  {}mv{} {} {}",
@@ -925,7 +935,7 @@ pub fn handle_update() {
         } else {
             OutputFormatter::error(&error_msg);
         }
-        
+
         let _ = fs::remove_dir_all(&temp_dir);
         // Don't remove new_binary_path - user might want to manually install it
         std::process::exit(1);
@@ -955,22 +965,37 @@ pub fn handle_update() {
 ///
 /// Returns `Ok((platform, architecture))` if detection succeeds,
 /// or `Err(error_message)` if the OS or architecture is not supported.
+///
+/// # Platform Support
+///
+/// This function currently supports Linux and macOS. On Windows, use the PowerShell install script.
 fn detect_platform() -> Result<(String, String), String> {
     use std::process::Command;
 
-    // Detect OS
-    let os_output = Command::new("uname").arg("-s").output();
-    let os = match os_output {
+    // Check if uname is available (Unix systems)
+    let os_output = match Command::new("uname").arg("-s").output() {
         Ok(output) if output.status.success() => {
             String::from_utf8_lossy(&output.stdout).trim().to_string()
         }
-        _ => return Err("Failed to detect OS".to_string()),
+        _ => {
+            // On Windows or if uname is not available
+            #[cfg(windows)]
+            return Err("Update command is not supported on Windows. Please use the PowerShell install script (install.ps1) instead.".to_string());
+
+            #[cfg(not(windows))]
+            return Err("Failed to detect OS. The 'uname' command is required.".to_string());
+        }
     };
 
-    let platform = match os.as_str() {
+    let platform = match os_output.as_str() {
         "Linux" => "linux",
         "Darwin" => "macos",
-        _ => return Err(format!("Unsupported OS: {}", os)),
+        _ => {
+            return Err(format!(
+                "Unsupported OS: {}. Update command currently supports Linux and macOS only.",
+                os_output
+            ))
+        }
     };
 
     // Detect architecture
