@@ -141,14 +141,41 @@ fi
 
 # Verify downloaded file is a valid archive
 echo "${INFO} ${BOLD}Verifying download...${RESET}"
-if ! file "${TEMP_FILE}" | grep -q "gzip\|archive"; then
+# Check file size (should be greater than 0)
+if [ ! -s "${TEMP_FILE}" ]; then
     echo ""
-    echo "${CROSS} ${BOLD}${RED}Error: Downloaded file is not a valid archive${RESET}" >&2
+    echo "${CROSS} ${BOLD}${RED}Error: Downloaded file is empty${RESET}" >&2
     echo "   ${WARN} The release may not exist yet. Please check:" >&2
     echo "      https://github.com/${REPO}/releases" >&2
     rm -rf "${TEMP_DIR}"
     exit 1
 fi
+
+# Try to verify it's a valid gzip archive by checking magic bytes or testing extraction
+# Check for gzip magic bytes (1f 8b) at the start of the file
+if command -v od > /dev/null 2>&1; then
+    # Use od to check first two bytes
+    MAGIC_BYTES=$(od -An -tx1 -N2 "${TEMP_FILE}" 2>/dev/null | tr -d ' \n')
+    if [ "$MAGIC_BYTES" != "1f8b" ]; then
+        echo ""
+        echo "${CROSS} ${BOLD}${RED}Error: Downloaded file is not a valid gzip archive${RESET}" >&2
+        echo "   ${WARN} The release may not exist yet. Please check:" >&2
+        echo "      https://github.com/${REPO}/releases" >&2
+        rm -rf "${TEMP_DIR}"
+        exit 1
+    fi
+elif command -v file > /dev/null 2>&1; then
+    # Fallback to file command if available
+    if ! file "${TEMP_FILE}" | grep -q "gzip\|archive"; then
+        echo ""
+        echo "${CROSS} ${BOLD}${RED}Error: Downloaded file is not a valid archive${RESET}" >&2
+        echo "   ${WARN} The release may not exist yet. Please check:" >&2
+        echo "      https://github.com/${REPO}/releases" >&2
+        rm -rf "${TEMP_DIR}"
+        exit 1
+    fi
+fi
+# If neither od nor file is available, we'll rely on tar extraction to catch errors
 echo "   ${CHECK} Archive verified"
 
 # Extract archive
