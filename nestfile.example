@@ -54,7 +54,7 @@ dev:
 # Command with numeric and array parameters
 deploy(version: str, !retries|r: num = 3, !tags|t: arr = []):
     > desc: Deploy application
-    > script: |
+        > script: |
         echo "Deploying version {{version}}"
         echo "Retries: {{retries}}"
         if [ -n "{{tags}}" ]; then
@@ -67,5 +67,5 @@ deploy(version: str, !retries|r: num = 3, !tags|t: arr = []):
 test():
     > desc: Run tests
     > cwd: .
-    > script: |
+        > script: |
         echo "Running tests in current directory"

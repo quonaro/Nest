@@ -47,6 +47,9 @@ pub const FLAG_SHOW: &str = "show";
 /// Flag name for copying example nestfile.
 pub const FLAG_EXAMPLE: &str = "example";
 
+/// Flag name for updating Nest CLI.
+pub const FLAG_UPDATE: &str = "update";
+
 /// Flag name for dry-run mode.
 pub const FLAG_DRY_RUN: &str = "dry-run";
 

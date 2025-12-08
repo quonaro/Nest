@@ -10,7 +10,7 @@ use super::executor::CommandExecutor;
 use super::template::TemplateProcessor;
 use crate::constants::{
     APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
-    FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON, SHORT_VERSION,
+    FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON, SHORT_VERSION,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
@@ -155,6 +155,11 @@ impl CliGenerator {
                     .hide(true)
                     .help("Copy example nestfile to current directory"),
             )
+            .subcommand(
+                ClapCommand::new(FLAG_UPDATE)
+                    .hide(true)
+                    .about("Update Nest CLI to the latest version"),
+            )
             .arg(
                 Arg::new(FLAG_DRY_RUN)
                     .long(FLAG_DRY_RUN)
@@ -208,7 +213,7 @@ impl CliGenerator {
                 subcmd = subcmd.arg(arg);
             }
         }
-
+        
         // Then, add all positional arguments with sequential indices
         let mut positional_index = 1; // Start from 1 (0 is command name)
         for param in parameters {
@@ -218,7 +223,7 @@ impl CliGenerator {
                 positional_index += 1;
             }
         }
-
+        
         subcmd
     }
 
@@ -241,7 +246,7 @@ impl CliGenerator {
                         subcmd = subcmd.arg(arg);
                     }
                 }
-
+                
                 // Then, add all positional arguments with sequential indices
                 let mut positional_index = 1;
                 for param in &default_cmd.parameters {
@@ -356,7 +361,7 @@ impl CliGenerator {
             .help(help_text)
             .required(true)
             .action(ArgAction::Set);
-
+        
         if let Some(alias) = &param.alias {
             if let Some(short) = alias.chars().next() {
                 new_arg = new_arg.short(short);
@@ -573,7 +578,7 @@ pub fn handle_example() {
 
     // Write to nestfile in current directory
     let target_path = current_dir.join("nestfile");
-
+    
     // Check if nestfile already exists
     if target_path.exists() {
         OutputFormatter::error("nestfile already exists in the current directory");
@@ -644,4 +649,344 @@ pub fn handle_example() {
             std::process::exit(1);
         }
     }
+}
+
+/// Handles the update command.
+///
+/// Updates Nest CLI to the latest version by downloading from GitHub releases
+/// and replacing the binary in ~/.local/bin.
+///
+/// # Errors
+///
+/// Exits with code 1 if:
+/// - OS or architecture is not supported
+/// - curl or wget is not available
+/// - Download fails
+/// - Archive extraction fails
+/// - Binary replacement fails
+pub fn handle_update() {
+    use std::env;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    use super::output::colors;
+    use super::output::OutputFormatter;
+
+    // Detect OS and architecture
+    let (platform, architecture) = match detect_platform() {
+        Ok((p, a)) => (p, a),
+        Err(e) => {
+            OutputFormatter::error(&e);
+            std::process::exit(1);
+        }
+    };
+
+    // Determine binary name
+    let binary_name = "nest";
+    let install_dir = match env::var("HOME") {
+        Ok(home) => PathBuf::from(home).join(".local").join("bin"),
+        Err(_) => {
+            OutputFormatter::error("HOME environment variable is not set");
+            std::process::exit(1);
+        }
+    };
+    let binary_path = install_dir.join(binary_name);
+
+    // GitHub repository
+    let repo = "quonaro/nest";
+    let version = "latest";
+
+    // Print header
+    OutputFormatter::info("Updating Nest CLI...");
+    println!("  Platform: {}-{}", platform, architecture);
+    println!("  Install directory: {}", install_dir.display());
+
+    // Create install directory if it doesn't exist
+    if let Err(e) = fs::create_dir_all(&install_dir) {
+        OutputFormatter::error(&format!("Failed to create install directory: {}", e));
+        std::process::exit(1);
+    }
+
+    // Build download URL
+    let url = if version == "latest" {
+        format!(
+            "https://github.com/{}/releases/latest/download/nest-{}-{}.tar.gz",
+            repo, platform, architecture
+        )
+    } else {
+        format!(
+            "https://github.com/{}/releases/download/v{}/nest-{}-{}.tar.gz",
+            repo, version, platform, architecture
+        )
+    };
+
+    // Create temporary directory
+    let temp_dir = match env::temp_dir().join(format!("nest-update-{}", std::process::id())) {
+        dir => dir,
+    };
+    if let Err(e) = fs::create_dir_all(&temp_dir) {
+        OutputFormatter::error(&format!("Failed to create temporary directory: {}", e));
+        std::process::exit(1);
+    }
+    let temp_file = temp_dir.join(format!("nest-{}-{}.tar.gz", platform, architecture));
+
+    // Download binary
+    OutputFormatter::info("Downloading Nest CLI...");
+    println!("  URL: {}", url);
+
+    let download_success = if Command::new("curl").arg("--version").output().is_ok() {
+        // Use curl
+        let output = Command::new("curl")
+            .args(&[
+                "-L",
+                "-s",
+                "-S",
+                "--show-error",
+                "-w",
+                "%{http_code}",
+                "-o",
+                temp_file.to_str().unwrap(),
+                &url,
+            ])
+            .output();
+
+        match output {
+            Ok(result) => {
+                // HTTP code is in stdout (last line)
+                let stdout = String::from_utf8_lossy(&result.stdout);
+                let http_code = stdout.trim();
+                
+                if http_code == "200" {
+                    true
+                } else {
+                    // Print stderr if available
+                    if !result.stderr.is_empty() {
+                        let stderr = String::from_utf8_lossy(&result.stderr);
+                        OutputFormatter::error(&format!(
+                            "Failed to download binary (HTTP {}): {}",
+                            http_code, stderr
+                        ));
+                    } else {
+                        OutputFormatter::error(&format!(
+                            "Failed to download binary (HTTP {})",
+                            http_code
+                        ));
+                    }
+                    false
+                }
+            }
+            Err(e) => {
+                OutputFormatter::error(&format!("curl failed: {}", e));
+                false
+            }
+        }
+    } else if Command::new("wget").arg("--version").output().is_ok() {
+        // Use wget
+        let output = Command::new("wget")
+            .args(&["-O", temp_file.to_str().unwrap(), &url])
+            .output();
+
+        match output {
+            Ok(result) if result.status.success() => true,
+            Ok(result) => {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                if !stderr.is_empty() {
+                    OutputFormatter::error(&format!("wget failed: {}", stderr));
+                } else {
+                    OutputFormatter::error("wget failed to download file");
+                }
+                false
+            }
+            Err(e) => {
+                OutputFormatter::error(&format!("wget failed: {}", e));
+                false
+            }
+        }
+    } else {
+        OutputFormatter::error("Neither curl nor wget is available");
+        OutputFormatter::info("Please install curl or wget to use this feature.");
+        false
+    };
+
+    if !download_success {
+        let _ = fs::remove_dir_all(&temp_dir);
+        std::process::exit(1);
+    }
+
+    // Verify downloaded file exists and is not empty
+    match fs::metadata(&temp_file) {
+        Ok(meta) if meta.len() > 0 => {}
+        Ok(_) => {
+            OutputFormatter::error("Downloaded file is empty");
+            let _ = fs::remove_dir_all(&temp_dir);
+            std::process::exit(1);
+        }
+        Err(e) => {
+            OutputFormatter::error(&format!("Failed to verify downloaded file: {}", e));
+            let _ = fs::remove_dir_all(&temp_dir);
+            std::process::exit(1);
+        }
+    }
+
+    // Extract archive
+    OutputFormatter::info("Extracting archive...");
+    let extract_dir = temp_dir.join("extract");
+    if let Err(e) = fs::create_dir_all(&extract_dir) {
+        OutputFormatter::error(&format!("Failed to create extract directory: {}", e));
+        let _ = fs::remove_dir_all(&temp_dir);
+        std::process::exit(1);
+    }
+
+    let extract_output = Command::new("tar")
+        .args(&["-xzf", temp_file.to_str().unwrap(), "-C", extract_dir.to_str().unwrap()])
+        .output();
+
+    match extract_output {
+        Ok(result) if result.status.success() => {}
+        Ok(_) => {
+            OutputFormatter::error("Failed to extract archive");
+            let _ = fs::remove_dir_all(&temp_dir);
+            std::process::exit(1);
+        }
+        Err(e) => {
+            OutputFormatter::error(&format!("tar failed: {}", e));
+            let _ = fs::remove_dir_all(&temp_dir);
+            std::process::exit(1);
+        }
+    }
+
+    // Check if binary exists in extracted archive
+    let extracted_binary = extract_dir.join(binary_name);
+    if !extracted_binary.exists() {
+        OutputFormatter::error(&format!(
+            "Binary '{}' not found in archive",
+            binary_name
+        ));
+        let _ = fs::remove_dir_all(&temp_dir);
+        std::process::exit(1);
+    }
+
+    // Replace binary using atomic rename to avoid "Text file busy" error
+    OutputFormatter::info("Installing binary...");
+    
+    // Copy new binary to temporary file in the same directory as target
+    // This allows atomic rename operation
+    let new_binary_path = binary_path.with_extension("new");
+    if let Err(e) = fs::copy(&extracted_binary, &new_binary_path) {
+        OutputFormatter::error(&format!("Failed to copy new binary: {}", e));
+        let _ = fs::remove_dir_all(&temp_dir);
+        std::process::exit(1);
+    }
+
+    // Make new binary executable before renaming
+    let mut perms = match fs::metadata(&new_binary_path) {
+        Ok(meta) => meta.permissions(),
+        Err(e) => {
+            OutputFormatter::error(&format!("Failed to get file permissions: {}", e));
+            let _ = fs::remove_dir_all(&temp_dir);
+            let _ = fs::remove_file(&new_binary_path);
+            std::process::exit(1);
+        }
+    };
+    perms.set_mode(0o755);
+    if let Err(e) = fs::set_permissions(&new_binary_path, perms) {
+        OutputFormatter::error(&format!("Failed to set executable permissions: {}", e));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::remove_file(&new_binary_path);
+        std::process::exit(1);
+    }
+
+    // Try to remove old binary first (if it exists and is not in use)
+    // This is best-effort - if it fails due to "Text file busy", we'll try rename anyway
+    if binary_path.exists() {
+        let _ = fs::remove_file(&binary_path);
+    }
+
+    // Atomically replace old binary with new one using rename
+    // This should work even if the old binary is in use, as rename is atomic
+    if let Err(e) = fs::rename(&new_binary_path, &binary_path) {
+        // If rename fails, try to restore the new binary and give helpful error
+        let error_msg = format!("Failed to install binary: {}", e);
+        
+        // Check if it's the "Text file busy" error
+        if error_msg.contains("Text file busy") || error_msg.contains("os error 26") {
+            OutputFormatter::error("Cannot update binary while it is running.");
+            OutputFormatter::info("Please close this terminal session and run the update command again.");
+            OutputFormatter::info("Alternatively, you can manually replace the binary:");
+            println!(
+                "  {}mv{} {} {}",
+                OutputFormatter::help_label("mv"),
+                colors::RESET,
+                OutputFormatter::path(&new_binary_path.display().to_string()),
+                OutputFormatter::path(&binary_path.display().to_string())
+            );
+        } else {
+            OutputFormatter::error(&error_msg);
+        }
+        
+        let _ = fs::remove_dir_all(&temp_dir);
+        // Don't remove new_binary_path - user might want to manually install it
+        std::process::exit(1);
+    }
+
+    // Cleanup
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    // Success message
+    OutputFormatter::success("Nest CLI updated successfully!");
+    println!(
+        "  {}Location:{} {}",
+        OutputFormatter::help_label("Location:"),
+        colors::RESET,
+        OutputFormatter::path(&binary_path.display().to_string())
+    );
+    println!(
+        "  Run {}nest --version{} to verify the update.",
+        colors::BRIGHT_BLUE,
+        colors::RESET
+    );
+}
+
+/// Detects the platform and architecture.
+///
+/// # Returns
+///
+/// Returns `Ok((platform, architecture))` if detection succeeds,
+/// or `Err(error_message)` if the OS or architecture is not supported.
+fn detect_platform() -> Result<(String, String), String> {
+    use std::process::Command;
+
+    // Detect OS
+    let os_output = Command::new("uname").arg("-s").output();
+    let os = match os_output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => return Err("Failed to detect OS".to_string()),
+    };
+
+    let platform = match os.as_str() {
+        "Linux" => "linux",
+        "Darwin" => "macos",
+        _ => return Err(format!("Unsupported OS: {}", os)),
+    };
+
+    // Detect architecture
+    let arch_output = Command::new("uname").arg("-m").output();
+    let arch = match arch_output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => return Err("Failed to detect architecture".to_string()),
+    };
+
+    let architecture = match arch.as_str() {
+        "x86_64" => "x86_64",
+        "aarch64" | "arm64" => "aarch64",
+        _ => return Err(format!("Unsupported architecture: {}", arch)),
+    };
+
+    Ok((platform.to_string(), architecture.to_string()))
 }

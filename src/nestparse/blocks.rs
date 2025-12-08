@@ -10,10 +10,10 @@ pub fn read_config_file(path: &Path) -> io::Result<String> {
     if let Some(file_name) = path.file_name() {
         if let Some(file_name_str) = file_name.to_str() {
             if !is_config_file(file_name_str) {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Not a config file",
-                ));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Not a config file",
+        ));
             }
         }
     }

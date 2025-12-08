@@ -8,7 +8,7 @@ mod constants;
 mod nestparse;
 
 use constants::{FLAG_SHOW, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
-use nestparse::cli::{handle_example, handle_json, handle_show_ast, handle_version, CliGenerator};
+use nestparse::cli::{handle_example, handle_json, handle_show_ast, handle_update, handle_version, CliGenerator};
 use nestparse::command_handler::CommandHandler;
 use nestparse::file::read_config_file;
 use nestparse::parser::Parser;
@@ -34,16 +34,22 @@ use std::process;
 fn main() {
     // Check for special flags that don't need config by parsing args manually
     let args: Vec<String> = std::env::args().collect();
-
+    
     // Check for --version or -V
     if args.iter().any(|a| a == "--version" || a == "-V") {
         handle_version();
         return;
     }
-
+    
     // Check for --example
     if args.iter().any(|a| a == "--example") {
         handle_example();
+        return;
+    }
+    
+    // Check for update command (first argument after program name)
+    if args.len() > 1 && args[1] == "update" {
+        handle_update();
         return;
     }
 
