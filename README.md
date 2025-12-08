@@ -82,6 +82,21 @@ This command:
 - Works without requiring an existing Nestfile
 - Requires `curl` or `wget` to be available on your system
 
+#### `update`
+Update Nest CLI to the latest version:
+```bash
+nest update
+```
+
+This command:
+- Automatically detects your OS and architecture
+- Downloads the latest release from GitHub
+- Replaces the binary in `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
+- Works without requiring an existing Nestfile
+- Requires `curl` or `wget` to be available on your system
+
+**Note:** If you get a "Text file busy" error, it means the binary is currently in use. Close the terminal session and run the update command again, or manually replace the binary using the instructions provided in the error message.
+
 ## 📝 Writing Nestfile
 
 ### Basic Command Structure
