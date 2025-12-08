@@ -42,6 +42,31 @@ cargo build --release
 sudo cp target/release/nest /usr/local/bin/
 ```
 
+**Note for older Linux distributions (e.g., Debian 12, Ubuntu 20.04):**
+
+If you encounter a GLIBC version error (e.g., `GLIBC_2.39 not found`), the pre-built binaries may be incompatible with your system. In this case, compile from source:
+
+1. Install Rust (if not already installed):
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source $HOME/.cargo/env
+   ```
+
+2. Install build dependencies:
+   ```bash
+   # Debian/Ubuntu
+   sudo apt-get update
+   sudo apt-get install -y build-essential pkg-config libssl-dev
+   ```
+
+3. Clone and build:
+   ```bash
+   git clone https://github.com/quonaro/nest.git
+   cd nest
+   cargo build --release
+   cp target/release/nest ~/.local/bin/
+   ```
+
 ### Usage
 
 1. Create a `Nestfile` in your project root (see `nestfile.example` for reference)
