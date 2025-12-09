@@ -40,7 +40,7 @@
           <li><strong>{{ $t('guides.parameters.named') }}</strong></li>
           <li><strong>{{ $t('guides.parameters.required') }}</strong></li>
           <li><strong>{{ $t('guides.parameters.optional') }}</strong></li>
-          <li><strong>{{ $t('guides.parameters.aliases') }}</strong></li>
+          <li><strong>{{ $t('guides.parameters.shortForms') }}</strong></li>
         </ul>
 
         <h3>{{ $t('guides.parameters.usageExamples') }}</h3>
@@ -79,27 +79,140 @@ $ nest deploy "v1.2.3"  # env defaults to "production"</code></pre>
         fi</code></pre>
         <pre v-pre><code>$ nest copy "file.txt" --destination "backup.txt"
 $ nest copy "file.txt" -d "backup.txt" -o true</code></pre>
+
+        <h4>{{ $t('guides.parameters.shortForms') }}</h4>
+        <p>{{ $t('guides.parameters.shortFormsDesc') }}</p>
+        <pre v-pre><code>command_name(!parameter|short: type = default)</code></pre>
+        <p>{{ $t('guides.parameters.shortFormsNote') }}</p>
+        <pre v-pre><code>build(!target|t: str = "x86_64", !release|r: bool = false):
+    > desc: Build the project
+    > script: |
+        echo "Building for {{target}}"
+        if [ "{{release}}" = "true" ]; then
+            echo "Release mode enabled"
+        fi</code></pre>
+        <pre v-pre><code>$ nest build --target aarch64 --release true
+$ nest build -t aarch64 -r true
+$ nest build --target aarch64 -r true</code></pre>
+      </section>
+
+      <section id="aliases">
+        <h2>{{ $t('guides.aliases.title') }}</h2>
+        <p>{{ $t('guides.aliases.desc') }}</p>
+
+        <h3>{{ $t('guides.aliases.syntax') }}</h3>
+        <pre v-pre><code>alias-name(*):
+    > desc: Description
+    > script: |
+        long-command-with-many-options {{*}}</code></pre>
+        <p>{{ $t('guides.aliases.syntaxDesc') }}</p>
+
+        <h3>{{ $t('guides.aliases.example1') }}</h3>
+        <pre v-pre><code>docker-build(*):
+    > desc: Build the project with Docker
+    > privileged
+    > env: DOCKER_PROXY=https://example.com
+    > script: |
+        docker compose -f compose.yml up -d --build {{*}}</code></pre>
+        <p>{{ $t('guides.aliases.example1Usage') }}</p>
+        <pre v-pre><code>$ nest docker-build
+$ nest docker-build --pull
+$ nest docker-build --pull --build-arg KEY=value</code></pre>
+        <p><em>{{ $t('guides.aliases.example1Note') }}</em></p>
+
+        <h3>{{ $t('guides.aliases.example2') }}</h3>
+        <pre v-pre><code>git-commit(*):
+    > desc: Git commit with custom message
+    > script: |
+        git add .
+        git commit {{*}}</code></pre>
+        <p>{{ $t('guides.aliases.example2Usage') }}</p>
+        <pre v-pre><code>$ nest git-commit -m "Fix bug"
+$ nest git-commit -m "Update docs" --no-verify
+$ nest git-commit -am "Quick fix"</code></pre>
+
+        <h3>{{ $t('guides.aliases.bestPractices') }}</h3>
+        <ul>
+          <li>{{ $t('guides.aliases.practice1') }}</li>
+          <li>{{ $t('guides.aliases.practice2') }}</li>
+          <li>{{ $t('guides.aliases.practice3') }}</li>
+        </ul>
       </section>
 
       <section id="directives">
         <h2>{{ $t('guides.directives.title') }}</h2>
         <p>{{ $t('guides.directives.desc') }}</p>
-        <ul>
-          <li><strong><code>> desc:</code></strong> - {{ $t('guides.directives.descDirective') }}</li>
-          <li><strong><code>> cwd:</code></strong> - {{ $t('guides.directives.cwdDirective') }}</li>
-          <li><strong><code>> env:</code></strong> - {{ $t('guides.directives.envDirective') }}
-            <ul>
-              <li>{{ $t('guides.directives.envDirect') }}</li>
-              <li>{{ $t('guides.directives.envFile') }}</li>
-            </ul>
-          </li>
-          <li><strong><code>> script:</code></strong> - {{ $t('guides.directives.scriptDirective') }}
-            <ul>
-              <li>{{ $t('guides.directives.scriptSingle') }}</li>
-              <li>{{ $t('guides.directives.scriptMulti') }}</li>
-            </ul>
-          </li>
-        </ul>
+
+        <h3>{{ $t('guides.directives.descTitle') }}</h3>
+        <p>{{ $t('guides.directives.descDirective') }}</p>
+        <pre v-pre><code>build:
+    > desc: Build the project for production
+    > script: npm run build</code></pre>
+
+        <h3>{{ $t('guides.directives.cwdTitle') }}</h3>
+        <p>{{ $t('guides.directives.cwdDirective') }}</p>
+        <pre v-pre><code>test:
+    > desc: Run tests
+    > cwd: ./tests
+    > script: npm test</code></pre>
+        <p><em>{{ $t('guides.directives.cwdNote') }}</em></p>
+
+        <h3>{{ $t('guides.directives.envTitle') }}</h3>
+        <p>{{ $t('guides.directives.envDirective') }}</p>
+        
+        <h4>{{ $t('guides.directives.envDirectTitle') }}</h4>
+        <p>{{ $t('guides.directives.envDirect') }}</p>
+        <pre v-pre><code>run-prod:
+    > desc: Run in production mode
+    > env: NODE_ENV=production
+    > env: PORT=3000
+    > script: node app.js</code></pre>
+
+        <h4>{{ $t('guides.directives.envFileTitle') }}</h4>
+        <p>{{ $t('guides.directives.envFile') }}</p>
+        <pre v-pre><code>run-dev:
+    > desc: Run in development mode
+    > env: .env.local
+    > env: NODE_ENV=development
+    > script: node dev-server.js</code></pre>
+        <p><em>{{ $t('guides.directives.envMultiple') }}</em></p>
+
+        <h3>{{ $t('guides.directives.scriptTitle') }}</h3>
+        <p>{{ $t('guides.directives.scriptDirective') }}</p>
+        
+        <h4>{{ $t('guides.directives.scriptSingleTitle') }}</h4>
+        <p>{{ $t('guides.directives.scriptSingle') }}</p>
+        <pre v-pre><code>hello:
+    > desc: Print hello
+    > script: echo "Hello, World!"</code></pre>
+
+        <h4>{{ $t('guides.directives.scriptMultiTitle') }}</h4>
+        <p>{{ $t('guides.directives.scriptMulti') }}</p>
+        <pre v-pre><code>setup:
+    > desc: Setup project
+    > script: |
+        #!/bin/sh
+        set -e
+        npm install
+        cp .env.example .env
+        npm run build</code></pre>
+
+        <h3>{{ $t('guides.directives.privilegedTitle') }}</h3>
+        <p>{{ $t('guides.directives.privilegedDirective') }}</p>
+        <pre v-pre><code>install-system:
+    > desc: Install system packages
+    > privileged: true
+    > script: |
+        apt-get update
+        apt-get install -y curl wget</code></pre>
+        <p>{{ $t('guides.directives.privilegedShortForm') }}</p>
+        <pre v-pre><code>install-system:
+    > desc: Install system packages
+    > privileged
+    > script: |
+        apt-get update
+        apt-get install -y curl wget</code></pre>
+        <p><em>{{ $t('guides.directives.privilegedNote') }}</em></p>
       </section>
 
       <section id="nested-commands">
@@ -154,6 +267,78 @@ $ nest dev lint -f true       # Use short alias</code></pre>
         #!/bin/sh
         echo "Deploying {{version}} by {{user}} at {{now}}"
         ./deploy.sh {{version}}</code></pre>
+        <p><em>{{ $t('guides.templates.note') }}</em></p>
+      </section>
+
+      <section id="wildcard">
+        <h2>{{ $t('guides.wildcard.title') }}</h2>
+        <p>{{ $t('guides.wildcard.desc') }}</p>
+
+        <h3>{{ $t('guides.wildcard.syntax') }}</h3>
+        <pre v-pre><code>command_name(*):</code></pre>
+
+        <h3>{{ $t('guides.wildcard.example') }}</h3>
+        <pre v-pre><code>docker-build(*):
+    > desc: Build the project with Docker, passing all arguments through
+    > privileged
+    > script: |
+        docker compose -f compose.yml up -d --build {{*}}</code></pre>
+
+        <h3>{{ $t('guides.wildcard.usage') }}</h3>
+        <pre v-pre><code>$ nest docker-build
+$ nest docker-build --pull
+$ nest docker-build --pull --build-arg KEY=value</code></pre>
+        <p><em>{{ $t('guides.wildcard.note') }}</em></p>
+      </section>
+
+      <section id="privileged">
+        <h2>{{ $t('guides.privileged.title') }}</h2>
+        <p>{{ $t('guides.privileged.desc') }}</p>
+
+        <h3>{{ $t('guides.privileged.syntax') }}</h3>
+        <pre v-pre><code>install-system:
+    > desc: Install system packages (requires sudo)
+    > privileged: true
+    > script: |
+        apt-get update
+        apt-get install -y curl wget git</code></pre>
+        <p>Или короткая форма:</p>
+        <pre v-pre><code>install-system:
+    > desc: Install system packages (requires sudo)
+    > privileged
+    > script: |
+        apt-get update
+        apt-get install -y curl wget git</code></pre>
+
+        <p><em>{{ $t('guides.privileged.note') }}</em></p>
+      </section>
+
+      <section id="multiline">
+        <h2>{{ $t('guides.multiline.title') }}</h2>
+        <p>{{ $t('guides.multiline.desc') }}</p>
+
+        <h3>{{ $t('guides.multiline.scriptMultiline') }}</h3>
+        <pre v-pre><code>setup-project:
+    > desc: Setup new project with multiple steps
+    > script: |
+        #!/bin/sh
+        set -e
+        
+        echo "Setting up project..."
+        npm install
+        mkdir -p logs data cache
+        cp .env.example .env.local</code></pre>
+
+        <h3>{{ $t('guides.multiline.paramMultiline') }}</h3>
+        <pre v-pre><code>complex-command(
+    input: str,
+    !output|o: str,
+    !format|f: str = "json",
+    !compress|c: bool = false
+):
+    > desc: Complex command with multiline parameters
+    > script: |
+        ./process.sh {{input}} {{output}}</code></pre>
       </section>
     </div>
   </Layout>

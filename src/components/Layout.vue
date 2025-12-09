@@ -38,27 +38,32 @@
             </div>
             <div class="nav-section">
               <h3 class="nav-section-title">{{ $t('nav.sidebar.gettingStarted') }}</h3>
-              <router-link to="/getting-started" class="nav-item">{{ $t('nav.sidebar.installation') }}</router-link>
-              <router-link to="/getting-started#first-steps" class="nav-item">{{ $t('nav.sidebar.firstSteps') }}</router-link>
-              <router-link to="/getting-started#features" class="nav-item">{{ $t('nav.sidebar.features') }}</router-link>
+              <router-link to="/getting-started" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && !hash }">{{ $t('nav.sidebar.installation') }}</router-link>
+              <a href="/getting-started#first-steps" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && currentHash === 'first-steps' }">{{ $t('nav.sidebar.firstSteps') }}</a>
+              <a href="/getting-started#features" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && currentHash === 'features' }">{{ $t('nav.sidebar.features') }}</a>
             </div>
             <div class="nav-section">
               <h3 class="nav-section-title">{{ $t('nav.sidebar.guides') }}</h3>
-              <router-link to="/guides" class="nav-item">{{ $t('nav.sidebar.writingNestfile') }}</router-link>
-              <router-link to="/guides#parameters" class="nav-item">{{ $t('nav.sidebar.parameters') }}</router-link>
-              <router-link to="/guides#directives" class="nav-item">{{ $t('nav.sidebar.directives') }}</router-link>
-              <router-link to="/guides#nested-commands" class="nav-item">{{ $t('nav.sidebar.nestedCommands') }}</router-link>
+              <router-link to="/guides" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && !hash }">{{ $t('nav.sidebar.writingNestfile') }}</router-link>
+              <a href="/guides#parameters" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'parameters' }">{{ $t('nav.sidebar.parameters') }}</a>
+              <a href="/guides#aliases" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'aliases' }">{{ $t('nav.sidebar.aliases') }}</a>
+              <a href="/guides#directives" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'directives' }">{{ $t('nav.sidebar.directives') }}</a>
+              <a href="/guides#nested-commands" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'nested-commands' }">{{ $t('nav.sidebar.nestedCommands') }}</a>
+              <a href="/guides#templates" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'templates' }">{{ $t('nav.sidebar.templates') }}</a>
+              <a href="/guides#wildcard" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'wildcard' }">{{ $t('nav.sidebar.wildcard') }}</a>
+              <a href="/guides#privileged" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'privileged' }">{{ $t('nav.sidebar.privileged') }}</a>
+              <a href="/guides#multiline" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'multiline' }">{{ $t('nav.sidebar.multiline') }}</a>
             </div>
             <div class="nav-section">
               <h3 class="nav-section-title">{{ $t('nav.sidebar.concepts') }}</h3>
-              <router-link to="/concepts" class="nav-item">{{ $t('nav.sidebar.projects') }}</router-link>
-              <router-link to="/concepts#commands" class="nav-item">{{ $t('nav.sidebar.commands') }}</router-link>
-              <router-link to="/concepts#templates" class="nav-item">{{ $t('nav.sidebar.templates') }}</router-link>
+              <router-link to="/concepts" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && !hash }">{{ $t('nav.sidebar.projects') }}</router-link>
+              <a href="/concepts#commands" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && currentHash === 'commands' }">{{ $t('nav.sidebar.commands') }}</a>
+              <a href="/concepts#templates" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && currentHash === 'templates' }">{{ $t('nav.sidebar.templates') }}</a>
             </div>
             <div class="nav-section">
               <h3 class="nav-section-title">{{ $t('nav.sidebar.reference') }}</h3>
-              <router-link to="/reference" class="nav-item">{{ $t('nav.sidebar.cliReference') }}</router-link>
-              <router-link to="/reference#configuration" class="nav-item">{{ $t('nav.sidebar.configuration') }}</router-link>
+              <router-link to="/reference" class="nav-item" :class="{ 'nav-item-active': isReferencePage && !hash }">{{ $t('nav.sidebar.cliReference') }}</router-link>
+              <a href="/reference#configuration" class="nav-item" :class="{ 'nav-item-active': isReferencePage && currentHash === 'configuration' }">{{ $t('nav.sidebar.configuration') }}</a>
             </div>
           </nav>
         </aside>
@@ -71,14 +76,40 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '../composables/useTheme'
 
 const { locale } = useI18n()
 const { theme, toggleTheme } = useTheme()
+const route = useRoute()
+const router = useRouter()
 
 const logoPath = `${import.meta.env.BASE_URL}Nest.png`
+const currentHash = ref('')
+const hash = ref('')
+
+// Check current page and hash
+const isGuidesPage = ref(false)
+const isGettingStartedPage = ref(false)
+const isConceptsPage = ref(false)
+const isReferencePage = ref(false)
+
+const updateActiveState = () => {
+  const path = route.path
+  hash.value = window.location.hash.slice(1)
+  currentHash.value = hash.value
+  
+  isGuidesPage.value = path === '/guides'
+  isGettingStartedPage.value = path === '/getting-started'
+  isConceptsPage.value = path === '/concepts'
+  isReferencePage.value = path === '/reference'
+}
+
+const handleHashChange = () => {
+  updateActiveState()
+}
 
 // Initialize locale from localStorage on mount
 onMounted(() => {
@@ -86,6 +117,16 @@ onMounted(() => {
   if (savedLocale && (savedLocale === 'en' || savedLocale === 'ru')) {
     locale.value = savedLocale
   }
+  updateActiveState()
+  window.addEventListener('hashchange', handleHashChange)
+  // Watch route changes
+  router.afterEach(() => {
+    setTimeout(updateActiveState, 0)
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('hashchange', handleHashChange)
 })
 
 const changeLocale = () => {
@@ -265,8 +306,12 @@ const changeLocale = () => {
   transition: color 0.2s;
 }
 
-.nav-item:hover,
-.nav-item.router-link-active {
+.nav-item:hover {
+  color: var(--color-primary);
+}
+
+.nav-item.router-link-active,
+.nav-item-active {
   color: var(--color-primary);
 }
 

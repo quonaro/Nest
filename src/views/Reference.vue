@@ -19,6 +19,10 @@
               <li><code>ast</code> - {{ $t('reference.cliReference.ast') }}</li>
             </ul>
           </li>
+          <li><code>--dry-run</code> - {{ $t('reference.cliReference.dryRun') }}</li>
+          <li><code>--verbose</code> - {{ $t('reference.cliReference.verbose') }}</li>
+          <li><code>--example</code> - {{ $t('reference.cliReference.example') }}</li>
+          <li><code>update</code> - {{ $t('reference.cliReference.update') }}</li>
         </ul>
 
         <h3>{{ $t('reference.cliReference.commandExecution') }}</h3>
@@ -61,6 +65,7 @@ $ nest &lt;command&gt; &lt;subcommand&gt; --help</code></pre>
           <li><code>> env: &lt;.env.file&gt;</code> - {{ $t('reference.configuration.envFileDirective') }}</li>
           <li><code>> script: &lt;command&gt;</code> - {{ $t('reference.configuration.scriptDirective') }}</li>
           <li><code>> script: |</code> - {{ $t('reference.configuration.scriptMultiDirective') }}</li>
+          <li><code>> privileged: true</code> {{ $t('reference.configuration.privilegedOr') }} <code>> privileged</code> - {{ $t('reference.configuration.privilegedDirective') }}</li>
         </ul>
 
         <h3>{{ $t('reference.configuration.fileLocation') }}</h3>
