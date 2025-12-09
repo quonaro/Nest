@@ -1,6 +1,19 @@
 # Nestfile Example
-# This is a simple example configuration file for Nest.
+# This is a comprehensive example configuration file for Nest.
 # Copy this file to 'nestfile' in your project root and customize it.
+#
+# This example demonstrates:
+# - Positional and named arguments
+# - Parameter types (str, bool, num, arr)
+# - Environment variables (direct assignment and .env files)
+# - Template variables ({{param}}, {{now}}, {{user}})
+# - Working directory configuration
+# - Nested command groups
+# - Single-line and multiline scripts
+
+# ============================================================================
+# BASIC COMMANDS
+# ============================================================================
 
 # Simple command with positional arguments
 greet(name: str, message: str):
@@ -29,32 +42,125 @@ copy(source: str, !destination|d: str, !overwrite|o: bool = false):
             echo "Copying {{source}} to {{destination}}"
         fi
 
-# Group command with subcommands
-dev:
-    > desc: Development tools
+# ============================================================================
+# ENVIRONMENT VARIABLES
+# ============================================================================
 
-    default(!watch|w: bool = false):
-        > desc: Start development server
-        > script: |
-            if [ "{{watch}}" = "true" ]; then
-                echo "Starting dev server with watch mode"
-            else
-                echo "Starting dev server"
-            fi
+# Command with direct environment variable assignment
+run_app(!port|p: num = 3000):
+    > desc: Run application with environment variables
+    > env: NODE_ENV=production
+    > env: PORT={{port}}
+    > script: |
+        echo "Starting app on port $PORT"
+        echo "Environment: $NODE_ENV"
+        # Your app startup command here
+        # node server.js
 
-    lint(!fix|f: bool = false):
-        > desc: Run linter
-        > script: |
-            if [ "{{fix}}" = "true" ]; then
-                echo "Running linter with --fix"
-            else
-                echo "Running linter"
-            fi
+# Command loading environment from .env file
+# Note: The .env file should exist in your project root
+# Example .env file content:
+#   DATABASE_URL=postgres://localhost/mydb
+#   API_KEY=secret123
+start_db():
+    > desc: Start database with environment from .env file
+    > env: .env
+    > script: |
+        echo "Database URL: $DATABASE_URL"
+        echo "API Key: $API_KEY"
+        # Your database startup command here
 
-# Command with numeric and array parameters
+# Command with multiple environment variables
+deploy_app(version: str, !env|e: str = "production"):
+    > desc: Deploy application with environment configuration
+    > env: DEPLOY_ENV={{env}}
+    > env: APP_VERSION={{version}}
+    > env: DEPLOYER={{user}}
+    > env: BUILD_TIME={{now}}
+    > script: |
+        echo "Deploying {{version}} to {{env}}"
+        echo "Deployed by: $DEPLOYER"
+        echo "Build time: $BUILD_TIME"
+        # Your deployment command here
+
+# Command combining .env file and direct assignments
+# Direct assignments override values from .env file
+run_dev():
+    > desc: Run development server with custom env
+    > env: .env.local
+    > env: NODE_ENV=development
+    > env: DEBUG=true
+    > script: |
+        echo "Running in $NODE_ENV mode"
+        echo "Debug: $DEBUG"
+        # Your dev server command here
+
+# ============================================================================
+# TEMPLATE VARIABLES
+# ============================================================================
+
+# Using special template variables: {{now}} and {{user}}
+create_backup(name: str):
+    > desc: Create backup with timestamp and user info
+    > script: |
+        echo "Creating backup: {{name}}"
+        echo "Created by: {{user}}"
+        echo "Created at: {{now}}"
+        # Your backup command here
+        # tar -czf "backup-{{name}}-{{now}}.tar.gz" ./data
+
+# Command using template variables in environment
+log_action(action: str):
+    > desc: Log action with user and timestamp
+    > env: LOG_USER={{user}}
+    > env: LOG_TIME={{now}}
+    > script: |
+        echo "Action: {{action}}"
+        echo "User: $LOG_USER"
+        echo "Time: $LOG_TIME"
+        # Your logging command here
+
+# ============================================================================
+# WORKING DIRECTORY
+# ============================================================================
+
+# Command with custom working directory
+test():
+    > desc: Run tests in specific directory
+    > cwd: ./tests
+    > script: |
+        echo "Running tests in $(pwd)"
+        # Your test command here
+        # pytest
+
+# Command combining cwd and env
+build_frontend():
+    > desc: Build frontend in specific directory
+    > cwd: ./frontend
+    > env: NODE_ENV=production
+    > script: |
+        echo "Building in $(pwd)"
+        echo "Environment: $NODE_ENV"
+        # Your build command here
+        # npm run build
+
+# ============================================================================
+# PARAMETER TYPES
+# ============================================================================
+
+# Command with numeric parameter
+scale(!replicas|r: num = 1):
+    > desc: Scale application replicas
+    > script: |
+        echo "Scaling to {{replicas}} replicas"
+        # Your scaling command here
+        # kubectl scale deployment app --replicas={{replicas}}
+
+# Command with array parameter
 deploy(version: str, !retries|r: num = 3, !tags|t: arr = []):
-    > desc: Deploy application
-        > script: |
+    > desc: Deploy application with tags
+    > env: APP_VERSION={{version}}
+    > script: |
         echo "Deploying version {{version}}"
         echo "Retries: {{retries}}"
         if [ -n "{{tags}}" ]; then
@@ -62,10 +168,115 @@ deploy(version: str, !retries|r: num = 3, !tags|t: arr = []):
         else
             echo "No tags specified"
         fi
+        # Your deployment command here
 
-# Simple command with working directory
-test():
-    > desc: Run tests
-    > cwd: .
+# Command with boolean flag
+clean(!force|f: bool = false):
+    > desc: Clean build artifacts
+    > script: |
+        if [ "{{force}}" = "true" ]; then
+            echo "Force cleaning..."
+            # rm -rf ./build ./dist
+        else
+            echo "Cleaning..."
+            # rm -rf ./build
+        fi
+
+# ============================================================================
+# NESTED COMMANDS (GROUPS)
+# ============================================================================
+
+# Group command with subcommands
+dev:
+    > desc: Development tools
+
+    default(!watch|w: bool = false):
+        > desc: Start development server
+        > env: NODE_ENV=development
         > script: |
-        echo "Running tests in current directory"
+            if [ "{{watch}}" = "true" ]; then
+                echo "Starting dev server with watch mode"
+                # nodemon src/index.js
+            else
+                echo "Starting dev server"
+                # node src/index.js
+            fi
+
+    lint(!fix|f: bool = false):
+        > desc: Run linter
+        > script: |
+            if [ "{{fix}}" = "true" ]; then
+                echo "Running linter with --fix"
+                # eslint src/ --fix
+            else
+                echo "Running linter"
+                # eslint src/
+            fi
+
+    test(!coverage|c: bool = false):
+        > desc: Run tests
+        > env: NODE_ENV=test
+        > script: |
+            if [ "{{coverage}}" = "true" ]; then
+                echo "Running tests with coverage"
+                # npm test -- --coverage
+            else
+                echo "Running tests"
+                # npm test
+            fi
+
+# Another group with environment configuration
+docker:
+    > desc: Docker operations
+
+    build(!tag|t: str = "latest"):
+        > desc: Build Docker image
+        > env: DOCKER_BUILDKIT=1
+        > script: |
+            echo "Building Docker image with tag {{tag}}"
+            # docker build -t myapp:{{tag}} .
+
+    run(!port|p: num = 8080):
+        > desc: Run Docker container
+        > env: CONTAINER_PORT={{port}}
+        > script: |
+            echo "Running container on port {{port}}"
+            # docker run -p {{port}}:8080 myapp:latest
+
+# ============================================================================
+# SINGLE-LINE SCRIPTS
+# ============================================================================
+
+# Single-line script (no pipe needed)
+version():
+    > desc: Show version information
+    > script: echo "Nest CLI - Version 1.0.0"
+
+# Single-line with template
+hello(name: str):
+    > desc: Simple greeting
+    > script: echo "Hello, {{name}}!"
+
+# ============================================================================
+# COMPLEX EXAMPLES
+# ============================================================================
+
+# Complex command combining all features
+release(version: str, !dry-run|d: bool = false):
+    > desc: Create a new release
+    > env: RELEASE_VERSION={{version}}
+    > env: RELEASED_BY={{user}}
+    > env: RELEASE_TIME={{now}}
+    > cwd: .
+    > script: |
+        echo "Creating release {{version}}"
+        echo "Released by: {{user}}"
+        echo "Release time: {{now}}"
+        if [ "{{dry-run}}" = "true" ]; then
+            echo "DRY RUN: Would create release {{version}}"
+        else
+            echo "Creating release {{version}}..."
+            # Your release commands here
+            # git tag -a "v{{version}}" -m "Release {{version}}"
+            # git push origin "v{{version}}"
+        fi
