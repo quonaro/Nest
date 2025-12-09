@@ -55,11 +55,7 @@ pub fn process_includes(
     base_path: &Path,
     visited: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<String, IncludeError> {
-    let base_dir = base_path
-        .parent()
-        .ok_or_else(|| IncludeError::InvalidPath("Base path has no parent".to_string()))?;
-
-    // Normalize base_path for comparison
+    // Normalize base_path for comparison and path resolution
     let normalized_base = base_path.canonicalize()
         .map_err(|e| IncludeError::IoError(format!("Cannot canonicalize base path: {}", e)))?;
     
@@ -69,6 +65,11 @@ pub fn process_includes(
         ));
     }
     visited.insert(normalized_base.clone());
+
+    // Get base directory from canonicalized path
+    let base_dir = normalized_base
+        .parent()
+        .ok_or_else(|| IncludeError::InvalidPath("Base path has no parent".to_string()))?;
 
     let mut result = String::new();
     let mut lines = content.lines().peekable();

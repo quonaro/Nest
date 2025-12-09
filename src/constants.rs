@@ -59,6 +59,9 @@ pub const FLAG_DRY_RUN: &str = "dry-run";
 /// Flag name for verbose output.
 pub const FLAG_VERBOSE: &str = "verbose";
 
+/// Flag name for generating shell completion.
+pub const FLAG_COMPLETE: &str = "complete";
+
 /// Format option for JSON output.
 pub const FORMAT_JSON: &str = "json";
 

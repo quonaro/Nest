@@ -9,7 +9,7 @@ use super::condition;
 use super::env::EnvironmentManager;
 use super::template::TemplateProcessor;
 use crate::constants::{
-    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_CONFIG, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
+    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_COMPLETE, FLAG_CONFIG, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
     FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON, SHORT_VERSION,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
@@ -204,6 +204,13 @@ impl CliGenerator {
                     .short('v')
                     .action(ArgAction::SetTrue)
                     .help("Show detailed output including environment variables and working directory"),
+            )
+            .arg(
+                Arg::new(FLAG_COMPLETE)
+                    .long(FLAG_COMPLETE)
+                    .value_name("SHELL")
+                    .hide(true)
+                    .help("Generate and install shell completion (bash, zsh, fish, powershell, elvish). Use -V to show script content."),
             )
     }
 

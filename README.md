@@ -42,6 +42,47 @@ cargo build --release
 sudo cp target/release/nest /usr/local/bin/
 ```
 
+### Shell Completion
+
+Nest CLI automatically generates and installs shell completion for all supported shells (bash, zsh, fish, PowerShell, elvish). Completion is automatically set up when you run any `nest` command.
+
+**Automatic Installation:**
+- Completion scripts are generated automatically when your nestfile changes
+- Installation happens automatically in your shell's configuration file
+- Works for bash, zsh, fish, PowerShell, and elvish
+
+**Manual Installation:**
+```bash
+# Generate and install completion for current shell
+nest --complete zsh
+
+# View completion script content
+nest --complete zsh -V
+
+# Generate for specific shell
+nest --complete bash
+nest --complete fish
+```
+
+**Completion Script Locations:**
+- All completion scripts: `~/.cache/nest/completions/`
+- Hash file (for change detection): `~/.cache/nest/completions/nestfile.hash`
+- Shell configs: Automatically added to `.zshrc`, `.bashrc`, etc.
+
+**Supported Shells:**
+- **Bash**: Added to `~/.bashrc` or `~/.bash_profile`
+- **Zsh**: Added to `~/.zshrc`
+- **Fish**: Copied to `~/.config/fish/completions/nest.fish`
+- **PowerShell**: Added to PowerShell profile
+- **Elvish**: Added to `~/.elvish/rc.elv`
+
+After installation, reload your shell configuration:
+```bash
+source ~/.zshrc  # for zsh
+source ~/.bashrc  # for bash
+# or simply restart your terminal
+```
+
 **Note for older Linux distributions (e.g., Debian 12, Ubuntu 20.04):**
 
 If you encounter a GLIBC version error (e.g., `GLIBC_2.39 not found`), the pre-built binaries may be incompatible with your system. In this case, compile from source:
@@ -94,6 +135,23 @@ Display commands in different formats. Requires a Nestfile to be present:
 nest --show json    # Output commands as JSON
 nest --show ast     # Output commands as Abstract Syntax Tree
 ```
+
+#### `--complete <shell>`
+Generate and install shell completion. Supports: `bash`, `zsh`, `fish`, `powershell`, `elvish`:
+```bash
+nest --complete zsh        # Generate and install for zsh
+nest --complete zsh -V      # Show completion script content (verbose)
+nest --complete bash        # Generate and install for bash
+```
+
+This command:
+- Automatically detects your current shell
+- Generates completion scripts for all supported shells
+- Installs completion in your shell's configuration file
+- Shows informational message about installation
+- Sources completion in current terminal (if possible)
+
+Use `-V` or `--verbose` flag to view the generated completion script content instead of installing it.
 
 #### `--example`
 Download the examples folder from GitHub:

@@ -7,9 +7,10 @@
 mod constants;
 mod nestparse;
 
-use constants::{FLAG_SHOW, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
+use constants::{FLAG_COMPLETE, FLAG_SHOW, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
 use nestparse::cli::{handle_example, handle_json, handle_show_ast, handle_update, handle_version, CliGenerator};
 use nestparse::command_handler::CommandHandler;
+use nestparse::completion::CompletionManager;
 use nestparse::file::read_config_file;
 use nestparse::include::process_includes;
 use nestparse::parser::{Parser, ParseError, ParseResult};
@@ -93,6 +94,43 @@ fn main() {
         }
     };
     let matches = cli.clone().get_matches();
+
+    // Handle --complete flag (generate completion script)
+    if let Some(shell_name) = matches.get_one::<String>(FLAG_COMPLETE) {
+        let verbose = matches.get_flag(FLAG_VERBOSE);
+        if let Err(e) = nestparse::completion::CompletionManager::handle_completion_request(
+            &mut cli, 
+            shell_name,
+            verbose,
+            &config_path,
+        ) {
+            nestparse::output::OutputFormatter::error(&e);
+            process::exit(1);
+        }
+        return;
+    }
+
+    // Automatically generate/update completion scripts if nestfile changed
+    if let Ok(completion_manager) = CompletionManager::new() {
+        if let Ok(needs_regeneration) = completion_manager.needs_regeneration(&config_path) {
+            if needs_regeneration {
+                // Silently generate completions in background (don't interrupt user workflow)
+                if let Ok(_) = completion_manager.generate_all_completions(&mut cli, &config_path) {
+                    // Completion scripts generated successfully
+                    // Now try to auto-install for current shell
+                    if let Ok(Some(_installed_shell)) = completion_manager.auto_install_completion(&config_path) {
+                        // Completion installed successfully (or already was installed)
+                        // User will need to reload shell or restart terminal
+                    }
+                }
+            } else {
+                // Scripts are up to date, but check if installation is needed
+                if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {
+                    // Installation check completed (already installed or just installed)
+                }
+            }
+        }
+    }
 
     if handle_special_flags(&matches, &parse_result.commands) {
         return;
