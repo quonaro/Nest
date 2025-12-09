@@ -1,6 +1,5 @@
 /target
 nest
-nestfile
 *.tar.gz
 *.zip
 *.sha256
