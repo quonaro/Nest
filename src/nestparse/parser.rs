@@ -4,7 +4,8 @@
 //! It handles nested commands, parameters, directives, and multiline constructs.
 
 use crate::constants::{BOOL_FALSE, BOOL_TRUE, INDENT_SIZE};
-use super::ast::{Command, Parameter, Value, Directive, Variable, Constant};
+use super::ast::{Command, Parameter, Value, Directive, Variable, Constant, Dependency};
+use std::collections::HashMap;
 
 /// Parser state for processing Nestfile content.
 ///
@@ -472,6 +473,12 @@ impl Parser {
                 "desc" => Ok((Directive::Desc(directive_value.to_string()), false)),
                 "cwd" => Ok((Directive::Cwd(directive_value.to_string()), false)),
                 "env" => Ok((Directive::Env(directive_value.to_string()), false)),
+                "depends" => {
+                    // Parse comma-separated list of dependencies
+                    // Each dependency can have arguments: "build(target=\"x86_64\")"
+                    let deps = self.parse_dependencies(directive_value)?;
+                    Ok((Directive::Depends(deps), false))
+                }
                 "privileged" => {
                     // Parse boolean value: true, false, or empty (defaults to true)
                     let privileged = if directive_value.is_empty() {
@@ -500,6 +507,43 @@ impl Parser {
                         // Single line script
                         Ok((Directive::Script(directive_value.to_string()), false))
                     }
+                }
+                "before" => {
+                    // Check if it's multiline (ends with |)
+                    if directive_value == "|" {
+                        // Parse multiline block
+                        let script_content = self.parse_multiline_block(indent)?;
+                        Ok((Directive::Before(script_content), true))
+                    } else {
+                        // Single line script
+                        Ok((Directive::Before(directive_value.to_string()), false))
+                    }
+                }
+                "after" => {
+                    // Check if it's multiline (ends with |)
+                    if directive_value == "|" {
+                        // Parse multiline block
+                        let script_content = self.parse_multiline_block(indent)?;
+                        Ok((Directive::After(script_content), true))
+                    } else {
+                        // Single line script
+                        Ok((Directive::After(directive_value.to_string()), false))
+                    }
+                }
+                "fallback" => {
+                    // Check if it's multiline (ends with |)
+                    if directive_value == "|" {
+                        // Parse multiline block
+                        let script_content = self.parse_multiline_block(indent)?;
+                        Ok((Directive::Fallback(script_content), true))
+                    } else {
+                        // Single line script
+                        Ok((Directive::Fallback(directive_value.to_string()), false))
+                    }
+                }
+                "validate" => {
+                    // Validation directive (single line only)
+                    Ok((Directive::Validate(directive_value.to_string()), false))
                 }
                 _ => Err(ParseError::InvalidSyntax(format!("Unknown directive: {}", directive_name), self.current_line_number()))
             }
@@ -643,5 +687,236 @@ fn get_indent_size(line: &str) -> u8 {
         }
     }
     spaces / INDENT_SIZE
+}
+
+impl Parser {
+    /// Parses dependencies from a depends directive value.
+    ///
+    /// Supports syntax like:
+    /// - `clean` - simple dependency
+    /// - `build(target="x86_64")` - dependency with named argument
+    /// - `test(coverage=true)` - dependency with boolean argument
+    /// - `build(target="x86_64", release=true)` - multiple arguments
+    /// - `dev:build(target="x86_64")` - nested command with arguments
+    fn parse_dependencies(&self, value: &str) -> Result<Vec<Dependency>, ParseError> {
+        let mut dependencies = Vec::new();
+        let mut current = value.trim();
+        
+        while !current.is_empty() {
+            // Find the next dependency (accounting for parentheses and quotes)
+            let (dep_str, remainder) = self.split_next_dependency(current)?;
+            
+            if dep_str.is_empty() {
+                break;
+            }
+            
+            let dep = self.parse_single_dependency(dep_str.trim())?;
+            dependencies.push(dep);
+            
+            current = remainder.trim();
+        }
+        
+        Ok(dependencies)
+    }
+    
+    /// Splits the next dependency from the string, handling nested parentheses and quotes.
+    fn split_next_dependency<'a>(&self, s: &'a str) -> Result<(&'a str, &'a str), ParseError> {
+        let mut depth = 0;
+        let mut in_quotes = false;
+        let mut quote_char = '\0';
+        let mut start = 0;
+        
+        // Skip leading whitespace
+        while start < s.len() && s.chars().nth(start).unwrap().is_whitespace() {
+            start += 1;
+        }
+        
+        for (i, ch) in s.char_indices() {
+            if i < start {
+                continue;
+            }
+            
+            match ch {
+                '"' | '\'' if !in_quotes => {
+                    in_quotes = true;
+                    quote_char = ch;
+                }
+                ch if ch == quote_char && in_quotes => {
+                    in_quotes = false;
+                }
+                '(' if !in_quotes => {
+                    depth += 1;
+                }
+                ')' if !in_quotes => {
+                    depth -= 1;
+                }
+                ',' if !in_quotes && depth == 0 => {
+                    // Found a top-level comma, split here
+                    return Ok((&s[start..i], &s[i + 1..]));
+                }
+                _ => {}
+            }
+        }
+        
+        // No comma found, this is the last dependency
+        if start < s.len() {
+            Ok((&s[start..], ""))
+        } else {
+            Ok(("", ""))
+        }
+    }
+    
+    /// Parses a single dependency string into a Dependency struct.
+    fn parse_single_dependency(&self, dep_str: &str) -> Result<Dependency, ParseError> {
+        // Check if dependency has arguments
+        if let Some(open_paren) = dep_str.find('(') {
+            let command_path = dep_str[..open_paren].trim().to_string();
+            
+            // Find matching closing parenthesis
+            let mut depth = 0;
+            let mut in_quotes = false;
+            let mut quote_char = '\0';
+            let mut close_paren = None;
+            
+            for (i, ch) in dep_str[open_paren..].char_indices() {
+                match ch {
+                    '"' | '\'' if !in_quotes => {
+                        in_quotes = true;
+                        quote_char = ch;
+                    }
+                    ch if ch == quote_char && in_quotes => {
+                        in_quotes = false;
+                    }
+                    '(' if !in_quotes => {
+                        depth += 1;
+                    }
+                    ')' if !in_quotes => {
+                        depth -= 1;
+                        if depth == 0 {
+                            close_paren = Some(open_paren + i);
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            
+            let close_paren = close_paren.ok_or_else(|| {
+                ParseError::InvalidSyntax(
+                    format!("Unclosed parentheses in dependency: {}", dep_str),
+                    self.current_line_number(),
+                )
+            })?;
+            
+            let args_str = &dep_str[open_paren + 1..close_paren];
+            let args = self.parse_dependency_args(args_str)?;
+            
+            Ok(Dependency {
+                command_path,
+                args,
+            })
+        } else {
+            // No arguments
+            Ok(Dependency {
+                command_path: dep_str.to_string(),
+                args: HashMap::new(),
+            })
+        }
+    }
+    
+    /// Parses arguments from a dependency argument string.
+    /// Format: `name="value", name2=true, name3=123`
+    fn parse_dependency_args(&self, args_str: &str) -> Result<HashMap<String, String>, ParseError> {
+        let mut args = HashMap::new();
+        
+        if args_str.trim().is_empty() {
+            return Ok(args);
+        }
+        
+        // Split by comma, but respect quotes
+        let mut current = args_str.trim();
+        while !current.is_empty() {
+            let (arg_str, remainder) = self.split_next_arg(current)?;
+            
+            if arg_str.is_empty() {
+                break;
+            }
+            
+            // Parse name=value
+            let equals_pos = arg_str.find('=')
+                .ok_or_else(|| {
+                    ParseError::InvalidSyntax(
+                        format!("Invalid argument format (expected name=value): {}", arg_str),
+                        self.current_line_number(),
+                    )
+                })?;
+            
+            let name = arg_str[..equals_pos].trim().to_string();
+            let value_str = arg_str[equals_pos + 1..].trim();
+            
+            // Parse value (string, bool, or number)
+            let value = self.parse_dependency_value(value_str)?;
+            
+            args.insert(name, value);
+            
+            current = remainder.trim();
+        }
+        
+        Ok(args)
+    }
+    
+    /// Splits the next argument from the string, handling quotes.
+    fn split_next_arg<'a>(&self, s: &'a str) -> Result<(&'a str, &'a str), ParseError> {
+        let mut in_quotes = false;
+        let mut quote_char = '\0';
+        
+        for (i, ch) in s.char_indices() {
+            match ch {
+                '"' | '\'' if !in_quotes => {
+                    in_quotes = true;
+                    quote_char = ch;
+                }
+                ch if ch == quote_char && in_quotes => {
+                    in_quotes = false;
+                }
+                ',' if !in_quotes => {
+                    return Ok((&s[..i], &s[i + 1..]));
+                }
+                _ => {}
+            }
+        }
+        
+        Ok((s, ""))
+    }
+    
+    /// Parses a dependency argument value (string, bool, or number).
+    fn parse_dependency_value(&self, value_str: &str) -> Result<String, ParseError> {
+        let trimmed = value_str.trim();
+        
+        // String value (quoted)
+        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
+           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
+            // Remove quotes
+            let unquoted = &trimmed[1..trimmed.len() - 1];
+            // Unescape quotes
+            let unescaped = unquoted
+                .replace("\\\"", "\"")
+                .replace("\\'", "'")
+                .replace("\\\\", "\\");
+            Ok(unescaped)
+        }
+        // Boolean value
+        else if trimmed == "true" || trimmed == "false" {
+            Ok(trimmed.to_string())
+        }
+        // Number value
+        else if trimmed.parse::<f64>().is_ok() {
+            Ok(trimmed.to_string())
+        }
+        // Unquoted string (treat as string)
+        else {
+            Ok(trimmed.to_string())
+        }
+    }
 }
 

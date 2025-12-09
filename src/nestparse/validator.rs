@@ -291,6 +291,11 @@ fn validate_command_recursive(
         match directive {
             Directive::Script(_) => has_script = true,
             Directive::Desc(_) => {}
+            Directive::Depends(_) => {}
+            Directive::Before(_) => {}
+            Directive::After(_) => {}
+            Directive::Fallback(_) => {}
+            Directive::Validate(_) => {}
             Directive::Privileged(_) => {}
             Directive::Cwd(path) => {
                 cwd_paths.push(path.clone());

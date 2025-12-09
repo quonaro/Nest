@@ -146,7 +146,7 @@ impl CommandExecutor {
     /// # Returns
     ///
     /// Returns `true` if running with privileged access, `false` otherwise.
-    fn check_privileged_access() -> bool {
+    pub fn check_privileged_access() -> bool {
         #[cfg(unix)]
         {
             // Check if SUDO_USER is set (indicates running via sudo)
@@ -186,7 +186,7 @@ impl CommandExecutor {
         }
     }
 
-    fn format_privileged_error(command: &Command, command_path: Option<&[String]>) -> String {
+    pub fn format_privileged_error(command: &Command, command_path: Option<&[String]>) -> String {
         use super::output::colors;
         use std::env::consts::OS;
         use std::fmt::Write;
@@ -279,7 +279,7 @@ impl CommandExecutor {
     }
 
 
-    fn show_dry_run_preview(
+    pub fn show_dry_run_preview(
         command: &Command,
         command_path: Option<&[String]>,
         args: &HashMap<String, String>,
@@ -467,7 +467,7 @@ impl CommandExecutor {
         eprint!("{}", output);
     }
 
-    fn show_verbose_info(
+    pub fn show_verbose_info(
         command: &Command,
         command_path: Option<&[String]>,
         args: &HashMap<String, String>,

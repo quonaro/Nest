@@ -424,8 +424,21 @@ impl CliGenerator {
             (Directive::Cwd(s), "cwd") => Some(s.clone()),
             (Directive::Env(s), "env") => Some(s.clone()),
             (Directive::Script(s), "script") => Some(s.clone()),
+            (Directive::Before(s), "before") => Some(s.clone()),
+            (Directive::After(s), "after") => Some(s.clone()),
+            (Directive::Fallback(s), "fallback") => Some(s.clone()),
+            (Directive::Validate(s), "validate") => Some(s.clone()),
             _ => None,
         })
+    }
+
+    fn get_depends_directive(directives: &[Directive]) -> Vec<super::ast::Dependency> {
+        directives.iter()
+            .find_map(|d| match d {
+                Directive::Depends(deps) => Some(deps.clone()),
+                _ => None,
+            })
+            .unwrap_or_default()
     }
 
     fn get_privileged_directive(directives: &[Directive]) -> bool {
@@ -433,6 +446,483 @@ impl CliGenerator {
             Directive::Privileged(value) => Some(*value),
             _ => None,
         }).unwrap_or(false)
+    }
+
+    fn get_validate_directives(directives: &[Directive]) -> Vec<String> {
+        directives.iter()
+            .filter_map(|d| match d {
+                Directive::Validate(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Validates command parameters according to validation directives.
+    ///
+    /// Supports format: "param_name matches /regex/"
+    ///
+    /// # Arguments
+    ///
+    /// * `validate_directives` - List of validation rules
+    /// * `args` - Arguments to validate
+    /// * `command_path` - Command path for error messages
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if all validations pass,
+    /// `Err(message)` if validation fails.
+    fn validate_parameters(
+        validate_directives: &[String],
+        args: &HashMap<String, String>,
+        command_path: &[String],
+    ) -> Result<(), String> {
+        use regex::Regex;
+        
+        for validate_rule in validate_directives {
+            // Parse validation rule: "param_name matches /regex/"
+            // Format: <param_name> matches /<pattern>/
+            let trimmed = validate_rule.trim();
+            
+            // Check for "matches" keyword
+            if !trimmed.contains("matches") {
+                return Err(format!(
+                    "Invalid validation rule: '{}'. Expected format: 'param_name matches /regex/'",
+                    trimmed
+                ));
+            }
+            
+            // Split by "matches"
+            let parts: Vec<&str> = trimmed.splitn(2, "matches").collect();
+            if parts.len() != 2 {
+                return Err(format!(
+                    "Invalid validation rule: '{}'. Expected format: 'param_name matches /regex/'",
+                    trimmed
+                ));
+            }
+            
+            let param_name = parts[0].trim();
+            let pattern_part = parts[1].trim();
+            
+            // Extract regex pattern from /pattern/ or /pattern/flags
+            let pattern = if pattern_part.starts_with('/') && pattern_part.len() > 1 {
+                // Find closing /
+                let mut end_pos = None;
+                let mut escaped = false;
+                for (i, ch) in pattern_part[1..].char_indices() {
+                    if escaped {
+                        escaped = false;
+                        continue;
+                    }
+                    if ch == '\\' {
+                        escaped = true;
+                        continue;
+                    }
+                    if ch == '/' {
+                        end_pos = Some(i + 1);
+                        break;
+                    }
+                }
+                
+                if let Some(end) = end_pos {
+                    // Extract pattern (without leading /)
+                    let pattern_str = &pattern_part[1..end - 1];
+                    // Unescape the pattern
+                    let unescaped = pattern_str.replace("\\/", "/");
+                    
+                    // Check for flags after closing /
+                    let flags = pattern_part[end..].trim();
+                    let regex = if flags.is_empty() {
+                        Regex::new(&unescaped)
+                    } else {
+                        // Parse flags (e.g., "i" for case-insensitive)
+                        let mut regex_builder = regex::RegexBuilder::new(&unescaped);
+                        if flags.contains('i') {
+                            regex_builder.case_insensitive(true);
+                        }
+                        regex_builder.build()
+                    };
+                    
+                    match regex {
+                        Ok(re) => re,
+                        Err(e) => {
+                            return Err(format!(
+                                "Invalid regex pattern in validation rule: '{}'. Error: {}",
+                                trimmed, e
+                            ));
+                        }
+                    }
+                } else {
+                    return Err(format!(
+                        "Invalid regex pattern in validation rule: '{}'. Expected format: '/pattern/'",
+                        trimmed
+                    ));
+                }
+            } else {
+                return Err(format!(
+                    "Invalid regex pattern in validation rule: '{}'. Expected format: '/pattern/'",
+                    trimmed
+                ));
+            };
+            
+            // Get parameter value
+            let param_value = args.get(param_name)
+                .ok_or_else(|| format!(
+                    "Validation error: parameter '{}' not found in arguments",
+                    param_name
+                ))?;
+            
+            // Validate
+            if !pattern.is_match(param_value) {
+                let command_str = command_path.join(" ");
+                return Err(format!(
+                    "❌ Validation error in command 'nest {}':\n   Parameter '{}' with value '{}' does not match pattern '{}'",
+                    command_str, param_name, param_value, pattern_part
+                ));
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Parses a command call from a string.
+    ///
+    /// Supports formats:
+    /// - `command` - simple command
+    /// - `group:command` - nested command
+    /// - `command(arg="value")` - command with arguments
+    /// - `group:command(arg="value")` - nested command with arguments
+    ///
+    /// Returns (command_path, args) if it's a command call, None otherwise.
+    fn parse_command_call(line: &str) -> Option<(String, std::collections::HashMap<String, String>)> {
+        let trimmed = line.trim();
+        
+        // Check if line looks like a command call
+        // Command calls should start with alphanumeric or underscore, and may contain colons
+        // They should not contain shell operators like |, &&, ||, ;, >, <, etc.
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            return None;
+        }
+        
+        // Check for shell operators that indicate this is not a command call
+        let shell_operators = ["|", "&&", "||", ";", ">", "<", ">>", "<<", "&", "$", "`"];
+        if shell_operators.iter().any(|&op| trimmed.contains(op)) {
+            return None;
+        }
+        
+        // Try to parse as command call
+        // Pattern: [group:]command[(args)]
+        let command_path: String;
+        let mut args = std::collections::HashMap::new();
+        
+        // Check if there are parentheses (arguments)
+        if let Some(open_paren) = trimmed.find('(') {
+            // Extract command path (before parentheses)
+            command_path = trimmed[..open_paren].trim().to_string();
+            
+            // Find matching closing parenthesis
+            let mut depth = 0;
+            let mut in_quotes = false;
+            let mut quote_char = '\0';
+            let mut close_paren = None;
+            
+            for (i, ch) in trimmed[open_paren..].char_indices() {
+                match ch {
+                    '"' | '\'' if !in_quotes => {
+                        in_quotes = true;
+                        quote_char = ch;
+                    }
+                    ch if ch == quote_char && in_quotes => {
+                        in_quotes = false;
+                    }
+                    '(' if !in_quotes => {
+                        depth += 1;
+                    }
+                    ')' if !in_quotes => {
+                        depth -= 1;
+                        if depth == 0 {
+                            close_paren = Some(open_paren + i);
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            
+            if let Some(close) = close_paren {
+                let args_str = &trimmed[open_paren + 1..close];
+                // Parse arguments using similar logic to dependency parsing
+                args = Self::parse_command_args(args_str).unwrap_or_default();
+            } else {
+                // Unclosed parentheses - not a valid command call
+                return None;
+            }
+        } else {
+            // No arguments - just command path
+            command_path = trimmed.to_string();
+        }
+        
+        // Validate command path (should contain only alphanumeric, underscore, colon, hyphen)
+        if command_path.is_empty() {
+            return None;
+        }
+        
+        // Check if it looks like a valid command path
+        let is_valid = command_path.chars().all(|c| {
+            c.is_alphanumeric() || c == ':' || c == '_' || c == '-'
+        }) && !command_path.starts_with(':') && !command_path.ends_with(':');
+        
+        if !is_valid {
+            return None;
+        }
+        
+        Some((command_path, args))
+    }
+    
+    /// Parses arguments from a command call argument string.
+    /// Format: `name="value", name2=true, name3=123`
+    fn parse_command_args(args_str: &str) -> Result<std::collections::HashMap<String, String>, ()> {
+        let mut args = std::collections::HashMap::new();
+        
+        if args_str.trim().is_empty() {
+            return Ok(args);
+        }
+        
+        // Split by comma, but respect quotes
+        let mut current = args_str.trim();
+        while !current.is_empty() {
+            let (arg_str, remainder) = Self::split_next_arg(current)?;
+            
+            if arg_str.is_empty() {
+                break;
+            }
+            
+            // Parse name=value
+            let equals_pos = arg_str.find('=').ok_or(())?;
+            
+            let name = arg_str[..equals_pos].trim().to_string();
+            let value_str = arg_str[equals_pos + 1..].trim();
+            
+            // Parse value (string, bool, or number)
+            let value = Self::parse_command_value(value_str);
+            
+            args.insert(name, value);
+            
+            current = remainder.trim();
+        }
+        
+        Ok(args)
+    }
+    
+    /// Splits the next argument from the string, handling quotes.
+    fn split_next_arg(s: &str) -> Result<(&str, &str), ()> {
+        let mut in_quotes = false;
+        let mut quote_char = '\0';
+        
+        for (i, ch) in s.char_indices() {
+            match ch {
+                '"' | '\'' if !in_quotes => {
+                    in_quotes = true;
+                    quote_char = ch;
+                }
+                ch if ch == quote_char && in_quotes => {
+                    in_quotes = false;
+                }
+                ',' if !in_quotes => {
+                    return Ok((&s[..i], &s[i + 1..]));
+                }
+                _ => {}
+            }
+        }
+        
+        Ok((s, ""))
+    }
+    
+    /// Parses a command argument value (string, bool, or number).
+    fn parse_command_value(value_str: &str) -> String {
+        let trimmed = value_str.trim();
+        
+        // String value (quoted)
+        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
+           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
+            // Remove quotes
+            let unquoted = &trimmed[1..trimmed.len() - 1];
+            // Unescape quotes
+            let unescaped = unquoted
+                .replace("\\\"", "\"")
+                .replace("\\'", "'")
+                .replace("\\\\", "\\");
+            unescaped
+        }
+        // Boolean or number value (keep as is)
+        else {
+            trimmed.to_string()
+        }
+    }
+
+    /// Executes a script with the given environment and working directory.
+    ///
+    /// This function supports both regular shell commands and command calls.
+    /// Command calls use the format: `command` or `group:command` or `command(arg="value")`.
+    ///
+    /// This is a helper function for executing before, after, and fallback scripts.
+    fn execute_script(
+        &self,
+        script: &str,
+        env_vars: &HashMap<String, String>,
+        cwd: Option<&str>,
+        command_path: Option<&[String]>,
+        args: &HashMap<String, String>,
+        dry_run: bool,
+        verbose: bool,
+    ) -> Result<(), String> {
+        if dry_run {
+            use super::output::OutputFormatter;
+            OutputFormatter::info(&format!("[DRY RUN] Would execute: {}", script));
+            return Ok(());
+        }
+
+        // Process script line by line
+        let lines: Vec<&str> = script.lines().collect();
+        let mut current_shell_block = Vec::new();
+        
+        for line in lines {
+            // Try to parse as command call
+            if let Some((cmd_path, cmd_args)) = Self::parse_command_call(line) {
+                // Execute any accumulated shell commands first
+                if !current_shell_block.is_empty() {
+                    let shell_script = current_shell_block.join("\n");
+                    Self::execute_shell_script(
+                        &shell_script,
+                        env_vars,
+                        cwd,
+                        args,
+                        verbose,
+                    )?;
+                    current_shell_block.clear();
+                }
+                
+                // Resolve command path
+                let resolved_path: Vec<String> = if cmd_path.contains(':') {
+                    // Absolute path from root (e.g., "dev:build")
+                    cmd_path.split(':').map(|s| s.trim().to_string()).collect()
+                } else {
+                    // Relative path - resolve from current command's parent
+                    let cmd_name = cmd_path.trim().to_string();
+                    if let Some(current_path) = command_path {
+                        if current_path.is_empty() {
+                            // Top-level command - dependency is also top-level
+                            vec![cmd_name]
+                        } else {
+                            // Nested command - dependency is relative to parent
+                            let mut resolved = current_path[..current_path.len().saturating_sub(1)].to_vec();
+                            resolved.push(cmd_name);
+                            resolved
+                        }
+                    } else {
+                        vec![cmd_name]
+                    }
+                };
+                
+                // Find and execute command
+                if let Some(cmd) = self.find_command(&resolved_path) {
+                    if verbose {
+                        use super::output::OutputFormatter;
+                        let args_str = if cmd_args.is_empty() {
+                            String::new()
+                        } else {
+                            let args_display: Vec<String> = cmd_args.iter()
+                                .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                                .collect();
+                            format!("({})", args_display.join(", "))
+                        };
+                        OutputFormatter::info(&format!(
+                            "Executing command: {}{}",
+                            resolved_path.join(" "),
+                            args_str
+                        ));
+                    }
+                    
+                    let mut visited = std::collections::HashSet::new();
+                    self.execute_command_with_deps(
+                        cmd,
+                        &cmd_args,
+                        Some(&resolved_path),
+                        dry_run,
+                        verbose,
+                        &mut visited,
+                    )?;
+                } else {
+                    // Command not found - treat as shell command
+                    current_shell_block.push(line);
+                }
+            } else {
+                // Not a command call - treat as shell command
+                current_shell_block.push(line);
+            }
+        }
+        
+        // Execute any remaining shell commands
+        if !current_shell_block.is_empty() {
+            let shell_script = current_shell_block.join("\n");
+            Self::execute_shell_script(
+                &shell_script,
+                env_vars,
+                cwd,
+                args,
+                verbose,
+            )?;
+        }
+
+        Ok(())
+    }
+    
+    /// Executes a shell script (helper function).
+    fn execute_shell_script(
+        script: &str,
+        env_vars: &HashMap<String, String>,
+        cwd: Option<&str>,
+        args: &HashMap<String, String>,
+        _verbose: bool,
+    ) -> Result<(), String> {
+        use std::process::{Command as ProcessCommand, Stdio};
+        
+        if script.trim().is_empty() {
+            return Ok(());
+        }
+
+        let mut cmd = ProcessCommand::new("sh");
+        cmd.arg("-c");
+        cmd.arg(script);
+
+        if let Some(cwd_path) = cwd {
+            cmd.current_dir(cwd_path);
+        }
+
+        // Set environment variables
+        for (key, value) in env_vars {
+            cmd.env(key, value);
+        }
+
+        // Set command arguments as environment variables
+        for (key, value) in args {
+            cmd.env(key.to_uppercase(), value);
+            cmd.env(key, value);
+        }
+
+        // Capture output
+        cmd.stdout(Stdio::inherit());
+        cmd.stderr(Stdio::inherit());
+
+        let status = cmd
+            .status()
+            .map_err(|e| format!("Failed to start script execution: {}", e))?;
+
+        if !status.success() {
+            let exit_code = status.code().unwrap_or(-1);
+            return Err(format!("Script exited with code {}", exit_code));
+        }
+
+        Ok(())
     }
 
     /// Finds a command by its path.
@@ -502,14 +992,167 @@ impl CliGenerator {
     /// Returns an error if:
     /// - Command has no script directive
     /// - Script execution fails
-    pub fn execute_command(
+    /// Executes dependencies before executing the main command.
+    ///
+    /// # Arguments
+    ///
+    /// * `depends` - List of dependencies with optional arguments
+    /// * `current_path` - Current command path (for resolving relative dependencies)
+    /// * `dry_run` - If true, show what would be executed without running it
+    /// * `verbose` - If true, show detailed output
+    /// * `visited` - Set of already executed commands (for cycle detection)
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if all dependencies executed successfully,
+    /// `Err(message)` if any dependency failed or cycle detected.
+    fn execute_dependencies(
+        &self,
+        depends: &[super::ast::Dependency],
+        current_path: &[String],
+        dry_run: bool,
+        verbose: bool,
+        visited: &mut std::collections::HashSet<Vec<String>>,
+    ) -> Result<(), String> {
+        for dep in depends {
+            // Parse dependency path
+            // Format: "command" (relative to current command's parent)
+            //         "parent:command" (absolute path from root)
+            let dep_path: Vec<String> = if dep.command_path.contains(':') {
+                // Absolute path from root (e.g., "dev:build")
+                dep.command_path.split(':').map(|s| s.trim().to_string()).collect()
+            } else {
+                // Relative dependency - resolve from current command's parent
+                let dep_name = dep.command_path.trim().to_string();
+                if current_path.is_empty() {
+                    // Top-level command - dependency is also top-level
+                    vec![dep_name]
+                } else {
+                    // Nested command - dependency is relative to parent
+                    let mut resolved = current_path[..current_path.len().saturating_sub(1)].to_vec();
+                    resolved.push(dep_name);
+                    resolved
+                }
+            };
+
+            // Check for cycles
+            if visited.contains(&dep_path) {
+                return Err(format!(
+                    "Circular dependency detected: {} -> {}",
+                    current_path.join(" "),
+                    dep_path.join(" ")
+                ));
+            }
+
+            // Find and execute dependency
+            if let Some(dep_command) = self.find_command(&dep_path) {
+                // Mark as visited
+                visited.insert(dep_path.clone());
+
+                // Execute dependency recursively (with its own dependencies and provided arguments)
+                self.execute_command_with_deps(
+                    dep_command,
+                    &dep.args,
+                    Some(&dep_path),
+                    dry_run,
+                    verbose,
+                    visited,
+                )?;
+
+                // Remove from visited after execution (allow reuse in different branches)
+                visited.remove(&dep_path);
+            } else {
+                return Err(format!(
+                    "Dependency not found: {} (required by {})",
+                    dep_path.join(" "),
+                    current_path.join(" ")
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Executes a command with its dependencies.
+    ///
+    /// This is an internal method that handles dependency resolution.
+    fn execute_command_with_deps(
         &self,
         command: &Command,
         args: &HashMap<String, String>,
         command_path: Option<&[String]>,
         dry_run: bool,
         verbose: bool,
+        visited: &mut std::collections::HashSet<Vec<String>>,
     ) -> Result<(), String> {
+        let command_path = command_path.unwrap_or(&[]);
+
+        // Execute dependencies first
+        let depends = Self::get_depends_directive(&command.directives);
+        if !depends.is_empty() {
+            if verbose {
+                use super::output::OutputFormatter;
+                let deps_str: Vec<String> = depends.iter().map(|dep| {
+                    if dep.args.is_empty() {
+                        dep.command_path.clone()
+                    } else {
+                        let args_str: Vec<String> = dep.args.iter()
+                            .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                            .collect();
+                        format!("{}({})", dep.command_path, args_str.join(", "))
+                    }
+                }).collect();
+                OutputFormatter::info(&format!(
+                    "Executing dependencies for {}: {}",
+                    command_path.join(" "),
+                    deps_str.join(", ")
+                ));
+            }
+            self.execute_dependencies(&depends, command_path, dry_run, verbose, visited)?;
+        }
+
+        // Validate parameters (if validation directives are present)
+        let validate_directives = Self::get_validate_directives(&command.directives);
+        if !validate_directives.is_empty() {
+            if let Err(e) = Self::validate_parameters(&validate_directives, args, command_path) {
+                return Err(e);
+            }
+        }
+
+        // Prepare environment
+        let env_vars = EnvironmentManager::extract_env_vars(&command.directives);
+        let cwd = Self::get_directive_value(&command.directives, "cwd");
+        let privileged = Self::get_privileged_directive(&command.directives);
+
+        // Execute before script (if present)
+        if let Some(before_script) = Self::get_directive_value(&command.directives, "before") {
+            let processed_before = TemplateProcessor::process(
+                &before_script,
+                args,
+                &self.variables,
+                &self.constants,
+                &command.local_variables,
+                &command.local_constants,
+            );
+            
+            if verbose {
+                use super::output::OutputFormatter;
+                OutputFormatter::info("Executing before script...");
+            }
+            
+            if let Err(e) = self.execute_script(
+                &processed_before,
+                &env_vars,
+                cwd.as_deref(),
+                Some(command_path),
+                args,
+                dry_run,
+                verbose,
+            ) {
+                return Err(format!("Before script failed: {}", e));
+            }
+        }
+
+        // Execute main script
         let script = Self::get_directive_value(&command.directives, "script")
             .ok_or_else(|| "Command has no script directive".to_string())?;
 
@@ -521,21 +1164,138 @@ impl CliGenerator {
             &command.local_variables,
             &command.local_constants,
         );
-        let env_vars = EnvironmentManager::extract_env_vars(&command.directives);
-        let cwd = Self::get_directive_value(&command.directives, "cwd");
-        let privileged = Self::get_privileged_directive(&command.directives);
 
-        CommandExecutor::execute(
-            command,
-            args,
+        // Check privileged access BEFORE execution
+        if privileged && !dry_run {
+            use super::executor::CommandExecutor;
+            if !CommandExecutor::check_privileged_access() {
+                return Err(CommandExecutor::format_privileged_error(command, Some(command_path)));
+            }
+        }
+
+        // Show dry-run preview
+        if dry_run {
+            use super::executor::CommandExecutor;
+            CommandExecutor::show_dry_run_preview(
+                command,
+                Some(command_path),
+                args,
+                &env_vars,
+                cwd.as_deref(),
+                &processed_script,
+                verbose,
+                privileged,
+            );
+            return Ok(());
+        }
+
+        // Show verbose information if requested
+        if verbose {
+            use super::executor::CommandExecutor;
+            CommandExecutor::show_verbose_info(
+                command,
+                Some(command_path),
+                args,
+                &env_vars,
+                cwd.as_deref(),
+                &processed_script,
+                privileged,
+            );
+        }
+
+        // Execute script with command call support
+        let main_result = self.execute_script(
             &processed_script,
             &env_vars,
             cwd.as_deref(),
-            command_path,
+            Some(command_path),
+            args,
             dry_run,
             verbose,
-            privileged,
-        )
+        );
+
+        // Handle main script result
+        match main_result {
+            Ok(()) => {
+                // Main script succeeded - execute after script (if present)
+                if let Some(after_script) = Self::get_directive_value(&command.directives, "after") {
+                    let processed_after = TemplateProcessor::process(
+                        &after_script,
+                        args,
+                        &self.variables,
+                        &self.constants,
+                        &command.local_variables,
+                        &command.local_constants,
+                    );
+                    
+                    if verbose {
+                        use super::output::OutputFormatter;
+                        OutputFormatter::info("Executing after script...");
+                    }
+                    
+                    if let Err(e) = self.execute_script(
+                        &processed_after,
+                        &env_vars,
+                        cwd.as_deref(),
+                        Some(command_path),
+                        args,
+                        dry_run,
+                        verbose,
+                    ) {
+                        return Err(format!("After script failed: {}", e));
+                    }
+                }
+                Ok(())
+            }
+            Err(_) => {
+                // Main script failed - execute fallback script (if present)
+                if let Some(fallback_script) = Self::get_directive_value(&command.directives, "fallback") {
+                    let processed_fallback = TemplateProcessor::process(
+                        &fallback_script,
+                        args,
+                        &self.variables,
+                        &self.constants,
+                        &command.local_variables,
+                        &command.local_constants,
+                    );
+                    
+                    if verbose {
+                        use super::output::OutputFormatter;
+                        OutputFormatter::info("Executing fallback script...");
+                    }
+                    
+                    // Execute fallback and return its output instead of error
+                    if let Err(e) = self.execute_script(
+                        &processed_fallback,
+                        &env_vars,
+                        cwd.as_deref(),
+                        Some(command_path),
+                        args,
+                        dry_run,
+                        verbose,
+                    ) {
+                        return Err(format!("Fallback script failed: {}", e));
+                    }
+                    // Fallback succeeded - return Ok (suppress original error)
+                    Ok(())
+                } else {
+                    // No fallback - return original error
+                    main_result
+                }
+            }
+        }
+    }
+
+    pub fn execute_command(
+        &self,
+        command: &Command,
+        args: &HashMap<String, String>,
+        command_path: Option<&[String]>,
+        dry_run: bool,
+        verbose: bool,
+    ) -> Result<(), String> {
+        let mut visited = std::collections::HashSet::new();
+        self.execute_command_with_deps(command, args, command_path, dry_run, verbose, &mut visited)
     }
 }
 

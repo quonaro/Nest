@@ -5,6 +5,7 @@
 
 use super::ast::{Command, Directive, Parameter, Value};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// JSON representation of a Value.
 #[derive(Serialize, Deserialize)]
@@ -18,6 +19,15 @@ pub enum JsonValue {
     Number(f64),
     /// An array of strings
     Array(Vec<String>),
+}
+
+/// JSON representation of a Dependency.
+#[derive(Serialize, Deserialize)]
+pub struct JsonDependency {
+    /// The command path
+    pub command_path: String,
+    /// Arguments to pass to the dependency
+    pub args: HashMap<String, String>,
 }
 
 /// JSON representation of a Parameter.
@@ -48,6 +58,21 @@ pub enum JsonDirective {
     /// Environment variable directive
     #[serde(rename = "env")]
     Env(String),
+    /// Dependencies directive
+    #[serde(rename = "depends")]
+    Depends(Vec<JsonDependency>),
+    /// Before script directive
+    #[serde(rename = "before")]
+    Before(String),
+    /// After script directive
+    #[serde(rename = "after")]
+    After(String),
+    /// Fallback script directive
+    #[serde(rename = "fallback")]
+    Fallback(String),
+    /// Validation directive
+    #[serde(rename = "validate")]
+    Validate(String),
     /// Script directive
     #[serde(rename = "script")]
     Script(String),
@@ -100,6 +125,17 @@ impl From<&Directive> for JsonDirective {
             Directive::Desc(s) => JsonDirective::Desc(s.clone()),
             Directive::Cwd(s) => JsonDirective::Cwd(s.clone()),
             Directive::Env(s) => JsonDirective::Env(s.clone()),
+            Directive::Depends(deps) => {
+                let json_deps: Vec<JsonDependency> = deps.iter().map(|dep| JsonDependency {
+                    command_path: dep.command_path.clone(),
+                    args: dep.args.clone(),
+                }).collect();
+                JsonDirective::Depends(json_deps)
+            },
+            Directive::Before(s) => JsonDirective::Before(s.clone()),
+            Directive::After(s) => JsonDirective::After(s.clone()),
+            Directive::Fallback(s) => JsonDirective::Fallback(s.clone()),
+            Directive::Validate(s) => JsonDirective::Validate(s.clone()),
             Directive::Script(s) => JsonDirective::Script(s.clone()),
             Directive::Privileged(value) => JsonDirective::Privileged(*value),
         }

@@ -305,11 +305,102 @@ build():
 3. Direct assignments in `> env:` directives
 4. Fallback values (for `${VAR:-default}` syntax)
 
+### Variables and Constants
+
+Define variables and constants at the top level (global) or inside commands (local):
+
+```nest
+# Global variables and constants
+@var APP_NAME = "myapp"
+@var VERSION = "1.0.0"
+@const COMPANY_NAME = "My Company"
+
+# Variables can be redefined (last definition wins)
+@var APP_NAME = "production-app"  # Overrides previous definition
+
+# Command with local variables and constants
+build():
+    # Local variable overrides global
+    @var APP_NAME = "local-app"
+    # Local constant overrides global
+    @const COMPANY_NAME = "Local Company"
+    # New local variable (only in this command)
+    @var BUILD_DIR = "./build"
+    > script: |
+        echo "Building {{APP_NAME}} v{{VERSION}}"
+        echo "Company: {{COMPANY_NAME}}"
+        echo "Build dir: {{BUILD_DIR}}"
+        npm run build
+```
+
+**Usage in scripts:**
+```nest
+build():
+    > script: |
+        echo "Building {{APP_NAME}} v{{VERSION}}"
+        echo "Company: {{COMPANY_NAME}}"
+        npm run build
+```
+
+**Priority order:**
+1. Parameters (from command arguments) - highest priority
+2. Local variables (from command) - override global variables
+3. Local constants (from command) - override global constants
+4. Global variables (can be redefined, last definition wins)
+5. Global constants (cannot be redefined)
+6. Special variables ({{now}}, {{user}}) - lowest priority
+
+**Scope:**
+- Global variables/constants: Available in all commands
+- Local variables/constants: Only available in the command where they're defined
+- Local variables/constants override global ones for that specific command
+
+**Example: Overriding Global Variables Inside Commands**
+
+```nest
+# Global variables
+@var APP_NAME = "global-app"
+@var NODE_ENV = "development"
+@const COMPANY = "Global Company"
+
+# Command 1: Uses global variables
+show_global():
+    > script: |
+        echo "APP_NAME: {{APP_NAME}}"      # Output: "global-app"
+        echo "NODE_ENV: {{NODE_ENV}}"      # Output: "development"
+        echo "COMPANY: {{COMPANY}}"        # Output: "Global Company"
+
+# Command 2: Overrides global variables with local ones
+show_local():
+    # Local variables override global for this command only
+    @var APP_NAME = "local-app"
+    @var NODE_ENV = "production"
+    @const COMPANY = "Local Company"
+    > script: |
+        echo "APP_NAME: {{APP_NAME}}"      # Output: "local-app" (local overrides global)
+        echo "NODE_ENV: {{NODE_ENV}}"      # Output: "production" (local overrides global)
+        echo "COMPANY: {{COMPANY}}"        # Output: "Local Company" (local overrides global)
+
+# Command 3: Still uses global variables (no local overrides)
+show_global_again():
+    > script: |
+        echo "APP_NAME: {{APP_NAME}}"      # Output: "global-app" (no local override)
+        echo "NODE_ENV: {{NODE_ENV}}"      # Output: "development" (no local override)
+```
+
+**Key Points:**
+- Local variables/constants defined inside a command override global ones **only for that command**
+- Other commands without local definitions still use global variables/constants
+- Local variables can be redefined multiple times (last definition wins)
+- Local constants cannot be redefined within the same command
+
 ### Template Variables
 
 Use `{{variable}}` syntax in scripts:
 
 - **Parameters**: `{{param}}` - Replaced with parameter value
+- **Variables**: `{{VAR}}` - Replaced with variable value (can be redefined)
+- **Constants**: `{{CONST}}` - Replaced with constant value (cannot be redefined)
 - **Special variables**:
   - `{{now}}` - Current UTC time in RFC3339 format
   - `{{user}}` - Current user (from `$USER` environment variable)
@@ -353,6 +444,111 @@ deploy(version: str):
         ./deploy.sh --version {{version}} --env $NODE_ENV
 ```
 
+### Command Dependencies
+
+You can specify dependencies between commands using the `> depends:` directive:
+
+```nest
+clean():
+    > desc: Clean build artifacts
+    > script: rm -rf build/
+
+build():
+    > desc: Build the project
+    > depends: clean
+    > script: npm run build
+
+test():
+    > desc: Run tests
+    > depends: build
+    > script: npm test
+
+deploy():
+    > desc: Deploy application
+    > depends: build, test
+    > script: npm run deploy
+```
+
+**Dependency Resolution:**
+- Dependencies are executed **before** the main command
+- Multiple dependencies can be specified (comma-separated)
+- Dependencies are executed in the order specified
+- Dependencies can have their own dependencies (recursive)
+- Circular dependencies are detected and will cause an error
+
+**Dependency Paths:**
+- **Relative**: `clean` - relative to current command's parent
+- **Absolute**: `dev:build` - absolute path from root (use `:` separator)
+
+**Example:**
+```bash
+nest deploy
+# Executes: clean -> build -> test -> deploy
+```
+
+**Circular Dependency Detection:**
+```nest
+a():
+    > depends: b
+    > script: echo "A"
+
+b():
+    > depends: a  # ERROR: Circular dependency detected
+    > script: echo "B"
+```
+
+### Before, After, and Fallback Scripts
+
+You can define scripts that run before, after, or as a fallback for the main script:
+
+```nest
+deploy():
+    > desc: Deploy with before/after hooks and error handling
+    > before: |
+        echo "Setting up deployment environment..."
+        # Pre-deployment checks
+    > script: |
+        echo "Deploying application..."
+        # Main deployment logic
+        # If this fails, fallback will execute
+    > after: |
+        echo "Deployment completed successfully"
+        # Post-deployment tasks (only if main script succeeds)
+    > fallback: |
+        echo "Deployment failed, rolling back..."
+        # Error handling (only if main script fails)
+        # This replaces the error output
+```
+
+**Execution Order:**
+1. `> before:` - Executed first (always)
+2. `> script:` - Main script execution
+3. If successful: `> after:` - Executed after success
+4. If failed: `> fallback:` - Executed instead of error output
+
+**Key Points:**
+- All script directives (`before`, `after`, `fallback`, `script`) support multiline syntax with `|`
+- `before` always executes, even if main script fails
+- `after` only executes if main script succeeds
+- `fallback` only executes if main script fails, and replaces the error output
+- All scripts share the same environment variables and working directory
+
+**Example with Error Handling:**
+```nest
+build():
+    > before: echo "Starting build..."
+    > script: |
+        npm run build
+        if [ $? -ne 0 ]; then
+            exit 1
+        fi
+    > after: echo "Build completed successfully!"
+    > fallback: |
+        echo "Build failed, cleaning up..."
+        rm -rf dist/
+        echo "Cleanup complete"
+```
+
 ### Complete Example
 
 See `nestfile.example` for a complete working example with:
@@ -362,6 +558,9 @@ See `nestfile.example` for a complete working example with:
 - **Positional and named arguments**
 - Environment variable management
 - Multiline scripts
+- Command dependencies
+- Before/after/fallback scripts
+- Parameter validation with regex
 
 ## ✨ Supported Features
 
@@ -382,9 +581,23 @@ See `nestfile.example` for a complete working example with:
 - `> cwd:` - Working directory
 - `> env:` - Environment variables (direct assignment and .env files)
 - `> script:` - Single-line and multiline scripts
+- `> before:` - Script executed before the main script (single-line or multiline)
+- `> after:` - Script executed after the main script succeeds (single-line or multiline)
+- `> fallback:` - Script executed if the main script fails (replaces error output, single-line or multiline)
+- `> depends:` - Command dependencies (executed before the command)
+- `> validate:` - Parameter validation rules (regex patterns)
+
+✅ **Variables and Constants**
+- Global variables (`@var`) - Can be redefined (last definition wins)
+- Global constants (`@const`) - Cannot be redefined
+- Local variables (`@var` inside commands) - Override global for that command
+- Local constants (`@const` inside commands) - Override global for that command
+- Usage in templates: `{{VAR}}` or `{{CONST}}`
 
 ✅ **Template Processing**
 - Parameter substitution: `{{param}}`
+- Variable substitution: `{{VAR}}`
+- Constant substitution: `{{CONST}}`
 - Special variables: `{{now}}`, `{{user}}`
 - Template processing in scripts
 

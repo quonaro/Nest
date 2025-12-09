@@ -39,6 +39,19 @@ pub struct Parameter {
     pub is_named: bool,
 }
 
+/// Represents a dependency with optional arguments.
+///
+/// A dependency can be a simple command path (e.g., "clean") or
+/// a command with arguments (e.g., "build(target=\"x86_64\")").
+#[derive(Debug, Clone)]
+pub struct Dependency {
+    /// Command path (e.g., "clean" or "dev:build")
+    pub command_path: String,
+    /// Arguments to pass to the dependency command
+    /// Key is parameter name, value is argument value as string
+    pub args: std::collections::HashMap<String, String>,
+}
+
 /// Represents a directive that modifies command behavior.
 ///
 /// Directives are special instructions in the Nestfile that control
@@ -53,8 +66,21 @@ pub enum Directive {
     Env(String),
     /// Script to execute (can be single line or multiline)
     Script(String),
+    /// Script to execute before the main script (can be single line or multiline)
+    Before(String),
+    /// Script to execute after the main script (can be single line or multiline)
+    After(String),
+    /// Script to execute if the main script fails (can be single line or multiline)
+    /// Replaces error output with this script's output
+    Fallback(String),
     /// Whether this command requires privileged access (sudo/administrator)
     Privileged(bool),
+    /// Dependencies - commands that must be executed before this command
+    /// Each dependency can have arguments (e.g., "build(target=\"x86_64\")")
+    Depends(Vec<Dependency>),
+    /// Validation rules for parameters
+    /// Format: "param_name matches /regex/" or "param_name matches /regex/ flags"
+    Validate(String),
 }
 
 /// Represents a variable that can be redefined.

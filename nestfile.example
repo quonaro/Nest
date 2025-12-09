@@ -50,6 +50,259 @@ test_local():
         echo "Local: {{LOCAL_VAR}}"
 
 # ============================================================================
+# COMMAND DEPENDENCIES
+# ============================================================================
+#
+# Commands can depend on other commands using > depends: directive.
+# Dependencies are executed before the main command.
+#
+# Example: Build pipeline with dependencies
+clean():
+    > desc: Clean build artifacts
+    > script: |
+        echo "Cleaning build artifacts..."
+        rm -rf build/ dist/ node_modules/.cache/
+
+build():
+    > desc: Build the project
+    > depends: clean
+    > script: |
+        echo "Building project..."
+        npm run build
+
+test():
+    > desc: Run tests
+    > depends: build
+    > script: |
+        echo "Running tests..."
+        npm test
+
+deploy():
+    > desc: Deploy application
+    > depends: build, test
+    > script: |
+        echo "Deploying application..."
+        # npm run deploy
+
+# Multiple dependencies (comma-separated)
+release():
+    > desc: Create release
+    > depends: clean, build, test
+    > script: |
+        echo "Creating release..."
+        # git tag -a "v{{version}}" -m "Release {{version}}"
+
+# Nested commands in dependencies
+# Use colon (:) separator for absolute paths from root
+deploy_full():
+    > desc: Full deployment with nested command dependencies
+    > depends: clean, dev:lint, dev:test, docker:build
+    > script: |
+        echo "Deploying with all checks..."
+        # Full deployment process
+
+# Example: Using nested commands from different groups
+# Absolute path syntax: "group:command"
+ci():
+    > desc: Continuous integration pipeline
+    > depends: clean, dev:lint, dev:test, docker:build
+    > script: |
+        echo "Running CI pipeline..."
+        # CI/CD commands here
+
+# Relative dependencies in nested commands
+# When inside a nested command, dependencies without ':' are relative to parent group
+# To reference top-level commands from nested commands, use absolute paths
+dev:
+    > desc: Development tools
+
+    prepare():
+        > desc: Prepare development environment
+        > script: |
+            echo "Preparing dev environment..."
+
+    build():
+        > desc: Build in dev mode
+        > depends: prepare  # Relative: resolves to dev:prepare (same group)
+        > script: |
+            echo "Building in dev mode..."
+
+    deploy():
+        > desc: Deploy dev version
+        # Note: dependencies without ':' are always relative to parent group
+        # To use top-level 'clean', you need to create dev:clean or use absolute path
+        > depends: build  # Relative: resolves to dev:build
+        > script: |
+            echo "Deploying dev version..."
+
+    full():
+        > desc: Full dev workflow
+        > depends: lint, test, build  # All relative: dev:lint, dev:test, dev:build
+        > script: |
+            echo "Running full dev workflow..."
+
+# Mixing absolute and relative paths
+production_deploy():
+    > desc: Production deployment
+    > depends: clean, dev:test, docker:build, docker:run
+    > script: |
+        echo "Deploying to production..."
+
+# Dependencies with arguments
+# You can pass arguments to dependency commands using function-like syntax
+# Syntax: command(arg1="value1", arg2=true, arg3=123)
+build_custom(!target|t: str = "x86_64", !release|r: bool = false):
+    > desc: Build with target and release options
+    > script: |
+        echo "Building for {{target}} (release={{release}})..."
+
+test_custom(!coverage|c: bool = false):
+    > desc: Run tests with optional coverage
+    > script: |
+        if [ "{{coverage}}" = "true" ]; then
+            echo "Running tests with coverage..."
+        else
+            echo "Running tests..."
+        fi
+
+# Example: Using dependencies with arguments
+deploy_with_args():
+    > desc: Deploy with specific build configuration
+    # Pass arguments to dependencies: build_custom(target="arm64", release=true)
+    > depends: build_custom(target="arm64", release=true), test_custom(coverage=true)
+    > script: |
+        echo "Deploying with custom build configuration..."
+
+# Example: Mixing dependencies with and without arguments
+release_full():
+    > desc: Full release with custom configurations
+    # Some dependencies have arguments, others don't
+    > depends: clean, build_custom(target="x86_64", release=true), test_custom(coverage=true)
+    > script: |
+        echo "Creating full release..."
+
+# Example: Nested commands with arguments in dependencies
+docker:
+    > desc: Docker operations
+
+    build(!tag|t: str = "latest"):
+        > desc: Build Docker image
+        > env: DOCKER_BUILDKIT=1
+        > script: |
+            echo "Building Docker image with tag {{tag}}"
+            # docker build -t myapp:{{tag}} .
+
+    deploy():
+        > desc: Deploy Docker container
+        # Using relative dependency with arguments: build resolves to docker:build
+        > depends: build(tag="production")
+        > script: |
+            echo "Deploying Docker container..."
+            # docker push myapp:production
+
+# Example: Top-level command using nested command with arguments
+production_docker():
+    > desc: Production Docker deployment
+    # Using absolute path with arguments: docker:build(tag="v1.0.0")
+    > depends: docker:build(tag="v1.0.0"), docker:deploy
+    > script: |
+        echo "Production Docker deployment complete..."
+
+# ============================================================================
+# PARAMETER VALIDATION
+# ============================================================================
+#
+# You can validate command parameters using regex patterns.
+# Format: > validate: param_name matches /regex_pattern/
+#
+# Example: Version validation
+deploy(version: str):
+    > desc: Deploy with version validation
+    > validate: version matches /^v?\d+\.\d+\.\d+$/
+    > script: |
+        echo "Deploying version {{version}}"
+        # ./deploy.sh {{version}}
+
+# Example: Email validation
+register(email: str, username: str):
+    > desc: Register user with validation
+    > validate: email matches /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+    > validate: username matches /^[a-zA-Z0-9_]{3,20}$/
+    > script: |
+        echo "Registering {{username}} with email {{email}}"
+        # Registration logic
+
+# Example: Case-insensitive validation
+create_tag(name: str):
+    > desc: Create tag with case-insensitive validation
+    > validate: name matches /^[a-z]+$/i
+    > script: |
+        echo "Creating tag {{name}}"
+        # git tag {{name}}
+
+# Example: URL validation
+open_url(url: str):
+    > desc: Open URL with validation
+    > validate: url matches /^https?:\/\/.+\..+/
+    > script: |
+        echo "Opening {{url}}"
+        # xdg-open {{url}}
+
+# ============================================================================
+# BEFORE, AFTER, AND FALLBACK SCRIPTS
+# ============================================================================
+#
+# You can define scripts that run before, after, or as a fallback for the main script.
+# All support multiline syntax with |.
+#
+# Example: Deployment with hooks and error handling
+deploy_with_hooks():
+    > desc: Deploy with before/after hooks and error handling
+    > before: |
+        echo "Setting up deployment environment..."
+        # Pre-deployment checks
+        echo "Environment ready"
+    > script: |
+        echo "Deploying application..."
+        # Main deployment logic
+        # If this fails, fallback will execute
+    > after: |
+        echo "Deployment completed successfully"
+        # Post-deployment tasks (only if main script succeeds)
+        echo "Sending notification..."
+    > fallback: |
+        echo "Deployment failed, rolling back..."
+        # Error handling (only if main script fails)
+        # This replaces the error output
+        echo "Rollback complete"
+
+# Example: Build with cleanup
+build_with_cleanup():
+    > desc: Build with before setup and after cleanup
+    > before: |
+        echo "Cleaning previous build..."
+        rm -rf dist/ build/
+    > script: |
+        echo "Building project..."
+        npm run build
+    > after: |
+        echo "Build completed!"
+        echo "Build artifacts:"
+        ls -la dist/
+
+# Example: Test with fallback
+test_with_fallback():
+    > desc: Run tests with error handling
+    > before: echo "Running tests..."
+    > script: |
+        npm test
+        # If tests fail, fallback will execute
+    > fallback: |
+        echo "Tests failed, but continuing..."
+        echo "Generating test report..."
+        # Error handling instead of showing error
+
+# ============================================================================
 # INCLUDE DIRECTIVES
 # ============================================================================
 #
@@ -337,6 +590,14 @@ docker:
         > script: |
             echo "Running container on port {{port}}"
             # docker run -p {{port}}:8080 myapp:latest
+
+    deploy():
+        > desc: Deploy Docker container
+        # Using relative dependency: build resolves to docker:build
+        > depends: build
+        > script: |
+            echo "Deploying Docker container..."
+            # docker push myapp:latest
 
 # ============================================================================
 # SINGLE-LINE SCRIPTS
