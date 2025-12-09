@@ -50,6 +50,9 @@ pub const FLAG_EXAMPLE: &str = "example";
 /// Flag name for updating Nest CLI.
 pub const FLAG_UPDATE: &str = "update";
 
+/// Flag name for specifying custom config file path.
+pub const FLAG_CONFIG: &str = "config";
+
 /// Flag name for dry-run mode.
 pub const FLAG_DRY_RUN: &str = "dry-run";
 

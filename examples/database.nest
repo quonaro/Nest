@@ -1,0 +1,45 @@
+# Database Commands
+# This file contains database-related commands
+
+database:
+    > desc: Database operations
+
+    migrate():
+        > desc: Run database migrations
+        > env: .env
+        > script: |
+            echo "Running database migrations..."
+            echo "Database URL: $DATABASE_URL"
+            # npm run migrate
+
+    seed():
+        > desc: Seed database with initial data
+        > env: .env
+        > script: |
+            echo "Seeding database..."
+            echo "Database: $DATABASE_NAME"
+            # npm run seed
+
+    reset():
+        > desc: Reset database (drop and recreate)
+        > env: .env
+        > script: |
+            echo "Resetting database..."
+            echo "Warning: This will delete all data!"
+            # npm run db:reset
+
+    backup():
+        > desc: Create database backup
+        > env: .env
+        > script: |
+            echo "Creating database backup..."
+            echo "Backup created at: {{now}}"
+            # pg_dump $DATABASE_URL > backup-{{now}}.sql
+
+    restore(backup_file: str):
+        > desc: Restore database from backup
+        > env: .env
+        > script: |
+            echo "Restoring database from {{backup_file}}..."
+            # psql $DATABASE_URL < {{backup_file}}
+

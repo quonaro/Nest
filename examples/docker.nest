@@ -1,0 +1,40 @@
+# Docker Commands
+# This file demonstrates nested commands and can be included in the main nestfile
+
+docker:
+    > desc: Docker operations
+
+    build(!tag|t: str = "latest"):
+        > desc: Build Docker image
+        > env: DOCKER_BUILDKIT=1
+        > script: |
+            echo "Building Docker image with tag {{tag}}"
+            echo "App: {{APP_NAME}} v{{VERSION}}"
+            # docker build -t {{APP_NAME}}:{{tag}} .
+
+    run(!port|p: num = 8080):
+        > desc: Run Docker container
+        > env: CONTAINER_PORT={{port}}
+        > script: |
+            echo "Running container on port {{port}}"
+            # docker run -p {{port}}:8080 {{APP_NAME}}:latest
+
+    deploy():
+        > desc: Deploy Docker container
+        > depends: build
+        > script: |
+            echo "Deploying Docker container..."
+            # docker push {{APP_NAME}}:latest
+
+    stop():
+        > desc: Stop running Docker containers
+        > script: |
+            echo "Stopping Docker containers..."
+            # docker stop $(docker ps -q --filter ancestor={{APP_NAME}}:latest)
+
+    logs():
+        > desc: View Docker container logs
+        > script: |
+            echo "Viewing Docker container logs..."
+            # docker logs -f {{APP_NAME}}:latest
+

@@ -9,7 +9,7 @@ use super::condition;
 use super::env::EnvironmentManager;
 use super::template::TemplateProcessor;
 use crate::constants::{
-    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
+    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_CONFIG, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
     FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON, SHORT_VERSION,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
@@ -177,6 +177,14 @@ impl CliGenerator {
                     .action(ArgAction::SetTrue)
                     .hide(true)
                     .help("Copy example nestfile to current directory"),
+            )
+            .arg(
+                Arg::new(FLAG_CONFIG)
+                    .long(FLAG_CONFIG)
+                    .short('c')
+                    .value_name("PATH")
+                    .hide(true)
+                    .help("Specify path to configuration file"),
             )
             .subcommand(
                 ClapCommand::new(FLAG_UPDATE)
@@ -1480,12 +1488,11 @@ impl CliGenerator {
         let script = if !conditional_blocks.is_empty() {
             // Find the first matching condition
             let mut matched_script = None;
-            let mut found_match = false;
             
-            for block in &conditional_blocks {
+            'condition_loop: for block in &conditional_blocks {
                 match block {
                     ConditionalBlock::If(condition, script) => {
-                        if !found_match {
+                        if matched_script.is_none() {
                             match condition::evaluate_condition(
                                 condition,
                                 args,
@@ -1496,8 +1503,7 @@ impl CliGenerator {
                             ) {
                                 Ok(true) => {
                                     matched_script = Some(script.clone());
-                                    found_match = true;
-                                    break;
+                                    break 'condition_loop;
                                 }
                                 Ok(false) => {}
                                 Err(e) => {
@@ -1507,7 +1513,7 @@ impl CliGenerator {
                         }
                     }
                     ConditionalBlock::Elif(condition, script) => {
-                        if !found_match {
+                        if matched_script.is_none() {
                             match condition::evaluate_condition(
                                 condition,
                                 args,
@@ -1518,8 +1524,7 @@ impl CliGenerator {
                             ) {
                                 Ok(true) => {
                                     matched_script = Some(script.clone());
-                                    found_match = true;
-                                    break;
+                                    break 'condition_loop;
                                 }
                                 Ok(false) => {}
                                 Err(e) => {
@@ -1529,10 +1534,9 @@ impl CliGenerator {
                         }
                     }
                     ConditionalBlock::Else(script) => {
-                        if !found_match {
+                        if matched_script.is_none() {
                             matched_script = Some(script.clone());
-                            found_match = true;
-                            break;
+                            break 'condition_loop;
                         }
                     }
                 }
@@ -1760,21 +1764,41 @@ pub fn handle_show_ast(commands: &[Command]) {
 
 /// Handles the --example flag.
 ///
-/// Downloads the example nestfile from GitHub and saves it as "nestfile" in the current directory.
+/// Prompts user for confirmation, then downloads the examples folder from GitHub
+/// and changes directory into it.
 ///
 /// # Errors
 ///
 /// Exits with code 1 if:
-/// - curl or wget is not available
-/// - Download fails
-/// - The file cannot be written to the current directory
-/// - Nestfile already exists in the current directory
+/// - User declines confirmation
+/// - Git is not available
+/// - Clone fails
+/// - Directory change fails
 pub fn handle_example() {
     use std::env;
-    use std::fs;
+    use std::io::{self, Write};
     use std::process::Command;
 
     use super::output::OutputFormatter;
+
+    // Ask for confirmation
+    print!("Do you want to download the examples folder? (y/N): ");
+    io::stdout().flush().unwrap_or(());
+
+    let mut input = String::new();
+    match io::stdin().read_line(&mut input) {
+        Ok(_) => {
+            let trimmed = input.trim().to_lowercase();
+            if trimmed != "y" && trimmed != "yes" {
+                OutputFormatter::info("Download cancelled.");
+                std::process::exit(0);
+            }
+        }
+        Err(e) => {
+            OutputFormatter::error(&format!("Error reading input: {}", e));
+            std::process::exit(1);
+        }
+    }
 
     // Get current directory
     let current_dir = match env::current_dir() {
@@ -1785,76 +1809,199 @@ pub fn handle_example() {
         }
     };
 
-    // Write to nestfile in current directory
-    let target_path = current_dir.join("nestfile");
+    let examples_dir = current_dir.join("examples");
 
-    // Check if nestfile already exists
-    if target_path.exists() {
-        OutputFormatter::error("nestfile already exists in the current directory");
+    // Check if examples directory already exists
+    if examples_dir.exists() {
+        OutputFormatter::error("Examples directory already exists in the current directory");
         OutputFormatter::info("Please remove it first or choose a different location.");
         std::process::exit(1);
     }
 
-    // GitHub raw URL for nestfile.example
-    let url = "https://raw.githubusercontent.com/quonaro/nest/main/nestfile.example";
+    OutputFormatter::info("Downloading examples folder from GitHub...");
 
-    OutputFormatter::info("Downloading nestfile.example from GitHub...");
+    // Try to clone the repository (just the examples folder)
+    // We'll clone into a temp directory, then move the examples folder
+    let temp_dir = current_dir.join(".nest_examples_temp");
+    
+    // Clean up temp directory if it exists
+    if temp_dir.exists() {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
 
-    // Try curl first, then wget
-    let content = match Command::new("curl").args(&["-fsSL", url]).output() {
+    // Clone repository (depth 1 for faster download)
+    let clone_output = Command::new("git")
+        .args(&[
+            "clone",
+            "--depth",
+            "1",
+            "--filter=blob:none",
+            "--sparse",
+            "https://github.com/quonaro/nest.git",
+            temp_dir.to_str().unwrap_or(".nest_examples_temp"),
+        ])
+        .output();
+
+    match clone_output {
         Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout).to_string()
+            // Set sparse checkout to only get examples folder
+            let sparse_output = Command::new("git")
+                .args(&["sparse-checkout", "set", "cli/examples"])
+                .current_dir(&temp_dir)
+                .output();
+
+            if let Err(_) = sparse_output {
+                // If sparse checkout fails, just checkout normally and copy examples
+                OutputFormatter::info("Using full clone...");
+            }
+
+            // Move examples folder from temp/cli/examples to current_dir/examples
+            let source_examples = temp_dir.join("cli").join("examples");
+            
+            if source_examples.exists() {
+                match std::fs::rename(&source_examples, &examples_dir) {
+                    Ok(_) => {
+                        // Clean up temp directory
+                        let _ = std::fs::remove_dir_all(&temp_dir);
+                        
+                        use super::output::colors;
+                        OutputFormatter::success("Examples folder downloaded successfully!");
+                        println!(
+                            "  {}Location:{} {}",
+                            OutputFormatter::help_label("Location:"),
+                            colors::RESET,
+                            OutputFormatter::path(&examples_dir.display().to_string())
+                        );
+                        
+                        // Change directory to examples
+                        println!("\n{}Changing to examples directory...{}", colors::BRIGHT_CYAN, colors::RESET);
+                        println!("Run: cd examples");
+                    }
+                    Err(e) => {
+                        let _ = std::fs::remove_dir_all(&temp_dir);
+                        OutputFormatter::error(&format!("Error moving examples folder: {}", e));
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                let _ = std::fs::remove_dir_all(&temp_dir);
+                OutputFormatter::error("Examples folder not found in repository");
+                std::process::exit(1);
+            }
         }
         Ok(_) => {
-            // curl exists but failed, try wget
-            match Command::new("wget").args(&["-qO-", url]).output() {
-                Ok(output) if output.status.success() => {
-                    String::from_utf8_lossy(&output.stdout).to_string()
-                }
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            OutputFormatter::error("Git clone failed");
+            std::process::exit(1);
+        }
+        Err(_) => {
+            // Git not available, try alternative method: download archive
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            OutputFormatter::info("Git not available, trying alternative download method...");
+            
+            // Try downloading as archive using curl/wget
+            download_examples_archive(&current_dir, &examples_dir);
+        }
+    }
+}
+
+/// Downloads examples folder as archive (fallback method when git is not available).
+fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::path::Path) {
+    use std::fs;
+    use std::process::Command;
+    use super::output::OutputFormatter;
+
+    let archive_url = "https://github.com/quonaro/nest/archive/refs/heads/main.zip";
+    let temp_zip = current_dir.join(".nest_examples_temp.zip");
+    let temp_extract = current_dir.join(".nest_examples_temp_extract");
+
+    // Download archive
+    OutputFormatter::info("Downloading archive...");
+    let _download_output = match Command::new("curl").args(&["-fsSL", "-o", temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"), archive_url]).output() {
+        Ok(output) if output.status.success() => output,
+        Ok(_) => {
+            // Try wget
+            match Command::new("wget").args(&["-q", "-O", temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"), archive_url]).output() {
+                Ok(output) if output.status.success() => output,
                 Ok(_) => {
-                    OutputFormatter::error("Both curl and wget failed to download file");
+                    OutputFormatter::error("Both curl and wget failed to download archive");
                     std::process::exit(1);
                 }
                 Err(_) => {
                     OutputFormatter::error("Neither curl nor wget is available");
-                    OutputFormatter::info("Please install curl or wget to use this feature.");
+                    OutputFormatter::info("Please install git, curl, or wget to use this feature.");
                     std::process::exit(1);
                 }
             }
         }
         Err(_) => {
             // curl not found, try wget
-            match Command::new("wget").args(&["-qO-", url]).output() {
-                Ok(output) if output.status.success() => {
-                    String::from_utf8_lossy(&output.stdout).to_string()
-                }
+            match Command::new("wget").args(&["-q", "-O", temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"), archive_url]).output() {
+                Ok(output) if output.status.success() => output,
                 Ok(_) => {
-                    OutputFormatter::error("wget failed to download file");
+                    OutputFormatter::error("wget failed to download archive");
                     std::process::exit(1);
                 }
                 Err(_) => {
                     OutputFormatter::error("Neither curl nor wget is available");
-                    OutputFormatter::info("Please install curl or wget to use this feature.");
+                    OutputFormatter::info("Please install git, curl, or wget to use this feature.");
                     std::process::exit(1);
                 }
             }
         }
     };
 
-    // Write content to nestfile
-    use super::output::colors;
-    match fs::write(&target_path, content) {
-        Ok(_) => {
-            OutputFormatter::success("Created nestfile in current directory");
-            println!(
-                "  {}Location:{} {}",
-                OutputFormatter::help_label("Location:"),
-                colors::RESET,
-                OutputFormatter::path(&target_path.display().to_string())
-            );
+    // Extract archive (requires unzip or tar)
+    OutputFormatter::info("Extracting archive...");
+    let extract_output = Command::new("unzip")
+        .args(&["-q", temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"), "-d", temp_extract.to_str().unwrap_or(".nest_examples_temp_extract")])
+        .output();
+
+    match extract_output {
+        Ok(output) if output.status.success() => {
+            // Move examples folder
+            let source_examples = temp_extract.join("nest-main").join("cli").join("examples");
+            
+            if source_examples.exists() {
+                match std::fs::rename(&source_examples, examples_dir) {
+                    Ok(_) => {
+                        // Clean up
+                        let _ = fs::remove_file(&temp_zip);
+                        let _ = fs::remove_dir_all(&temp_extract);
+                        
+                        use super::output::colors;
+                        OutputFormatter::success("Examples folder downloaded successfully!");
+                        println!(
+                            "  {}Location:{} {}",
+                            OutputFormatter::help_label("Location:"),
+                            colors::RESET,
+                            OutputFormatter::path(&examples_dir.display().to_string())
+                        );
+                        println!("\n{}Changing to examples directory...{}", colors::BRIGHT_CYAN, colors::RESET);
+                        println!("Run: cd examples");
+                    }
+                    Err(e) => {
+                        let _ = fs::remove_file(&temp_zip);
+                        let _ = fs::remove_dir_all(&temp_extract);
+                        OutputFormatter::error(&format!("Error moving examples folder: {}", e));
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                let _ = fs::remove_file(&temp_zip);
+                let _ = fs::remove_dir_all(&temp_extract);
+                OutputFormatter::error("Examples folder not found in archive");
+                std::process::exit(1);
+            }
         }
-        Err(e) => {
-            OutputFormatter::error(&format!("Error writing nestfile: {}", e));
+        Ok(_) => {
+            let _ = fs::remove_file(&temp_zip);
+            OutputFormatter::error("Failed to extract archive. Please install unzip.");
+            std::process::exit(1);
+        }
+        Err(_) => {
+            let _ = fs::remove_file(&temp_zip);
+            OutputFormatter::error("unzip is not available. Please install unzip or use git.");
             std::process::exit(1);
         }
     }

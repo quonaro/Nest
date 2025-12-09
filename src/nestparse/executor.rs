@@ -53,6 +53,7 @@ impl CommandExecutor {
     /// - Script preview
     /// - Exit code
     /// - Helpful suggestions (e.g., missing commands)
+    #[allow(dead_code)]
     pub fn execute(
         command: &Command,
         args: &HashMap<String, String>,
@@ -603,6 +604,7 @@ impl CommandExecutor {
     }
 }
 
+#[allow(dead_code)]
 fn format_error_message(
     command: &Command,
     command_path: Option<&[String]>,
@@ -791,6 +793,7 @@ fn format_error_message(
     output
 }
 
+#[allow(dead_code)]
 fn extract_missing_command(stderr: &str) -> Option<String> {
     // Extract command name from various error patterns:
     // "sh: line X: command: command not found"

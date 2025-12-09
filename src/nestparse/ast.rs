@@ -126,6 +126,7 @@ pub struct Function {
     /// The function name
     pub name: String,
     /// List of parameters this function accepts
+    #[allow(dead_code)]
     pub parameters: Vec<Parameter>,
     /// The function body (script content)
     pub body: String,

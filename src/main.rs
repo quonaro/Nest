@@ -54,10 +54,21 @@ fn main() {
         return;
     }
 
-    let (parse_result, config_path) = match load_and_parse_config() {
+    // Check for --config flag and extract config path
+    let config_path_arg = args.iter()
+        .position(|a| a == "--config" || a == "-c")
+        .and_then(|pos| args.get(pos + 1))
+        .map(|s| s.as_str());
+
+    let (parse_result, config_path) = match load_and_parse_config(config_path_arg) {
         Ok(result) => result,
         Err(e) => {
             nestparse::output::OutputFormatter::error(&e.to_string());
+            if config_path_arg.is_none() {
+                nestparse::output::OutputFormatter::info(
+                    "Tip: You can specify a custom config file path using --config <path>"
+                );
+            }
             process::exit(1);
         }
     };
@@ -111,9 +122,13 @@ fn main() {
 /// Loads and parses the configuration file.
 ///
 /// This function:
-/// 1. Searches for a configuration file in the current directory
+/// 1. Uses provided config path or searches for a configuration file in the current directory
 /// 2. Reads the file content
 /// 3. Parses it into commands, variables, and constants
+///
+/// # Arguments
+///
+/// * `config_path_arg` - Optional path to config file (from --config flag)
 ///
 /// # Returns
 ///
@@ -123,12 +138,24 @@ fn main() {
 /// # Errors
 ///
 /// Returns an error if:
-/// - No configuration file is found
+/// - No configuration file is found (when path not provided)
 /// - File cannot be read
 /// - Parsing fails
-fn load_and_parse_config() -> Result<(ParseResult, std::path::PathBuf), String> {
-    let config_path =
-        find_config_file().ok_or_else(|| "Configuration file not found".to_string())?;
+fn load_and_parse_config(config_path_arg: Option<&str>) -> Result<(ParseResult, std::path::PathBuf), String> {
+    let config_path = if let Some(path_str) = config_path_arg {
+        let path = std::path::PathBuf::from(path_str);
+        if !path.exists() {
+            return Err(format!("Configuration file not found: {}", path.display()));
+        }
+        if !path.is_file() {
+            return Err(format!("Path is not a file: {}", path.display()));
+        }
+        path
+    } else {
+        find_config_file().ok_or_else(|| {
+            "Configuration file not found. Searched for: nestfile, Nestfile, nest, Nest".to_string()
+        })?
+    };
 
     let content =
         read_config_file(&config_path).map_err(|e| format!("Error reading file: {}", e))?;
