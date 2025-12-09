@@ -47,7 +47,10 @@ pub struct ValidationError {
 ///
 /// Returns `Ok(())` if validation passes,
 /// `Err(errors)` with a list of validation errors if any are found.
-pub fn validate_commands(commands: &[Command], file_path: &Path) -> Result<(), Vec<ValidationError>> {
+pub fn validate_commands(
+    commands: &[Command],
+    file_path: &Path,
+) -> Result<(), Vec<ValidationError>> {
     let mut errors = Vec::new();
     let mut command_names = HashMap::new();
     let mut all_aliases = HashMap::new();
@@ -113,7 +116,7 @@ fn validate_command_recursive(
     } else {
         parent_path.join(" ")
     };
-    
+
     // Check for duplicates only within the same parent context
     if let Some(existing_paths) = command_names.get(&command.name) {
         for existing_path in existing_paths {
@@ -123,7 +126,7 @@ fn validate_command_recursive(
             } else {
                 ""
             };
-            
+
             // Only report conflict if same parent
             if existing_parent == parent_str {
                 errors.push(ValidationError {
@@ -135,8 +138,7 @@ fn validate_command_recursive(
                     ),
                     suggestion: Some(format!(
                         "Command '{}' is already defined at path '{}'. Use a unique name.",
-                        command.name,
-                        existing_path
+                        command.name, existing_path
                     )),
                     command_path: current_path.clone(),
                 });
@@ -166,10 +168,7 @@ fn validate_command_recursive(
         }
 
         // Validate parameter type
-        if !matches!(
-            param.param_type.as_str(),
-            "str" | "bool" | "num" | "arr"
-        ) {
+        if !matches!(param.param_type.as_str(), "str" | "bool" | "num" | "arr") {
             errors.push(ValidationError {
                 line: 1,
                 column: None,
@@ -177,9 +176,7 @@ fn validate_command_recursive(
                     "Invalid parameter type '{}' for parameter '{}'",
                     param.param_type, param.name
                 ),
-                suggestion: Some(
-                    "Valid types are: str, bool, num, arr".to_string()
-                ),
+                suggestion: Some("Valid types are: str, bool, num, arr".to_string()),
                 command_path: current_path.clone(),
             });
         }
@@ -191,10 +188,7 @@ fn validate_command_recursive(
                 errors.push(ValidationError {
                     line: 1,
                     column: None,
-                    message: format!(
-                        "Empty alias for parameter '{}'",
-                        param.name
-                    ),
+                    message: format!("Empty alias for parameter '{}'", param.name),
                     suggestion: Some("Remove the alias or provide a single character".to_string()),
                     command_path: current_path.clone(),
                 });
@@ -207,7 +201,9 @@ fn validate_command_recursive(
                         "Alias '{}' for parameter '{}' must be a single character",
                         alias, param.name
                     ),
-                    suggestion: Some("Use a single character alias, e.g., 'f' for 'force'".to_string()),
+                    suggestion: Some(
+                        "Use a single character alias, e.g., 'f' for 'force'".to_string(),
+                    ),
                     command_path: current_path.clone(),
                 });
             } else if let Some(alias_char) = alias.chars().next() {
@@ -254,10 +250,7 @@ fn validate_command_recursive(
                         });
                     }
                 } else {
-                    all_aliases.insert(
-                        alias.clone(),
-                        (current_path.clone(), param.name.clone()),
-                    );
+                    all_aliases.insert(alias.clone(), (current_path.clone(), param.name.clone()));
                 }
             }
         }
@@ -306,6 +299,10 @@ fn validate_command_recursive(
                     env_files.push(env_value.clone());
                 }
             }
+            Directive::Logs(_, _) => {}
+            Directive::If(_) => {}
+            Directive::Elif(_) => {}
+            Directive::Else => {}
         }
     }
 
@@ -314,10 +311,7 @@ fn validate_command_recursive(
         errors.push(ValidationError {
             line: 1,
             column: None,
-            message: format!(
-                "Multiple 'cwd' directives found in command '{}'",
-                full_name
-            ),
+            message: format!("Multiple 'cwd' directives found in command '{}'", full_name),
             suggestion: Some("Use only one 'cwd' directive per command".to_string()),
             command_path: current_path.clone(),
         });
@@ -377,12 +371,10 @@ fn validate_command_recursive(
         errors.push(ValidationError {
             line: 1,
             column: None,
-            message: format!(
-                "Command '{}' has no script directive",
-                full_name
-            ),
+            message: format!("Command '{}' has no script directive", full_name),
             suggestion: Some(
-                "Add a 'script' directive or make this a group command with subcommands".to_string()
+                "Add a 'script' directive or make this a group command with subcommands"
+                    .to_string(),
             ),
             command_path: current_path.clone(),
         });
@@ -529,4 +521,3 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
 
     eprint!("{}", output);
 }
-

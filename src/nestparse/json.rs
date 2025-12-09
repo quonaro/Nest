@@ -79,6 +79,18 @@ pub enum JsonDirective {
     /// Privileged access directive
     #[serde(rename = "privileged")]
     Privileged(bool),
+    /// Logs directive
+    #[serde(rename = "logs")]
+    Logs { path: String, format: String },
+    /// If conditional directive
+    #[serde(rename = "if")]
+    If(String),
+    /// Elif conditional directive
+    #[serde(rename = "elif")]
+    Elif(String),
+    /// Else conditional directive
+    #[serde(rename = "else")]
+    Else,
 }
 
 /// JSON representation of a Command.
@@ -138,6 +150,13 @@ impl From<&Directive> for JsonDirective {
             Directive::Validate(s) => JsonDirective::Validate(s.clone()),
             Directive::Script(s) => JsonDirective::Script(s.clone()),
             Directive::Privileged(value) => JsonDirective::Privileged(*value),
+            Directive::Logs(path, format) => JsonDirective::Logs {
+                path: path.clone(),
+                format: format.clone(),
+            },
+            Directive::If(condition) => JsonDirective::If(condition.clone()),
+            Directive::Elif(condition) => JsonDirective::Elif(condition.clone()),
+            Directive::Else => JsonDirective::Else,
         }
     }
 }

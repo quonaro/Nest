@@ -5,8 +5,8 @@
 //! special cases like default subcommands.
 
 use super::ast::{Command, Directive, Parameter, Value, Variable, Constant, Function};
+use super::condition;
 use super::env::EnvironmentManager;
-use super::executor::CommandExecutor;
 use super::template::TemplateProcessor;
 use crate::constants::{
     APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
@@ -14,6 +14,17 @@ use crate::constants::{
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
+
+/// Represents a conditional block (if/elif/else with associated script)
+#[derive(Debug, Clone)]
+enum ConditionalBlock {
+    /// If block: condition and script
+    If(String, String),
+    /// Elif block: condition and script
+    Elif(String, String),
+    /// Else block: script only
+    Else(String),
+}
 
 // Removed: ShortAliasConflict - validation is now done in validator module
 
@@ -452,6 +463,13 @@ impl CliGenerator {
         }).unwrap_or(false)
     }
 
+    fn get_logs_directive(directives: &[Directive]) -> Option<(String, String)> {
+        directives.iter().find_map(|d| match d {
+            Directive::Logs(path, format) => Some((path.clone(), format.clone())),
+            _ => None,
+        })
+    }
+
     fn get_validate_directives(directives: &[Directive]) -> Vec<String> {
         directives.iter()
             .filter_map(|d| match d {
@@ -459,6 +477,148 @@ impl CliGenerator {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Writes a log entry to a file in the specified format.
+    fn write_log_entry(
+        log_path: &str,
+        log_format: &str,
+        command_path: Option<&[String]>,
+        args: &HashMap<String, String>,
+        result: &Result<(), String>,
+    ) -> Result<(), String> {
+        use std::fs::OpenOptions;
+        use std::io::Write;
+        use chrono::Utc;
+        use serde_json::json;
+
+        // Process template in log path
+        let processed_path = TemplateProcessor::process(
+            log_path,
+            args,
+            &[],
+            &[],
+            &[],
+            &[],
+        );
+
+        // Create parent directories if needed
+        if let Some(parent) = std::path::Path::new(&processed_path).parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create log directory: {}", e))?;
+        }
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&processed_path)
+            .map_err(|e| format!("Failed to open log file: {}", e))?;
+
+        let command_name = command_path
+            .map(|p| p.join(" "))
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let timestamp = Utc::now().to_rfc3339();
+        let success = result.is_ok();
+        let error_msg = result.as_ref().err().map(|e| e.to_string());
+
+        match log_format {
+            "json" => {
+                let log_entry = json!({
+                    "timestamp": timestamp,
+                    "command": command_name,
+                    "args": args,
+                    "success": success,
+                    "error": error_msg,
+                });
+                writeln!(file, "{}", serde_json::to_string(&log_entry).unwrap())
+                    .map_err(|e| format!("Failed to write log: {}", e))?;
+            }
+            "txt" => {
+                writeln!(file, "[{}] Command: {}", timestamp, command_name)
+                    .map_err(|e| format!("Failed to write log: {}", e))?;
+                if !args.is_empty() {
+                    let args_str: Vec<String> = args
+                        .iter()
+                        .map(|(k, v)| format!("{}={}", k, v))
+                        .collect();
+                    writeln!(file, "  Args: {}", args_str.join(", "))
+                        .map_err(|e| format!("Failed to write log: {}", e))?;
+                }
+                writeln!(file, "  Status: {}", if success { "SUCCESS" } else { "FAILED" })
+                    .map_err(|e| format!("Failed to write log: {}", e))?;
+                if let Some(err) = error_msg {
+                    writeln!(file, "  Error: {}", err)
+                        .map_err(|e| format!("Failed to write log: {}", e))?;
+                }
+                writeln!(file)
+                    .map_err(|e| format!("Failed to write log: {}", e))?;
+            }
+            _ => {
+                return Err(format!("Unknown log format: {}", log_format));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parses conditional blocks from directives.
+    ///
+    /// Groups if/elif/else directives with their following script directives.
+    /// Returns empty vector if no conditional directives are found.
+    fn parse_conditional_blocks(directives: &[Directive]) -> Vec<ConditionalBlock> {
+        let mut blocks = Vec::new();
+        let mut i = 0;
+        
+        while i < directives.len() {
+            let (condition_type, condition_value) = match &directives[i] {
+                Directive::If(cond) => (Some("if"), Some(cond.clone())),
+                Directive::Elif(cond) => (Some("elif"), Some(cond.clone())),
+                Directive::Else => (Some("else"), None),
+                _ => {
+                    i += 1;
+                    continue;
+                }
+            };
+            
+            if let Some(block_type) = condition_type {
+                // Look for the next script directive
+                let mut found_script = false;
+                for j in (i + 1)..directives.len() {
+                    if let Directive::Script(script) = &directives[j] {
+                        match block_type {
+                            "if" => {
+                                blocks.push(ConditionalBlock::If(condition_value.unwrap(), script.clone()));
+                            }
+                            "elif" => {
+                                blocks.push(ConditionalBlock::Elif(condition_value.unwrap(), script.clone()));
+                            }
+                            "else" => {
+                                blocks.push(ConditionalBlock::Else(script.clone()));
+                            }
+                            _ => {}
+                        }
+                        found_script = true;
+                        i = j + 1;
+                        break;
+                    }
+                    // If we encounter another conditional directive before script, it's an error
+                    // but we'll handle it gracefully by skipping
+                    if matches!(&directives[j], Directive::If(_) | Directive::Elif(_) | Directive::Else) {
+                        break;
+                    }
+                }
+                
+                if !found_script {
+                    // No script found for this conditional, skip it
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+        
+        blocks
     }
 
     /// Validates command parameters according to validation directives.
@@ -1243,7 +1403,8 @@ impl CliGenerator {
         verbose: bool,
         visited: &mut std::collections::HashSet<Vec<String>>,
     ) -> Result<(), String> {
-        let command_path = command_path.unwrap_or(&[]);
+        let command_path_unwrapped = command_path.unwrap_or(&[]);
+        let command_path_for_logging = command_path;
 
         // Execute dependencies first
         let depends = Self::get_depends_directive(&command.directives);
@@ -1262,17 +1423,17 @@ impl CliGenerator {
                 }).collect();
                 OutputFormatter::info(&format!(
                     "Executing dependencies for {}: {}",
-                    command_path.join(" "),
+                    command_path_unwrapped.join(" "),
                     deps_str.join(", ")
                 ));
             }
-            self.execute_dependencies(&depends, command_path, dry_run, verbose, visited)?;
+            self.execute_dependencies(&depends, command_path_unwrapped, dry_run, verbose, visited)?;
         }
 
         // Validate parameters (if validation directives are present)
         let validate_directives = Self::get_validate_directives(&command.directives);
         if !validate_directives.is_empty() {
-            if let Err(e) = self.validate_parameters(&validate_directives, args, command_path) {
+            if let Err(e) = self.validate_parameters(&validate_directives, args, command_path_unwrapped) {
                 return Err(e);
             }
         }
@@ -1281,6 +1442,7 @@ impl CliGenerator {
         let env_vars = EnvironmentManager::extract_env_vars(&command.directives);
         let cwd = Self::get_directive_value(&command.directives, "cwd");
         let privileged = Self::get_privileged_directive(&command.directives);
+        let logs = Self::get_logs_directive(&command.directives);
 
         // Execute before script (if present)
         if let Some(before_script) = Self::get_directive_value(&command.directives, "before") {
@@ -1302,7 +1464,7 @@ impl CliGenerator {
                 &processed_before,
                 &env_vars,
                 cwd.as_deref(),
-                Some(command_path),
+                Some(command_path_unwrapped),
                 args,
                 dry_run,
                 verbose,
@@ -1311,9 +1473,79 @@ impl CliGenerator {
             }
         }
 
-        // Execute main script
-        let script = Self::get_directive_value(&command.directives, "script")
-            .ok_or_else(|| "Command has no script directive".to_string())?;
+        // Execute main script with conditional logic
+        // Check if there are conditional directives (if/elif/else)
+        let conditional_blocks = Self::parse_conditional_blocks(&command.directives);
+        
+        let script = if !conditional_blocks.is_empty() {
+            // Find the first matching condition
+            let mut matched_script = None;
+            let mut found_match = false;
+            
+            for block in &conditional_blocks {
+                match block {
+                    ConditionalBlock::If(condition, script) => {
+                        if !found_match {
+                            match condition::evaluate_condition(
+                                condition,
+                                args,
+                                &self.variables,
+                                &self.constants,
+                                &command.local_variables,
+                                &command.local_constants,
+                            ) {
+                                Ok(true) => {
+                                    matched_script = Some(script.clone());
+                                    found_match = true;
+                                    break;
+                                }
+                                Ok(false) => {}
+                                Err(e) => {
+                                    return Err(format!("Error evaluating condition '{}': {}", condition, e));
+                                }
+                            }
+                        }
+                    }
+                    ConditionalBlock::Elif(condition, script) => {
+                        if !found_match {
+                            match condition::evaluate_condition(
+                                condition,
+                                args,
+                                &self.variables,
+                                &self.constants,
+                                &command.local_variables,
+                                &command.local_constants,
+                            ) {
+                                Ok(true) => {
+                                    matched_script = Some(script.clone());
+                                    found_match = true;
+                                    break;
+                                }
+                                Ok(false) => {}
+                                Err(e) => {
+                                    return Err(format!("Error evaluating condition '{}': {}", condition, e));
+                                }
+                            }
+                        }
+                    }
+                    ConditionalBlock::Else(script) => {
+                        if !found_match {
+                            matched_script = Some(script.clone());
+                            found_match = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            matched_script.ok_or_else(|| {
+                "No matching condition found and no else block provided".to_string()
+            })?
+        } else {
+            // No conditional directives, use regular script
+            Self::get_directive_value(&command.directives, "script")
+                .ok_or_else(|| "Command has no script directive".to_string())?
+        };
 
         let processed_script = TemplateProcessor::process(
             &script,
@@ -1328,7 +1560,7 @@ impl CliGenerator {
         if privileged && !dry_run {
             use super::executor::CommandExecutor;
             if !CommandExecutor::check_privileged_access() {
-                return Err(CommandExecutor::format_privileged_error(command, Some(command_path)));
+                return Err(CommandExecutor::format_privileged_error(command, Some(command_path_unwrapped)));
             }
         }
 
@@ -1337,7 +1569,7 @@ impl CliGenerator {
             use super::executor::CommandExecutor;
             CommandExecutor::show_dry_run_preview(
                 command,
-                Some(command_path),
+                Some(command_path_unwrapped),
                 args,
                 &env_vars,
                 cwd.as_deref(),
@@ -1353,7 +1585,7 @@ impl CliGenerator {
             use super::executor::CommandExecutor;
             CommandExecutor::show_verbose_info(
                 command,
-                Some(command_path),
+                Some(command_path_unwrapped),
                 args,
                 &env_vars,
                 cwd.as_deref(),
@@ -1367,11 +1599,26 @@ impl CliGenerator {
             &processed_script,
             &env_vars,
             cwd.as_deref(),
-            Some(command_path),
+            Some(command_path_unwrapped),
             args,
             dry_run,
             verbose,
         );
+
+        // Log output if logs directive is present
+        if let Some((log_path, log_format)) = logs {
+            if !dry_run {
+                // Note: For now, we'll log a summary since execute_script doesn't return output
+                // In a full implementation, we'd need to capture stdout/stderr
+                if let Err(e) = Self::write_log_entry(&log_path, &log_format, command_path_for_logging, args, &main_result) {
+                    // Don't fail the command if logging fails, just warn
+                    if verbose {
+                        use super::output::OutputFormatter;
+                        OutputFormatter::warning(&format!("Failed to write log: {}", e));
+                    }
+                }
+            }
+        }
 
         // Handle main script result
         match main_result {
@@ -1396,7 +1643,7 @@ impl CliGenerator {
                         &processed_after,
                         &env_vars,
                         cwd.as_deref(),
-                        Some(command_path),
+                        Some(command_path_unwrapped),
                         args,
                         dry_run,
                         verbose,
@@ -1428,7 +1675,7 @@ impl CliGenerator {
                         &processed_fallback,
                         &env_vars,
                         cwd.as_deref(),
-                        Some(command_path),
+                        Some(command_path_unwrapped),
                         args,
                         dry_run,
                         verbose,

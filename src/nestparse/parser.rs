@@ -553,12 +553,44 @@ impl Parser {
                     // Validation directive (single line only)
                     Ok((Directive::Validate(directive_value.to_string()), false))
                 }
+                "logs" => {
+                    // Parse logs directive: logs:json path or logs:txt path
+                    // Format: logs:json /path/to/file.log or logs:txt /path/to/file.log
+                    let parts: Vec<&str> = directive_value.splitn(2, ' ').collect();
+                    if parts.len() != 2 {
+                        return Err(ParseError::InvalidSyntax(
+                            format!("Invalid logs directive format. Expected: logs:json <path> or logs:txt <path>, got: {}", directive_value),
+                            self.current_line_number()
+                        ));
+                    }
+                    let format = parts[0].trim().to_lowercase();
+                    let path = parts[1].trim().to_string();
+                    
+                    if format != "json" && format != "txt" {
+                        return Err(ParseError::InvalidSyntax(
+                            format!("Invalid logs format: {}. Expected 'json' or 'txt'", format),
+                            self.current_line_number()
+                        ));
+                    }
+                    
+                    Ok((Directive::Logs(path, format), false))
+                }
+                "if" => {
+                    // Conditional execution directive: if: condition
+                    Ok((Directive::If(directive_value.to_string()), false))
+                }
+                "elif" => {
+                    // Else-if conditional execution directive: elif: condition
+                    Ok((Directive::Elif(directive_value.to_string()), false))
+                }
                 _ => Err(ParseError::InvalidSyntax(format!("Unknown directive: {}", directive_name), self.current_line_number()))
             }
         } else {
-            // No colon - check if it's a standalone privileged directive
+            // No colon - check if it's a standalone privileged directive or else directive
             if content == "privileged" {
                 Ok((Directive::Privileged(true), false))
+            } else if content == "else" {
+                Ok((Directive::Else, false))
             } else {
                 Err(ParseError::InvalidSyntax(format!("Invalid directive format: {}", trimmed), self.current_line_number()))
             }

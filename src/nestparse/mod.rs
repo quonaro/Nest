@@ -10,6 +10,7 @@ pub mod args;
 pub mod ast;
 pub mod cli;
 pub mod command_handler;
+pub mod condition;
 pub mod display;
 pub mod env;
 pub mod executor;

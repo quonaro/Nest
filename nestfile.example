@@ -660,6 +660,101 @@ hello(name: str):
     > script: echo "Hello, {{name}}!"
 
 # ============================================================================
+# CONDITIONAL EXECUTION (IF/ELIF/ELSE)
+# ============================================================================
+
+# Conditional execution allows you to execute different scripts based on conditions.
+# You can use multiple if directives, followed by elif and else.
+# Conditions support comparison operators (==, !=, <=, >=) and logical operators (&&, ||, !).
+
+# Example: Deploy based on environment
+deploy(env: str):
+    > desc: Deploy to different environments with conditional logic
+    > if: env == "production"
+    > script: |
+        echo "Deploying to PRODUCTION..."
+        # Production deployment commands
+    > if: env == "staging"
+    > script: |
+        echo "Deploying to STAGING..."
+        # Staging deployment commands
+    > elif: env == "development"
+    > script: |
+        echo "Deploying to DEVELOPMENT..."
+        # Development deployment commands
+    > else:
+    > script: |
+        echo "Unknown environment: {{env}}"
+        exit 1
+
+# Example: Conditional execution with logical operators
+build(!target|t: str = "x86_64", !release|r: bool = false):
+    > desc: Build with conditional logic using logical operators
+    > if: target == "x86_64" && release == "true"
+    > script: |
+        echo "Building optimized x86_64 release..."
+        cargo build --release --target x86_64-unknown-linux-gnu
+    > elif: target == "arm64" || target == "aarch64"
+    > script: |
+        echo "Building for ARM64..."
+        cargo build --target aarch64-unknown-linux-gnu
+    > elif: !(target == "x86_64")
+    > script: |
+        echo "Building for {{target}}..."
+        cargo build --target {{target}}
+    > else:
+    > script: |
+        echo "Building default target..."
+        cargo build
+
+# Example: Numeric comparisons
+scale(!replicas|r: num = 1):
+    > desc: Scale application with numeric conditions
+    > if: replicas <= 0
+    > script: |
+        echo "Error: Replicas must be greater than 0"
+        exit 1
+    > elif: replicas >= 10
+    > script: |
+        echo "Warning: Scaling to {{replicas}} replicas (high resource usage)"
+        kubectl scale deployment app --replicas={{replicas}}
+    > else:
+    > script: |
+        echo "Scaling to {{replicas}} replicas"
+        kubectl scale deployment app --replicas={{replicas}}
+
+# ============================================================================
+# LOGGING DIRECTIVES
+# ============================================================================
+
+# Logging directives allow you to log command execution to files.
+# Supported formats: json, txt
+
+# Example: Log to JSON file
+deploy_with_json_log(version: str):
+    > desc: Deploy with JSON logging
+    > logs:json ./logs/deploy-{{version}}.json
+    > script: |
+        echo "Deploying version {{version}}"
+        # Deployment commands
+
+# Example: Log to text file
+build_with_txt_log():
+    > desc: Build with text logging
+    > logs:txt ./logs/build.log
+    > script: |
+        echo "Building project..."
+        npm run build
+
+# Example: Log with template variables in path
+deploy_logged(env: str):
+    > desc: Deploy with logging using template variables
+    > logs:json ./logs/{{env}}/deploy-{{now}}.json
+    > script: |
+        echo "Deploying to {{env}}"
+        # Deployment commands
+
+# ============================================================================
 # COMPLEX EXAMPLES
 # ============================================================================
 
@@ -672,6 +767,7 @@ release(version: str, !dry-run|d: bool = false):
     > env: RELEASE_TIME={{now}}
     > env: APP_NAME={{APP_NAME}}
     > cwd: .
+    > logs:json ./logs/release-{{version}}.json
     > script: |
         echo "Creating release {{version}} for {{APP_NAME}}"
         echo "Company: {{COMPANY_NAME}}"

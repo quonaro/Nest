@@ -81,6 +81,18 @@ pub enum Directive {
     /// Validation rules for parameters
     /// Format: "param_name matches /regex/" or "param_name matches /regex/ flags"
     Validate(String),
+    /// Logging directive - logs command output to a file
+    /// First String is the file path, second is the format ("json" or "txt")
+    Logs(String, String),
+    /// Conditional execution - if condition is true, execute the following script
+    /// String contains the condition expression
+    If(String),
+    /// Else branch for conditional execution
+    /// Executes if all previous if/elif conditions were false
+    Else,
+    /// Else-if branch for conditional execution
+    /// String contains the condition expression
+    Elif(String),
 }
 
 /// Represents a variable that can be redefined.

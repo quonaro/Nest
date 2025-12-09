@@ -89,6 +89,18 @@ pub fn print_command(command: &Command, indent: usize) {
                     println!("{}    > script: {}", indent_str, s);
                 }
             }
+            Directive::Logs(path, format) => {
+                println!("{}    > logs:{} {}", indent_str, format, path);
+            }
+            Directive::If(condition) => {
+                println!("{}    > if: {}", indent_str, condition);
+            }
+            Directive::Elif(condition) => {
+                println!("{}    > elif: {}", indent_str, condition);
+            }
+            Directive::Else => {
+                println!("{}    > else", indent_str);
+            }
         }
     }
 
