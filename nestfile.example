@@ -10,6 +10,37 @@
 # - Working directory configuration
 # - Nested command groups
 # - Single-line and multiline scripts
+# - Include directives for modular configuration
+
+# ============================================================================
+# INCLUDE DIRECTIVES
+# ============================================================================
+#
+# Include directives allow you to include commands from other files or directories.
+# This enables modular configuration and code reuse.
+#
+# Three types of includes are supported:
+#
+# 1. Specific file:
+#    include app1/nestfile
+#    This includes a specific configuration file.
+#
+# 2. Pattern with wildcard:
+#    include app2/*.nest
+#    This includes all files matching the pattern (e.g., all .nest files in app2/).
+#
+# 3. Directory:
+#    include app3/
+#    This includes all configuration files (nestfile, Nestfile, nest, Nest) from the directory.
+#
+# Note: Include directives are processed before parsing, so included commands
+# are merged into the main configuration. Circular includes are detected and
+# will cause an error.
+#
+# Example includes (uncomment to use):
+# include apps/common.nest
+# include modules/*.nest
+# include commands/
 
 # ============================================================================
 # BASIC COMMANDS

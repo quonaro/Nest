@@ -70,8 +70,8 @@ impl Parser {
             let line = &self.lines[self.current_index];
             let trimmed = line.trim();
             
-            // Skip empty lines
-            if trimmed.is_empty() {
+            // Skip empty lines and comments
+            if trimmed.is_empty() || trimmed.starts_with('#') {
                 self.current_index += 1;
                 continue;
             }
@@ -123,8 +123,8 @@ impl Parser {
                 break;
             }
             
-            // Skip empty lines
-            if next_trimmed.is_empty() {
+            // Skip empty lines and comments
+            if next_trimmed.is_empty() || next_trimmed.starts_with('#') {
                 self.current_index += 1;
                 continue;
             }
@@ -200,6 +200,12 @@ impl Parser {
                     let next_indent = get_indent_size(next_line);
                     let next_trimmed = next_line.trim();
                     
+                    // Skip empty lines and comments
+                    if next_trimmed.is_empty() || next_trimmed.starts_with('#') {
+                        self.current_index += 1;
+                        continue;
+                    }
+                    
                     // If we find closing parenthesis, we're done
                     if next_trimmed.contains(')') {
                         // Extract the part before closing parenthesis and ':'
@@ -219,8 +225,15 @@ impl Parser {
                         return Err(ParseError::InvalidSyntax("Missing closing parenthesis in function signature".to_string()));
                     }
                     
-                    // Add this line to params
-                    params_lines.push(next_trimmed.to_string());
+                    // Add this line to params (remove inline comments if any)
+                    let line_without_comment = if let Some(comment_pos) = next_trimmed.find('#') {
+                        next_trimmed[..comment_pos].trim()
+                    } else {
+                        next_trimmed
+                    };
+                    if !line_without_comment.is_empty() {
+                        params_lines.push(line_without_comment.to_string());
+                    }
                     self.current_index += 1;
                 }
                 

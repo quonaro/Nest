@@ -11,7 +11,8 @@ use constants::{FLAG_SHOW, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
 use nestparse::cli::{handle_example, handle_json, handle_show_ast, handle_update, handle_version, CliGenerator};
 use nestparse::command_handler::CommandHandler;
 use nestparse::file::read_config_file;
-use nestparse::parser::Parser;
+use nestparse::include::process_includes;
+use nestparse::parser::{Parser, ParseError};
 use nestparse::path::find_config_file;
 use nestparse::validator::{print_validation_errors, validate_commands};
 use std::process;
@@ -127,10 +128,27 @@ fn load_and_parse_config() -> Result<(Vec<nestparse::ast::Command>, std::path::P
     let content =
         read_config_file(&config_path).map_err(|e| format!("Error reading file: {}", e))?;
 
-    let mut parser = Parser::new(&content);
+    // Process includes before parsing
+    let mut visited = std::collections::HashSet::new();
+    let processed_content = process_includes(&content, &config_path, &mut visited)
+        .map_err(|e| format!("Include error: {}", e))?;
+
+    let mut parser = Parser::new(&processed_content);
     let commands = parser
         .parse()
-        .map_err(|e| format!("Parse error: {:?}", e))?;
+        .map_err(|e| {
+            match e {
+                ParseError::UnexpectedEndOfFile => {
+                    "Parse error: Unexpected end of file. Check for incomplete command definitions.".to_string()
+                }
+                ParseError::InvalidSyntax(msg) => {
+                    format!("Parse error: {}", msg)
+                }
+                ParseError::InvalidIndent => {
+                    "Parse error: Invalid indentation. Make sure nested commands are properly indented (4 spaces per level).".to_string()
+                }
+            }
+        })?;
 
     Ok((commands, config_path))
 }

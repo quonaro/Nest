@@ -15,6 +15,7 @@ pub mod env;
 pub mod executor;
 pub mod file;
 pub mod help;
+pub mod include;
 pub mod json;
 pub mod output;
 pub mod parser;
