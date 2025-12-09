@@ -4,7 +4,7 @@
 //! command structure. It handles nested commands, parameters, flags, and
 //! special cases like default subcommands.
 
-use super::ast::{Command, Directive, Parameter, Value};
+use super::ast::{Command, Directive, Parameter, Value, Variable, Constant};
 use super::env::EnvironmentManager;
 use super::executor::CommandExecutor;
 use super::template::TemplateProcessor;
@@ -34,24 +34,32 @@ use std::collections::HashMap;
 pub struct CliGenerator {
     /// The parsed commands from the configuration file
     commands: Vec<Command>,
+    /// The parsed variables (can be redefined)
+    variables: Vec<Variable>,
+    /// The parsed constants (cannot be redefined)
+    constants: Vec<Constant>,
     /// Pre-allocated static strings for default command parameters
     default_param_ids: std::collections::HashMap<String, &'static str>,
 }
 
 impl CliGenerator {
-    /// Creates a new CLI generator from parsed commands.
+    /// Creates a new CLI generator from parsed commands, variables, and constants.
     ///
     /// # Arguments
     ///
     /// * `commands` - The list of commands parsed from the configuration file
+    /// * `variables` - The list of variables (can be redefined)
+    /// * `constants` - The list of constants (cannot be redefined)
     ///
     /// # Returns
     ///
     /// Returns a new `CliGenerator` instance ready to build CLI interfaces.
-    pub fn new(commands: Vec<Command>) -> Self {
+    pub fn new(commands: Vec<Command>, variables: Vec<Variable>, constants: Vec<Constant>) -> Self {
         let default_param_ids = Self::preallocate_default_param_ids(&commands);
         Self {
             commands,
+            variables,
+            constants,
             default_param_ids,
         }
     }
@@ -505,7 +513,14 @@ impl CliGenerator {
         let script = Self::get_directive_value(&command.directives, "script")
             .ok_or_else(|| "Command has no script directive".to_string())?;
 
-        let processed_script = TemplateProcessor::process(&script, args);
+        let processed_script = TemplateProcessor::process(
+            &script,
+            args,
+            &self.variables,
+            &self.constants,
+            &command.local_variables,
+            &command.local_constants,
+        );
         let env_vars = EnvironmentManager::extract_env_vars(&command.directives);
         let cwd = Self::get_directive_value(&command.directives, "cwd");
         let privileged = Self::get_privileged_directive(&command.directives);

@@ -57,6 +57,24 @@ pub enum Directive {
     Privileged(bool),
 }
 
+/// Represents a variable that can be redefined.
+#[derive(Debug, Clone)]
+pub struct Variable {
+    /// The variable name
+    pub name: String,
+    /// The variable value
+    pub value: String,
+}
+
+/// Represents a constant that cannot be redefined.
+#[derive(Debug, Clone)]
+pub struct Constant {
+    /// The constant name
+    pub name: String,
+    /// The constant value
+    pub value: String,
+}
+
 /// Represents a command in the configuration file.
 ///
 /// Commands can have:
@@ -64,6 +82,7 @@ pub enum Directive {
 /// - Directives (description, working directory, environment variables, script)
 /// - Child commands (nested subcommands)
 /// - Wildcard parameter (*) that accepts all remaining arguments
+/// - Local variables and constants (scoped to this command)
 ///
 /// Commands form a tree structure where parent commands can have child commands.
 #[derive(Debug, Clone)]
@@ -78,6 +97,10 @@ pub struct Command {
     pub children: Vec<Command>,
     /// Whether this command accepts all remaining arguments via wildcard (*)
     pub has_wildcard: bool,
+    /// Local variables for this command (can override global variables)
+    pub local_variables: Vec<Variable>,
+    /// Local constants for this command (can override global constants)
+    pub local_constants: Vec<Constant>,
 }
 
 impl fmt::Display for Command {

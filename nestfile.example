@@ -13,6 +13,43 @@
 # - Include directives for modular configuration
 
 # ============================================================================
+# VARIABLES AND CONSTANTS
+# ============================================================================
+#
+# Variables (@var) can be redefined, constants (@const) cannot.
+# Both can be used in templates with {{NAME}} syntax.
+#
+# Variables are useful for values that might change:
+@var APP_NAME = "myapp"
+@var VERSION = "1.0.0"
+@var NODE_ENV = "development"
+
+# Constants are useful for values that should never change:
+@const COMPANY_NAME = "My Company"
+@const LICENSE = "MIT"
+
+# Variables can be redefined (last definition wins):
+@var NODE_ENV = "production"  # This overrides the previous definition
+
+# Constants cannot be redefined (will cause an error):
+# @const COMPANY_NAME = "Other Company"  # ERROR: Cannot redefine constant
+
+# Variables and constants can also be defined inside commands (local scope)
+# Local variables/constants override global ones for that specific command
+test_local():
+    > desc: Example with local variables and constants
+    # Local variable overrides global
+    @var APP_NAME = "local-app"
+    # Local constant overrides global
+    @const COMPANY_NAME = "Local Company"
+    # New local variable (only available in this command)
+    @var LOCAL_VAR = "local-value"
+    > script: |
+        echo "App: {{APP_NAME}} (local overrides global)"
+        echo "Company: {{COMPANY_NAME}} (local constant overrides global)"
+        echo "Local: {{LOCAL_VAR}}"
+
+# ============================================================================
 # INCLUDE DIRECTIVES
 # ============================================================================
 #
@@ -53,10 +90,12 @@ greet(name: str, message: str):
         echo "Hello {{name}}, {{message}}!"
 
 # Command with named arguments and defaults
+# Using variables and constants in the script
 build(!target|t: str = "x86_64", !release|r: bool = false):
     > desc: Build the project
     > script: |
-        echo "Building for {{target}}"
+        echo "Building {{APP_NAME}} v{{VERSION}} for {{target}}"
+        echo "Company: {{COMPANY_NAME}}"
         if [ "{{release}}" = "true" ]; then
             echo "Release mode enabled"
         else
@@ -318,14 +357,17 @@ hello(name: str):
 # ============================================================================
 
 # Complex command combining all features
+# Using variables, constants, parameters, and special variables
 release(version: str, !dry-run|d: bool = false):
     > desc: Create a new release
     > env: RELEASE_VERSION={{version}}
     > env: RELEASED_BY={{user}}
     > env: RELEASE_TIME={{now}}
+    > env: APP_NAME={{APP_NAME}}
     > cwd: .
     > script: |
-        echo "Creating release {{version}}"
+        echo "Creating release {{version}} for {{APP_NAME}}"
+        echo "Company: {{COMPANY_NAME}}"
         echo "Released by: {{user}}"
         echo "Release time: {{now}}"
         if [ "{{dry-run}}" = "true" ]; then

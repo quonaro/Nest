@@ -12,7 +12,7 @@ use nestparse::cli::{handle_example, handle_json, handle_show_ast, handle_update
 use nestparse::command_handler::CommandHandler;
 use nestparse::file::read_config_file;
 use nestparse::include::process_includes;
-use nestparse::parser::{Parser, ParseError};
+use nestparse::parser::{Parser, ParseError, ParseResult};
 use nestparse::path::find_config_file;
 use nestparse::validator::{print_validation_errors, validate_commands};
 use std::process;
@@ -54,7 +54,7 @@ fn main() {
         return;
     }
 
-    let (commands, config_path) = match load_and_parse_config() {
+    let (parse_result, config_path) = match load_and_parse_config() {
         Ok(result) => result,
         Err(e) => {
             nestparse::output::OutputFormatter::error(&e.to_string());
@@ -63,12 +63,16 @@ fn main() {
     };
 
     // Validate configuration
-    if let Err(validation_errors) = validate_commands(&commands, &config_path) {
+    if let Err(validation_errors) = validate_commands(&parse_result.commands, &config_path) {
         print_validation_errors(&validation_errors, &config_path);
         process::exit(1);
     }
 
-    let generator = CliGenerator::new(commands.clone());
+    let generator = CliGenerator::new(
+        parse_result.commands.clone(),
+        parse_result.variables.clone(),
+        parse_result.constants.clone(),
+    );
     let mut cli = match generator.build_cli() {
         Ok(cli) => cli,
         Err(e) => {
@@ -78,7 +82,7 @@ fn main() {
     };
     let matches = cli.clone().get_matches();
 
-    if handle_special_flags(&matches, &commands) {
+    if handle_special_flags(&matches, &parse_result.commands) {
         return;
     }
 
@@ -108,11 +112,11 @@ fn main() {
 /// This function:
 /// 1. Searches for a configuration file in the current directory
 /// 2. Reads the file content
-/// 3. Parses it into a list of Command structures
+/// 3. Parses it into commands, variables, and constants
 ///
 /// # Returns
 ///
-/// - `Ok((commands, path))` - Successfully parsed list of commands and file path
+/// - `Ok((parse_result, path))` - Successfully parsed configuration and file path
 /// - `Err(message)` - Error message describing what went wrong
 ///
 /// # Errors
@@ -121,7 +125,7 @@ fn main() {
 /// - No configuration file is found
 /// - File cannot be read
 /// - Parsing fails
-fn load_and_parse_config() -> Result<(Vec<nestparse::ast::Command>, std::path::PathBuf), String> {
+fn load_and_parse_config() -> Result<(ParseResult, std::path::PathBuf), String> {
     let config_path =
         find_config_file().ok_or_else(|| "Configuration file not found".to_string())?;
 
@@ -134,7 +138,7 @@ fn load_and_parse_config() -> Result<(Vec<nestparse::ast::Command>, std::path::P
         .map_err(|e| format!("Include error: {}", e))?;
 
     let mut parser = Parser::new(&processed_content);
-    let commands = parser
+    let parse_result = parser
         .parse()
         .map_err(|e| {
             match e {
@@ -150,7 +154,7 @@ fn load_and_parse_config() -> Result<(Vec<nestparse::ast::Command>, std::path::P
             }
         })?;
 
-    Ok((commands, config_path))
+    Ok((parse_result, config_path))
 }
 
 /// Handles special global flags that don't execute commands.

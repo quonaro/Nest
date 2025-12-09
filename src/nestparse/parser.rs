@@ -4,7 +4,7 @@
 //! It handles nested commands, parameters, directives, and multiline constructs.
 
 use crate::constants::{BOOL_FALSE, BOOL_TRUE, INDENT_SIZE};
-use super::ast::{Command, Parameter, Value, Directive};
+use super::ast::{Command, Parameter, Value, Directive, Variable, Constant};
 
 /// Parser state for processing Nestfile content.
 ///
@@ -27,6 +27,17 @@ pub enum ParseError {
     InvalidSyntax(String, usize),
     /// Invalid indentation (e.g., child command not properly indented)
     InvalidIndent(usize),
+}
+
+/// Result of parsing a configuration file.
+#[derive(Debug)]
+pub struct ParseResult {
+    /// List of parsed commands
+    pub commands: Vec<Command>,
+    /// List of parsed variables (can be redefined)
+    pub variables: Vec<Variable>,
+    /// List of parsed constants (cannot be redefined)
+    pub constants: Vec<Constant>,
 }
 
 impl Parser {
@@ -52,14 +63,14 @@ impl Parser {
         self.current_index + 1
     }
 
-    /// Parses the entire configuration file into a list of commands.
+    /// Parses the entire configuration file into commands, variables, and constants.
     ///
     /// This is the main entry point for parsing. It processes all top-level
-    /// commands and their nested structure.
+    /// commands, variables, and constants.
     ///
     /// # Returns
     ///
-    /// Returns `Ok(commands)` with the parsed command structure,
+    /// Returns `Ok(ParseResult)` with the parsed structure,
     /// or `Err(error)` if parsing fails.
     ///
     /// # Errors
@@ -68,8 +79,12 @@ impl Parser {
     /// - File structure is invalid
     /// - Indentation is incorrect
     /// - Unexpected end of file
-    pub fn parse(&mut self) -> Result<Vec<Command>, ParseError> {
+    /// - Constant is redefined
+    pub fn parse(&mut self) -> Result<ParseResult, ParseError> {
         let mut commands = Vec::new();
+        let mut variables = Vec::new();
+        let mut constants = Vec::new();
+        let mut constant_names = std::collections::HashSet::new();
         
         while self.current_index < self.lines.len() {
             let line = &self.lines[self.current_index];
@@ -78,6 +93,27 @@ impl Parser {
             // Skip empty lines and comments
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 self.current_index += 1;
+                continue;
+            }
+            
+            // Check for variable or constant definition (@var or @const)
+            if trimmed.starts_with("@var ") {
+                let var = self.parse_variable()?;
+                // Check if variable already exists (allow redefinition)
+                variables.retain(|v: &Variable| v.name != var.name);
+                variables.push(var);
+                continue;
+            } else if trimmed.starts_with("@const ") {
+                let const_def = self.parse_constant()?;
+                // Check if constant already exists (disallow redefinition)
+                if constant_names.contains(&const_def.name) {
+                    return Err(ParseError::InvalidSyntax(
+                        format!("Constant '{}' is already defined and cannot be redefined", const_def.name),
+                        self.current_line_number()
+                    ));
+                }
+                constant_names.insert(const_def.name.clone());
+                constants.push(const_def);
                 continue;
             }
             
@@ -94,7 +130,11 @@ impl Parser {
             }
         }
         
-        Ok(commands)
+        Ok(ParseResult {
+            commands,
+            variables,
+            constants,
+        })
     }
 
     fn parse_command(&mut self, base_indent: u8) -> Result<Command, ParseError> {
@@ -116,8 +156,11 @@ impl Parser {
         
         let mut directives = Vec::new();
         let mut children = Vec::new();
+        let mut local_variables = Vec::new();
+        let mut local_constants = Vec::new();
+        let mut local_constant_names = std::collections::HashSet::new();
         
-        // Parse directives and children
+        // Parse directives, local variables/constants, and children
         while self.current_index < self.lines.len() {
             let next_line = self.lines[self.current_index].clone();
             let next_indent = get_indent_size(&next_line);
@@ -131,6 +174,27 @@ impl Parser {
             // Skip empty lines and comments
             if next_trimmed.is_empty() || next_trimmed.starts_with('#') {
                 self.current_index += 1;
+                continue;
+            }
+            
+            // Check for local variable or constant definition (@var or @const)
+            if next_trimmed.starts_with("@var ") {
+                let var = self.parse_variable()?;
+                // Allow redefinition (last definition wins)
+                local_variables.retain(|v: &Variable| v.name != var.name);
+                local_variables.push(var);
+                continue;
+            } else if next_trimmed.starts_with("@const ") {
+                let const_def = self.parse_constant()?;
+                // Check if constant already exists in this command (disallow redefinition)
+                if local_constant_names.contains(&const_def.name) {
+                    return Err(ParseError::InvalidSyntax(
+                        format!("Constant '{}' is already defined in this command and cannot be redefined", const_def.name),
+                        self.current_line_number()
+                    ));
+                }
+                local_constant_names.insert(const_def.name.clone());
+                local_constants.push(const_def);
                 continue;
             }
             
@@ -161,6 +225,8 @@ impl Parser {
             directives,
             children,
             has_wildcard,
+            local_variables,
+            local_constants,
         })
     }
 
@@ -444,6 +510,82 @@ impl Parser {
             } else {
                 Err(ParseError::InvalidSyntax(format!("Invalid directive format: {}", trimmed), self.current_line_number()))
             }
+        }
+    }
+
+    fn parse_variable(&mut self) -> Result<Variable, ParseError> {
+        if self.current_index >= self.lines.len() {
+            return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
+        }
+
+        let line = &self.lines[self.current_index];
+        let trimmed = line.trim();
+        
+        // Format: @var NAME = "value" or @var NAME = value
+        let var_part = trimmed.strip_prefix("@var ").unwrap_or("").trim();
+        
+        if let Some(eq_pos) = var_part.find('=') {
+            let name = var_part[..eq_pos].trim().to_string();
+            let value_str = var_part[eq_pos + 1..].trim();
+            
+            if name.is_empty() {
+                return Err(ParseError::InvalidSyntax(
+                    "Variable name cannot be empty".to_string(),
+                    self.current_line_number()
+                ));
+            }
+            
+            // Parse value (remove quotes if present)
+            let value = value_str
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string();
+            
+            self.current_index += 1;
+            Ok(Variable { name, value })
+        } else {
+            Err(ParseError::InvalidSyntax(
+                format!("Invalid variable syntax. Expected: @var NAME = value, got: {}", trimmed),
+                self.current_line_number()
+            ))
+        }
+    }
+
+    fn parse_constant(&mut self) -> Result<Constant, ParseError> {
+        if self.current_index >= self.lines.len() {
+            return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
+        }
+
+        let line = &self.lines[self.current_index];
+        let trimmed = line.trim();
+        
+        // Format: @const NAME = "value" or @const NAME = value
+        let const_part = trimmed.strip_prefix("@const ").unwrap_or("").trim();
+        
+        if let Some(eq_pos) = const_part.find('=') {
+            let name = const_part[..eq_pos].trim().to_string();
+            let value_str = const_part[eq_pos + 1..].trim();
+            
+            if name.is_empty() {
+                return Err(ParseError::InvalidSyntax(
+                    "Constant name cannot be empty".to_string(),
+                    self.current_line_number()
+                ));
+            }
+            
+            // Parse value (remove quotes if present)
+            let value = value_str
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string();
+            
+            self.current_index += 1;
+            Ok(Constant { name, value })
+        } else {
+            Err(ParseError::InvalidSyntax(
+                format!("Invalid constant syntax. Expected: @const NAME = value, got: {}", trimmed),
+                self.current_line_number()
+            ))
         }
     }
 
