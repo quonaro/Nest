@@ -1850,9 +1850,34 @@ pub fn handle_example() {
                 .current_dir(&temp_dir)
                 .output();
 
-            if let Err(_) = sparse_output {
-                // If sparse checkout fails, just checkout normally and copy examples
-                OutputFormatter::info("Using full clone...");
+            match sparse_output {
+                Ok(sparse_result) if sparse_result.status.success() => {
+                    // Checkout files after sparse checkout configuration
+                    let checkout_output = Command::new("git")
+                        .args(&["checkout"])
+                        .current_dir(&temp_dir)
+                        .output();
+                    
+                    if let Err(_) = checkout_output {
+                        let _ = std::fs::remove_dir_all(&temp_dir);
+                        OutputFormatter::error("Failed to checkout files after sparse checkout");
+                        std::process::exit(1);
+                    }
+                }
+                _ => {
+                    // If sparse checkout fails, try full checkout
+                    OutputFormatter::info("Sparse checkout failed, using full checkout...");
+                    let checkout_output = Command::new("git")
+                        .args(&["checkout"])
+                        .current_dir(&temp_dir)
+                        .output();
+                    
+                    if let Err(_) = checkout_output {
+                        let _ = std::fs::remove_dir_all(&temp_dir);
+                        OutputFormatter::error("Failed to checkout files");
+                        std::process::exit(1);
+                    }
+                }
             }
 
             // Move examples folder from temp/cli/examples to current_dir/examples
