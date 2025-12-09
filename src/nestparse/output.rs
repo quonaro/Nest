@@ -67,7 +67,7 @@ impl OutputFormatter {
             colors::RED,
             colors::RESET
         )
-        .unwrap();
+        .expect("Failed to format error box header");
         writeln!(
             output,
             "{}║{}  {}{}{}",
@@ -77,15 +77,15 @@ impl OutputFormatter {
             title,
             colors::RESET
         )
-        .unwrap();
+        .expect("Failed to format error box title");
         writeln!(
             output,
             "{}╚═══════════════════════════════════════════════════════════════╝{}",
             colors::RED,
             colors::RESET
         )
-        .unwrap();
-        writeln!(output, "\n{}", content).unwrap();
+        .expect("Failed to format error box footer");
+        writeln!(output, "\n{}", content).expect("Failed to format error box content");
         eprint!("{}", output);
     }
 

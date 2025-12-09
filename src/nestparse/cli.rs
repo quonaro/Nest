@@ -181,8 +181,14 @@ impl CliGenerator {
         let mut subcmd = ClapCommand::new(cmd_name).arg_required_else_help(false);
 
         subcmd = Self::add_description(subcmd, &command.directives);
-        subcmd = Self::add_parameters(subcmd, &command.parameters, self);
-        subcmd = Self::add_default_args_if_needed(subcmd, command, self);
+        
+        // If command has wildcard, add trailing var arg and skip regular parameters
+        if command.has_wildcard {
+            subcmd = Self::add_wildcard_arg(subcmd);
+        } else {
+            subcmd = Self::add_parameters(subcmd, &command.parameters, self);
+            subcmd = Self::add_default_args_if_needed(subcmd, command, self);
+        }
 
         for child in &command.children {
             subcmd = self.add_command_to_clap(subcmd, child);
@@ -190,6 +196,19 @@ impl CliGenerator {
 
         app = app.subcommand(subcmd);
         app
+    }
+    
+    fn add_wildcard_arg(mut subcmd: ClapCommand) -> ClapCommand {
+        // Add a trailing var arg that accepts all remaining arguments
+        // allow_hyphen_values(true) allows arguments starting with -- or -
+        let wildcard_id: &'static str = Box::leak("*".to_string().into_boxed_str());
+        let arg = Arg::new(wildcard_id)
+            .num_args(1..)
+            .trailing_var_arg(true)
+            .allow_hyphen_values(true)
+            .help("All remaining arguments");
+        subcmd = subcmd.arg(arg).allow_missing_positional(true);
+        subcmd
     }
 
     fn add_description(mut subcmd: ClapCommand, directives: &[Directive]) -> ClapCommand {
@@ -401,6 +420,13 @@ impl CliGenerator {
         })
     }
 
+    fn get_privileged_directive(directives: &[Directive]) -> bool {
+        directives.iter().find_map(|d| match d {
+            Directive::Privileged(value) => Some(*value),
+            _ => None,
+        }).unwrap_or(false)
+    }
+
     /// Finds a command by its path.
     ///
     /// # Arguments
@@ -482,6 +508,7 @@ impl CliGenerator {
         let processed_script = TemplateProcessor::process(&script, args);
         let env_vars = EnvironmentManager::extract_env_vars(&command.directives);
         let cwd = Self::get_directive_value(&command.directives, "cwd");
+        let privileged = Self::get_privileged_directive(&command.directives);
 
         CommandExecutor::execute(
             command,
@@ -492,6 +519,7 @@ impl CliGenerator {
             command_path,
             dry_run,
             verbose,
+            privileged,
         )
     }
 }
@@ -738,6 +766,15 @@ pub fn handle_update() {
     OutputFormatter::info("Downloading Nest CLI...");
     println!("  URL: {}", url);
 
+    // Convert paths to strings with proper error handling
+    let temp_file_str = match temp_file.to_str() {
+        Some(s) => s,
+        None => {
+            OutputFormatter::error("Invalid temporary file path encoding");
+            std::process::exit(1);
+        }
+    };
+
     let download_success = if Command::new("curl").arg("--version").output().is_ok() {
         // Use curl
         let output = Command::new("curl")
@@ -749,7 +786,7 @@ pub fn handle_update() {
                 "-w",
                 "%{http_code}",
                 "-o",
-                temp_file.to_str().unwrap(),
+                temp_file_str,
                 &url,
             ])
             .output();
@@ -787,7 +824,7 @@ pub fn handle_update() {
     } else if Command::new("wget").arg("--version").output().is_ok() {
         // Use wget
         let output = Command::new("wget")
-            .args(&["-O", temp_file.to_str().unwrap(), &url])
+            .args(&["-O", temp_file_str, &url])
             .output();
 
         match output {
@@ -841,12 +878,22 @@ pub fn handle_update() {
         std::process::exit(1);
     }
 
+    // Convert extract directory path to string with proper error handling
+    let extract_dir_str = match extract_dir.to_str() {
+        Some(s) => s,
+        None => {
+            OutputFormatter::error("Invalid extract directory path encoding");
+            let _ = fs::remove_dir_all(&temp_dir);
+            std::process::exit(1);
+        }
+    };
+
     let extract_output = Command::new("tar")
         .args(&[
             "-xzf",
-            temp_file.to_str().unwrap(),
+            temp_file_str,
             "-C",
-            extract_dir.to_str().unwrap(),
+            extract_dir_str,
         ])
         .output();
 

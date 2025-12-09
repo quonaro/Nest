@@ -30,6 +30,9 @@ pub fn print_command(command: &Command, indent: usize) {
             Directive::Env(s) => {
                 println!("{}    > env: {}", indent_str, s);
             }
+            Directive::Privileged(value) => {
+                println!("{}    > privileged: {}", indent_str, value);
+            }
             Directive::Script(s) => {
                 if s.contains('\n') {
                     println!("{}    > script: |", indent_str);

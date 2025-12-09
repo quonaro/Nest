@@ -53,6 +53,8 @@ pub enum Directive {
     Env(String),
     /// Script to execute (can be single line or multiline)
     Script(String),
+    /// Whether this command requires privileged access (sudo/administrator)
+    Privileged(bool),
 }
 
 /// Represents a command in the configuration file.
@@ -61,6 +63,7 @@ pub enum Directive {
 /// - Parameters (arguments and flags)
 /// - Directives (description, working directory, environment variables, script)
 /// - Child commands (nested subcommands)
+/// - Wildcard parameter (*) that accepts all remaining arguments
 ///
 /// Commands form a tree structure where parent commands can have child commands.
 #[derive(Debug, Clone)]
@@ -73,12 +76,16 @@ pub struct Command {
     pub directives: Vec<Directive>,
     /// Child commands (subcommands)
     pub children: Vec<Command>,
+    /// Whether this command accepts all remaining arguments via wildcard (*)
+    pub has_wildcard: bool,
 }
 
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)?;
-        if !self.parameters.is_empty() {
+        if self.has_wildcard {
+            write!(f, "(*)")?;
+        } else if !self.parameters.is_empty() {
             let params: Vec<String> = self.parameters.iter().map(|p| {
                 let mut s = if p.is_named { "!".to_string() } else { String::new() };
                 s.push_str(&p.name);

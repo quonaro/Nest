@@ -132,19 +132,24 @@ impl CommandHandler {
         command_path: &[String],
         root_matches: &ArgMatches,
     ) -> Result<(), String> {
-        let args = match ArgumentExtractor::extract_from_matches(
-            matches,
-            &command.parameters,
-            generator,
-            command_path,
-        ) {
-            Ok(args) => args,
-            Err(validation_errors) => {
-                use super::output::OutputFormatter;
-                for error in &validation_errors {
-                    OutputFormatter::error(error);
+        let args = if command.has_wildcard {
+            // For wildcard commands, extract all remaining arguments
+            ArgumentExtractor::extract_wildcard_args(matches)
+        } else {
+            match ArgumentExtractor::extract_from_matches(
+                matches,
+                &command.parameters,
+                generator,
+                command_path,
+            ) {
+                Ok(args) => args,
+                Err(validation_errors) => {
+                    use super::output::OutputFormatter;
+                    for error in &validation_errors {
+                        OutputFormatter::error(error);
+                    }
+                    return Err("Type validation failed".to_string());
                 }
-                return Err("Type validation failed".to_string());
             }
         };
 

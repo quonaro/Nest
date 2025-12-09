@@ -105,7 +105,7 @@ impl Parser {
         }
 
         // Parse function signature: name(params): (may be multiline)
-        let (name, parameters) = self.parse_function_signature_multiline(indent)?;
+        let (name, parameters, has_wildcard) = self.parse_function_signature_multiline(indent)?;
         
         // current_index already incremented in parse_function_signature_multiline
         
@@ -155,10 +155,11 @@ impl Parser {
             parameters,
             directives,
             children,
+            has_wildcard,
         })
     }
 
-    fn parse_function_signature_multiline(&mut self, base_indent: u8) -> Result<(String, Vec<Parameter>), ParseError> {
+    fn parse_function_signature_multiline(&mut self, base_indent: u8) -> Result<(String, Vec<Parameter>, bool), ParseError> {
         if self.current_index >= self.lines.len() {
             return Err(ParseError::UnexpectedEndOfFile);
         }
@@ -174,13 +175,21 @@ impl Parser {
             if let Some(close_paren) = trimmed.rfind(')') {
                 // Single line signature
                 let params_str = &trimmed[open_paren + 1..close_paren];
-                let parameters = if params_str.trim().is_empty() {
+                let trimmed_params = params_str.trim();
+                
+                // Check for wildcard parameter
+                if trimmed_params == "*" {
+                    self.current_index += 1;
+                    return Ok((name, Vec::new(), true));
+                }
+                
+                let parameters = if trimmed_params.is_empty() {
                     Vec::new()
                 } else {
                     self.parse_parameters(params_str)?
                 };
                 self.current_index += 1;
-                Ok((name, parameters))
+                Ok((name, parameters, false))
             } else {
                 // Multiline signature - collect lines until we find closing parenthesis
                 let mut params_lines = Vec::new();
@@ -216,13 +225,20 @@ impl Parser {
                 }
                 
                 let params_str = params_lines.join(" ");
-                let parameters = if params_str.trim().is_empty() {
+                let trimmed_params = params_str.trim();
+                
+                // Check for wildcard parameter
+                if trimmed_params == "*" {
+                    return Ok((name, Vec::new(), true));
+                }
+                
+                let parameters = if trimmed_params.is_empty() {
                     Vec::new()
                 } else {
                     self.parse_parameters(&params_str)?
                 };
                 
-                Ok((name, parameters))
+                Ok((name, parameters, false))
             }
         } else {
             // No parameters - check if it ends with ':'
@@ -232,7 +248,7 @@ impl Parser {
                 trimmed.to_string()
             };
             self.current_index += 1;
-            Ok((name, Vec::new()))
+            Ok((name, Vec::new(), false))
         }
     }
 
@@ -369,6 +385,23 @@ impl Parser {
                 "desc" => Ok((Directive::Desc(directive_value.to_string()), false)),
                 "cwd" => Ok((Directive::Cwd(directive_value.to_string()), false)),
                 "env" => Ok((Directive::Env(directive_value.to_string()), false)),
+                "privileged" => {
+                    // Parse boolean value: true, false, or empty (defaults to true)
+                    let privileged = if directive_value.is_empty() {
+                        true
+                    } else {
+                        match directive_value.to_lowercase().as_str() {
+                            "true" | "1" | "yes" => true,
+                            "false" | "0" | "no" => false,
+                            _ => {
+                                return Err(ParseError::InvalidSyntax(
+                                    format!("Invalid privileged value: {}. Expected true or false", directive_value)
+                                ));
+                            }
+                        }
+                    };
+                    Ok((Directive::Privileged(privileged), false))
+                }
                 "script" => {
                     // Check if it's multiline (ends with |)
                     if directive_value == "|" {
@@ -383,7 +416,12 @@ impl Parser {
                 _ => Err(ParseError::InvalidSyntax(format!("Unknown directive: {}", directive_name)))
             }
         } else {
-            Err(ParseError::InvalidSyntax(format!("Invalid directive format: {}", trimmed)))
+            // No colon - check if it's a standalone privileged directive
+            if content == "privileged" {
+                Ok((Directive::Privileged(true), false))
+            } else {
+                Err(ParseError::InvalidSyntax(format!("Invalid directive format: {}", trimmed)))
+            }
         }
     }
 

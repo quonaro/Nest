@@ -51,6 +51,9 @@ pub enum JsonDirective {
     /// Script directive
     #[serde(rename = "script")]
     Script(String),
+    /// Privileged access directive
+    #[serde(rename = "privileged")]
+    Privileged(bool),
 }
 
 /// JSON representation of a Command.
@@ -64,6 +67,9 @@ pub struct JsonCommand {
     pub directives: Vec<JsonDirective>,
     /// Child commands
     pub children: Vec<JsonCommand>,
+    /// Whether this command accepts all remaining arguments via wildcard (*)
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub has_wildcard: bool,
 }
 
 impl From<&Value> for JsonValue {
@@ -95,6 +101,7 @@ impl From<&Directive> for JsonDirective {
             Directive::Cwd(s) => JsonDirective::Cwd(s.clone()),
             Directive::Env(s) => JsonDirective::Env(s.clone()),
             Directive::Script(s) => JsonDirective::Script(s.clone()),
+            Directive::Privileged(value) => JsonDirective::Privileged(*value),
         }
     }
 }
@@ -106,6 +113,7 @@ impl From<&Command> for JsonCommand {
             parameters: command.parameters.iter().map(|p| p.into()).collect(),
             directives: command.directives.iter().map(|d| d.into()).collect(),
             children: command.children.iter().map(|c| c.into()).collect(),
+            has_wildcard: command.has_wildcard,
         }
     }
 }

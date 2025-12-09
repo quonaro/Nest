@@ -224,5 +224,33 @@ impl ArgumentExtractor {
         // Positional arguments are accessible by their name
         matches.get_one::<String>(&param.name).cloned()
     }
+
+    /// Extracts all remaining arguments for a wildcard command.
+    ///
+    /// For commands with `(*)` parameter, this collects all remaining
+    /// positional arguments and joins them into a single string.
+    ///
+    /// # Arguments
+    ///
+    /// * `matches` - The parsed CLI arguments from clap
+    ///
+    /// # Returns
+    ///
+    /// Returns a HashMap with a single key "*" containing all arguments
+    /// joined by spaces.
+    pub fn extract_wildcard_args(matches: &ArgMatches) -> HashMap<String, String> {
+        let mut args = HashMap::new();
+        
+        // Get all values from the wildcard argument (ID is "*")
+        if let Some(values) = matches.get_many::<String>("*") {
+            let all_args: Vec<String> = values.cloned().collect();
+            args.insert("*".to_string(), all_args.join(" "));
+        } else {
+            // If no arguments provided, use empty string
+            args.insert("*".to_string(), String::new());
+        }
+        
+        args
+    }
 }
 

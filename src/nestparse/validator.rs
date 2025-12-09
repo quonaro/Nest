@@ -291,6 +291,7 @@ fn validate_command_recursive(
         match directive {
             Directive::Script(_) => has_script = true,
             Directive::Desc(_) => {}
+            Directive::Privileged(_) => {}
             Directive::Cwd(path) => {
                 cwd_paths.push(path.clone());
             }
@@ -433,7 +434,7 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
         colors::RED,
         colors::RESET
     )
-    .unwrap();
+    .expect("Failed to format validation error header");
     writeln!(
         output,
         "{}║{}  {}❌ Configuration Validation Errors{}",
@@ -442,14 +443,14 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
         colors::BRIGHT_RED,
         colors::RESET
     )
-    .unwrap();
+    .expect("Failed to format validation error title");
     writeln!(
         output,
         "{}╚═══════════════════════════════════════════════════════════════╝{}\n",
         colors::RED,
         colors::RESET
     )
-    .unwrap();
+    .expect("Failed to format validation error footer");
 
     writeln!(
         output,
@@ -458,7 +459,7 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
         colors::RESET,
         file_path.display()
     )
-    .unwrap();
+    .expect("Failed to format file path in validation error");
     writeln!(
         output,
         "{}❌ Found {}{} error(s){}\n",
@@ -467,7 +468,7 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
         errors.len(),
         colors::RESET
     )
-    .unwrap();
+    .expect("Failed to format error count in validation error");
 
     for (idx, error) in errors.iter().enumerate() {
         writeln!(
@@ -478,7 +479,7 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
             colors::RESET,
             error.message
         )
-        .unwrap();
+        .expect("Failed to format validation error message");
 
         if !error.command_path.is_empty() {
             writeln!(
@@ -490,7 +491,7 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
                 error.command_path.join(" "),
                 colors::RESET
             )
-            .unwrap();
+            .expect("Failed to format command path in validation error");
         }
 
         if let Some(suggestion) = &error.suggestion {
@@ -503,11 +504,11 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
                 suggestion,
                 colors::RESET
             )
-            .unwrap();
+            .expect("Failed to format suggestion in validation error");
         }
 
         if idx < errors.len() - 1 {
-            writeln!(output).unwrap();
+            writeln!(output).expect("Failed to add newline in validation error output");
         }
     }
 
@@ -519,7 +520,7 @@ pub fn print_validation_errors(errors: &[ValidationError], file_path: &Path) {
         colors::GRAY,
         colors::RESET
     )
-    .unwrap();
+    .expect("Failed to format validation error footer message");
 
     eprint!("{}", output);
 }
