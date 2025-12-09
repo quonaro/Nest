@@ -21,12 +21,12 @@ pub struct Parser {
 #[derive(Debug)]
 pub enum ParseError {
     /// Unexpected end of file (e.g., incomplete command definition)
-    UnexpectedEndOfFile,
+    UnexpectedEndOfFile(usize),
     /// Invalid syntax in the configuration file
     #[allow(dead_code)]
-    InvalidSyntax(String),
+    InvalidSyntax(String, usize),
     /// Invalid indentation (e.g., child command not properly indented)
-    InvalidIndent,
+    InvalidIndent(usize),
 }
 
 impl Parser {
@@ -45,6 +45,11 @@ impl Parser {
             lines,
             current_index: 0,
         }
+    }
+
+    /// Gets the current line number (1-based).
+    fn current_line_number(&self) -> usize {
+        self.current_index + 1
     }
 
     /// Parses the entire configuration file into a list of commands.
@@ -94,14 +99,14 @@ impl Parser {
 
     fn parse_command(&mut self, base_indent: u8) -> Result<Command, ParseError> {
         if self.current_index >= self.lines.len() {
-            return Err(ParseError::UnexpectedEndOfFile);
+            return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
         }
 
         let line = &self.lines[self.current_index];
         let indent = get_indent_size(line);
         
         if indent < base_indent {
-            return Err(ParseError::InvalidIndent);
+            return Err(ParseError::InvalidIndent(self.current_line_number()));
         }
 
         // Parse function signature: name(params): (may be multiline)
@@ -161,7 +166,7 @@ impl Parser {
 
     fn parse_function_signature_multiline(&mut self, base_indent: u8) -> Result<(String, Vec<Parameter>, bool), ParseError> {
         if self.current_index >= self.lines.len() {
-            return Err(ParseError::UnexpectedEndOfFile);
+            return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
         }
 
         let line = &self.lines[self.current_index];
@@ -186,7 +191,7 @@ impl Parser {
                 let parameters = if trimmed_params.is_empty() {
                     Vec::new()
                 } else {
-                    self.parse_parameters(params_str)?
+                    self.parse_parameters(params_str, self.current_line_number())?
                 };
                 self.current_index += 1;
                 Ok((name, parameters, false))
@@ -222,7 +227,10 @@ impl Parser {
                     
                     // If indent is less than base, something's wrong
                     if next_indent <= base_indent && !next_trimmed.is_empty() {
-                        return Err(ParseError::InvalidSyntax("Missing closing parenthesis in function signature".to_string()));
+                        return Err(ParseError::InvalidSyntax(
+                            "Missing closing parenthesis in function signature".to_string(),
+                            self.current_line_number()
+                        ));
                     }
                     
                     // Add this line to params (remove inline comments if any)
@@ -248,7 +256,7 @@ impl Parser {
                 let parameters = if trimmed_params.is_empty() {
                     Vec::new()
                 } else {
-                    self.parse_parameters(&params_str)?
+                    self.parse_parameters(&params_str, self.current_line_number())?
                 };
                 
                 Ok((name, parameters, false))
@@ -265,7 +273,7 @@ impl Parser {
         }
     }
 
-    fn parse_parameters(&self, params_str: &str) -> Result<Vec<Parameter>, ParseError> {
+    fn parse_parameters(&self, params_str: &str, line_number: usize) -> Result<Vec<Parameter>, ParseError> {
         let mut parameters = Vec::new();
         let mut current_param = String::new();
         let mut paren_depth = 0;
@@ -282,7 +290,7 @@ impl Parser {
                 }
                 ',' if paren_depth == 0 => {
                     if !current_param.trim().is_empty() {
-                        parameters.push(self.parse_parameter(current_param.trim())?);
+                        parameters.push(self.parse_parameter(current_param.trim(), line_number)?);
                     }
                     current_param.clear();
                 }
@@ -293,19 +301,19 @@ impl Parser {
         }
         
         if !current_param.trim().is_empty() {
-            parameters.push(self.parse_parameter(current_param.trim())?);
+            parameters.push(self.parse_parameter(current_param.trim(), line_number)?);
         }
         
         Ok(parameters)
     }
 
-    fn parse_parameter(&self, param_str: &str) -> Result<Parameter, ParseError> {
+    fn parse_parameter(&self, param_str: &str, line_number: usize) -> Result<Parameter, ParseError> {
         // Format: [!]name|alias: type = default
         // ! prefix means named argument (uses --name)
         let parts: Vec<&str> = param_str.split(':').collect();
         
         if parts.len() < 2 {
-            return Err(ParseError::InvalidSyntax(format!("Invalid parameter: {}", param_str)));
+            return Err(ParseError::InvalidSyntax(format!("Invalid parameter: {}", param_str), line_number));
         }
         
         let name_part = parts[0].trim();
@@ -408,7 +416,8 @@ impl Parser {
                             "false" | "0" | "no" => false,
                             _ => {
                                 return Err(ParseError::InvalidSyntax(
-                                    format!("Invalid privileged value: {}. Expected true or false", directive_value)
+                                    format!("Invalid privileged value: {}. Expected true or false", directive_value),
+                                    self.current_line_number()
                                 ));
                             }
                         }
@@ -426,14 +435,14 @@ impl Parser {
                         Ok((Directive::Script(directive_value.to_string()), false))
                     }
                 }
-                _ => Err(ParseError::InvalidSyntax(format!("Unknown directive: {}", directive_name)))
+                _ => Err(ParseError::InvalidSyntax(format!("Unknown directive: {}", directive_name), self.current_line_number()))
             }
         } else {
             // No colon - check if it's a standalone privileged directive
             if content == "privileged" {
                 Ok((Directive::Privileged(true), false))
             } else {
-                Err(ParseError::InvalidSyntax(format!("Invalid directive format: {}", trimmed)))
+                Err(ParseError::InvalidSyntax(format!("Invalid directive format: {}", trimmed), self.current_line_number()))
             }
         }
     }

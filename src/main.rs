@@ -138,14 +138,14 @@ fn load_and_parse_config() -> Result<(Vec<nestparse::ast::Command>, std::path::P
         .parse()
         .map_err(|e| {
             match e {
-                ParseError::UnexpectedEndOfFile => {
-                    "Parse error: Unexpected end of file. Check for incomplete command definitions.".to_string()
+                ParseError::UnexpectedEndOfFile(line) => {
+                    format!("Parse error at line {}: Unexpected end of file. Check for incomplete command definitions.", line)
                 }
-                ParseError::InvalidSyntax(msg) => {
-                    format!("Parse error: {}", msg)
+                ParseError::InvalidSyntax(msg, line) => {
+                    format!("Parse error at line {}: {}", line, msg)
                 }
-                ParseError::InvalidIndent => {
-                    "Parse error: Invalid indentation. Make sure nested commands are properly indented (4 spaces per level).".to_string()
+                ParseError::InvalidIndent(line) => {
+                    format!("Parse error at line {}: Invalid indentation. Make sure nested commands are properly indented (4 spaces per level).", line)
                 }
             }
         })?;
