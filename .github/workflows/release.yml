@@ -380,7 +380,23 @@ jobs:
         run: |
           VERSION=$(grep '^version' Cargo.toml | cut -d '"' -f 2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+          echo "Version from Cargo.toml: $VERSION"
+          
+          # Verify version is not empty
+          if [ -z "$VERSION" ]; then
+            echo "Error: Could not extract version from Cargo.toml"
+            exit 1
+          fi
+          
+          # Check if tag already exists
+          TAG_NAME="v${VERSION}"
+          if git rev-parse "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Warning: Tag ${TAG_NAME} already exists. Version remains unchanged."
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tag ${TAG_NAME} does not exist. Will create new release."
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -488,6 +504,7 @@ jobs:
           generate_release_notes: false
           draft: false
           prerelease: false
+          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

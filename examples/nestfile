@@ -146,6 +146,7 @@ dev:
         > env: NODE_ENV=development
         > env: PORT={{PORT}}
         > script: |
+            #!/bin/bash
             if [ "{{watch}}" = "true" ]; then
                 echo "Starting dev server with watch mode on port {{PORT}}"
             else

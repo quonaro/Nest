@@ -777,8 +777,15 @@ impl CliGenerator {
         }
         
         // Check for shell operators that indicate this is not a command call
-        let shell_operators = ["|", "&&", "||", ";", ">", "<", ">>", "<<", "&", "$", "`"];
+        let shell_operators = ["|", "&&", "||", ";", ">", "<", ">>", "<<", "&", "$", "`", "[", "]", "="];
         if shell_operators.iter().any(|&op| trimmed.contains(op)) {
+            return None;
+        }
+        
+        // Check for shell keywords that indicate this is not a command call
+        let shell_keywords = ["if", "then", "else", "elif", "fi", "case", "esac", "for", "while", "until", "do", "done", "function"];
+        let first_word = trimmed.split_whitespace().next().unwrap_or("");
+        if shell_keywords.iter().any(|&kw| first_word == kw) {
             return None;
         }
         
@@ -961,12 +968,9 @@ impl CliGenerator {
         for line in lines {
             let trimmed_line = line.trim();
             
-            // Skip empty lines
+            // Preserve empty lines in shell blocks (they might be needed for syntax)
             if trimmed_line.is_empty() {
-                // Preserve empty lines in shell blocks
-                if !current_shell_block.is_empty() {
-                    current_shell_block.push(line);
-                }
+                current_shell_block.push(line);
                 continue;
             }
             
@@ -1070,18 +1074,59 @@ impl CliGenerator {
         // Execute any remaining shell commands
         if !current_shell_block.is_empty() {
             let shell_script = current_shell_block.join("\n");
-            Self::execute_shell_script(
-                &shell_script,
-                env_vars,
-                cwd,
-                args,
-                verbose,
-            )?;
+            // Don't trim - preserve all whitespace and structure
+            if !shell_script.trim().is_empty() {
+                Self::execute_shell_script(
+                    &shell_script,
+                    env_vars,
+                    cwd,
+                    args,
+                    verbose,
+                )?;
+            }
         }
 
         Ok(())
     }
     
+    /// Detects shell from shebang and removes it from script.
+    /// Returns (shell_command, script_without_shebang)
+    fn detect_shell_and_remove_shebang(script: &str) -> (&str, String) {
+        let trimmed = script.trim_start();
+        if trimmed.starts_with("#!") {
+            // Extract shell from shebang
+            let shebang_line = trimmed.lines().next().unwrap_or("");
+            let shell_path = shebang_line.trim_start_matches("#!").trim();
+            
+            // Determine shell command
+            let shell = if shell_path.contains("bash") {
+                "bash"
+            } else if shell_path.contains("zsh") {
+                "zsh"
+            } else if shell_path.contains("fish") {
+                "fish"
+            } else if shell_path.contains("sh") {
+                "sh"
+            } else {
+                "sh" // default
+            };
+            
+            // Remove shebang line from script
+            // Skip the first line (shebang) and join remaining lines
+            let lines: Vec<&str> = script.lines().collect();
+            let script_without_shebang = if lines.len() > 1 {
+                // Join all lines after shebang, preserving line breaks
+                lines[1..].join("\n")
+            } else {
+                String::new()
+            };
+            
+            (shell, script_without_shebang)
+        } else {
+            ("sh", script.to_string())
+        }
+    }
+
     /// Executes a shell script (helper function).
     fn execute_shell_script(
         script: &str,
@@ -1090,15 +1135,39 @@ impl CliGenerator {
         args: &HashMap<String, String>,
         _verbose: bool,
     ) -> Result<(), String> {
+        // Detect shell from shebang and remove it
+        let (shell, script_without_shebang) = Self::detect_shell_and_remove_shebang(script);
+        Self::execute_shell_script_with_shell(
+            &script_without_shebang,
+            shell,
+            env_vars,
+            cwd,
+            args,
+            _verbose,
+        )
+    }
+    
+    /// Executes a shell script with specified shell (helper function).
+    fn execute_shell_script_with_shell(
+        script: &str,
+        shell: &str,
+        env_vars: &HashMap<String, String>,
+        cwd: Option<&str>,
+        args: &HashMap<String, String>,
+        _verbose: bool,
+    ) -> Result<(), String> {
         use std::process::{Command as ProcessCommand, Stdio};
         
-        if script.trim().is_empty() {
+        // Trim only leading/trailing whitespace to avoid issues, but preserve internal structure
+        let script_to_execute = script.trim();
+        
+        if script_to_execute.is_empty() {
             return Ok(());
         }
 
-        let mut cmd = ProcessCommand::new("sh");
+        let mut cmd = ProcessCommand::new(shell);
         cmd.arg("-c");
-        cmd.arg(script);
+        cmd.arg(script_to_execute);
 
         if let Some(cwd_path) = cwd {
             cmd.current_dir(cwd_path);

@@ -15,12 +15,47 @@ use std::env;
 pub struct CommandExecutor;
 
 impl CommandExecutor {
+    /// Detects shell from shebang and removes it from script.
+    /// Returns (shell_command, script_without_shebang)
+    fn detect_shell_and_remove_shebang(script: &str) -> (&str, String) {
+        let trimmed = script.trim_start();
+        if trimmed.starts_with("#!") {
+            // Extract shell from shebang
+            let shebang_line = trimmed.lines().next().unwrap_or("");
+            let shell_path = shebang_line.trim_start_matches("#!").trim();
+            
+            // Determine shell command
+            let shell = if shell_path.contains("bash") {
+                "bash"
+            } else if shell_path.contains("zsh") {
+                "zsh"
+            } else if shell_path.contains("fish") {
+                "fish"
+            } else if shell_path.contains("sh") {
+                "sh"
+            } else {
+                "sh" // default
+            };
+            
+            // Remove shebang line from script
+            let script_without_shebang = script
+                .lines()
+                .skip(1)
+                .collect::<Vec<_>>()
+                .join("\n");
+            
+            (shell, script_without_shebang)
+        } else {
+            ("sh", script.to_string())
+        }
+    }
+
     /// Executes a shell script with the provided arguments and environment.
     ///
     /// This function:
     /// 1. Sets up the working directory (if specified)
     /// 2. Configures environment variables from directives and arguments
-    /// 3. Executes the script using `sh -c` (or shows preview if dry_run is true)
+    /// 3. Executes the script using the shell from shebang (or `sh -c` by default)
     /// 4. Captures and displays stdout/stderr
     /// 5. Formats detailed error messages if execution fails
     ///
@@ -83,9 +118,13 @@ impl CommandExecutor {
             Self::show_verbose_info(command, command_path, args, env_vars, cwd, script, privileged);
         }
 
-        let mut cmd = ProcessCommand::new("sh");
+        // Detect shell from shebang and remove it
+        let (shell, script_without_shebang) = Self::detect_shell_and_remove_shebang(script);
+        let script_to_execute = script_without_shebang.trim();
+
+        let mut cmd = ProcessCommand::new(shell);
         cmd.arg("-c");
-        cmd.arg(script);
+        cmd.arg(script_to_execute);
 
         if let Some(cwd_path) = cwd {
             cmd.current_dir(cwd_path);
