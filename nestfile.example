@@ -50,6 +50,52 @@ test_local():
         echo "Local: {{LOCAL_VAR}}"
 
 # ============================================================================
+# FUNCTIONS
+# ============================================================================
+#
+# Functions allow you to create reusable scripts that can be called from
+# commands or other functions. Functions are defined at the global level.
+#
+# Functions can:
+# - Execute commands
+# - Call other functions
+# - Use variables, constants, and environment variables (from global definitions)
+# - Use system environment variables
+# - Have parameters
+# - Define local variables
+#
+# Example: Simple function
+@function hello(name: str):
+    echo "Hello {{name}}!"
+
+# Example: Function with local variables
+@function setup_env(env_name: str):
+    @var LOCAL_ENV = "{{env_name}}"
+    echo "Setting up environment: {{LOCAL_ENV}}"
+    echo "App: {{APP_NAME}} v{{VERSION}}"
+
+# Example: Function calling another function
+@function build_app(target: str):
+    echo "Building for target: {{target}}"
+    setup_env(env_name="{{target}}")
+    npm run build --target={{target}}
+
+# Example: Function using commands
+@function deploy_app(version: str):
+    echo "Deploying version {{version}}"
+    # Functions can call commands
+    build(target="{{version}}")
+    echo "Deployment complete"
+
+# Example: Command using functions
+test_functions():
+    > desc: Example command using functions
+    > script: |
+        hello(name="World")
+        setup_env(env_name="test")
+        build_app(target="x86_64")
+
+# ============================================================================
 # COMMAND DEPENDENCIES
 # ============================================================================
 #
@@ -312,15 +358,15 @@ test_with_fallback():
 # Three types of includes are supported:
 #
 # 1. Specific file:
-#    include app1/nestfile
+#    @include app1/nestfile
 #    This includes a specific configuration file.
 #
 # 2. Pattern with wildcard:
-#    include app2/*.nest
+#    @include app2/*.nest
 #    This includes all files matching the pattern (e.g., all .nest files in app2/).
 #
 # 3. Directory:
-#    include app3/
+#    @include app3/
 #    This includes all configuration files (nestfile, Nestfile, nest, Nest) from the directory.
 #
 # Note: Include directives are processed before parsing, so included commands
@@ -328,9 +374,9 @@ test_with_fallback():
 # will cause an error.
 #
 # Example includes (uncomment to use):
-# include apps/common.nest
-# include modules/*.nest
-# include commands/
+# @include apps/common.nest
+# @include modules/*.nest
+# @include commands/
 
 # ============================================================================
 # BASIC COMMANDS

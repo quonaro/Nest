@@ -72,6 +72,7 @@ fn main() {
         parse_result.commands.clone(),
         parse_result.variables.clone(),
         parse_result.constants.clone(),
+        parse_result.functions.clone(),
     );
     let mut cli = match generator.build_cli() {
         Ok(cli) => cli,

@@ -4,7 +4,7 @@
 //! command structure. It handles nested commands, parameters, flags, and
 //! special cases like default subcommands.
 
-use super::ast::{Command, Directive, Parameter, Value, Variable, Constant};
+use super::ast::{Command, Directive, Parameter, Value, Variable, Constant, Function};
 use super::env::EnvironmentManager;
 use super::executor::CommandExecutor;
 use super::template::TemplateProcessor;
@@ -38,28 +38,32 @@ pub struct CliGenerator {
     variables: Vec<Variable>,
     /// The parsed constants (cannot be redefined)
     constants: Vec<Constant>,
+    /// The parsed functions (reusable scripts)
+    functions: Vec<Function>,
     /// Pre-allocated static strings for default command parameters
     default_param_ids: std::collections::HashMap<String, &'static str>,
 }
 
 impl CliGenerator {
-    /// Creates a new CLI generator from parsed commands, variables, and constants.
+    /// Creates a new CLI generator from parsed commands, variables, constants, and functions.
     ///
     /// # Arguments
     ///
     /// * `commands` - The list of commands parsed from the configuration file
     /// * `variables` - The list of variables (can be redefined)
     /// * `constants` - The list of constants (cannot be redefined)
+    /// * `functions` - The list of functions (reusable scripts)
     ///
     /// # Returns
     ///
     /// Returns a new `CliGenerator` instance ready to build CLI interfaces.
-    pub fn new(commands: Vec<Command>, variables: Vec<Variable>, constants: Vec<Constant>) -> Self {
+    pub fn new(commands: Vec<Command>, variables: Vec<Variable>, constants: Vec<Constant>, functions: Vec<Function>) -> Self {
         let default_param_ids = Self::preallocate_default_param_ids(&commands);
         Self {
             commands,
             variables,
             constants,
+            functions,
             default_param_ids,
         }
     }
@@ -472,6 +476,7 @@ impl CliGenerator {
     /// Returns `Ok(())` if all validations pass,
     /// `Err(message)` if validation fails.
     fn validate_parameters(
+        &self,
         validate_directives: &[String],
         args: &HashMap<String, String>,
         command_path: &[String],
@@ -786,8 +791,19 @@ impl CliGenerator {
         let mut current_shell_block = Vec::new();
         
         for line in lines {
-            // Try to parse as command call
-            if let Some((cmd_path, cmd_args)) = Self::parse_command_call(line) {
+            let trimmed_line = line.trim();
+            
+            // Skip empty lines
+            if trimmed_line.is_empty() {
+                // Preserve empty lines in shell blocks
+                if !current_shell_block.is_empty() {
+                    current_shell_block.push(line);
+                }
+                continue;
+            }
+            
+            // Try to parse as command or function call
+            if let Some((call_name, call_args)) = Self::parse_command_call(trimmed_line) {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
@@ -801,13 +817,36 @@ impl CliGenerator {
                     current_shell_block.clear();
                 }
                 
-                // Resolve command path
-                let resolved_path: Vec<String> = if cmd_path.contains(':') {
+                // Check if it's a function call (single name, no colons)
+                if !call_name.contains(':') {
+                    if let Some(func) = self.find_function(&call_name) {
+                        // Merge global env_vars with system env
+                        let mut merged_env = env_vars.clone();
+                        use std::env;
+                        for (key, value) in env::vars() {
+                            merged_env.insert(key, value);
+                        }
+                        
+                        self.execute_function(
+                            func,
+                            &call_args,
+                            &merged_env,
+                            cwd,
+                            command_path,
+                            dry_run,
+                            verbose,
+                        )?;
+                        continue;
+                    }
+                }
+                
+                // Try to find as command
+                let resolved_path: Vec<String> = if call_name.contains(':') {
                     // Absolute path from root (e.g., "dev:build")
-                    cmd_path.split(':').map(|s| s.trim().to_string()).collect()
+                    call_name.split(':').map(|s| s.trim().to_string()).collect()
                 } else {
                     // Relative path - resolve from current command's parent
-                    let cmd_name = cmd_path.trim().to_string();
+                    let cmd_name = call_name.trim().to_string();
                     if let Some(current_path) = command_path {
                         if current_path.is_empty() {
                             // Top-level command - dependency is also top-level
@@ -823,14 +862,13 @@ impl CliGenerator {
                     }
                 };
                 
-                // Find and execute command
                 if let Some(cmd) = self.find_command(&resolved_path) {
                     if verbose {
                         use super::output::OutputFormatter;
-                        let args_str = if cmd_args.is_empty() {
+                        let args_str = if call_args.is_empty() {
                             String::new()
                         } else {
-                            let args_display: Vec<String> = cmd_args.iter()
+                            let args_display: Vec<String> = call_args.iter()
                                 .map(|(k, v)| format!("{}=\"{}\"", k, v))
                                 .collect();
                             format!("({})", args_display.join(", "))
@@ -845,18 +883,18 @@ impl CliGenerator {
                     let mut visited = std::collections::HashSet::new();
                     self.execute_command_with_deps(
                         cmd,
-                        &cmd_args,
+                        &call_args,
                         Some(&resolved_path),
                         dry_run,
                         verbose,
                         &mut visited,
                     )?;
                 } else {
-                    // Command not found - treat as shell command
+                    // Neither command nor function found - treat as shell command
                     current_shell_block.push(line);
                 }
             } else {
-                // Not a command call - treat as shell command
+                // Not a command/function call - treat as shell command
                 current_shell_block.push(line);
             }
         }
@@ -948,6 +986,127 @@ impl CliGenerator {
         }
 
         found
+    }
+
+    /// Finds a function by its name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The function name
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(function)` if found, `None` otherwise.
+    fn find_function(&self, name: &str) -> Option<&Function> {
+        self.functions.iter().find(|f| f.name == name)
+    }
+
+    /// Executes a function with the provided arguments.
+    ///
+    /// Functions can:
+    /// - Execute commands
+    /// - Call other functions
+    /// - Use variables, constants, and environment variables
+    /// - Define local variables
+    ///
+    /// # Arguments
+    ///
+    /// * `function` - The function to execute
+    /// * `args` - Arguments to pass to the function
+    /// * `env_vars` - Environment variables (from global definitions)
+    /// * `cwd` - Optional working directory
+    /// * `command_path` - Current command path (for relative command resolution)
+    /// * `dry_run` - If true, show what would be executed without running it
+    /// * `verbose` - If true, show detailed output
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if execution succeeded,
+    /// `Err(message)` if execution failed.
+    fn execute_function(
+        &self,
+        function: &Function,
+        args: &HashMap<String, String>,
+        env_vars: &HashMap<String, String>,
+        cwd: Option<&str>,
+        command_path: Option<&[String]>,
+        dry_run: bool,
+        verbose: bool,
+    ) -> Result<(), String> {
+        if verbose {
+            use super::output::OutputFormatter;
+            let args_str = if args.is_empty() {
+                String::new()
+            } else {
+                let args_display: Vec<String> = args.iter()
+                    .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                    .collect();
+                format!("({})", args_display.join(", "))
+            };
+            OutputFormatter::info(&format!(
+                "Executing function: {}{}",
+                function.name,
+                args_str
+            ));
+        }
+
+        // Build variable map: function local > global
+        let mut var_map: HashMap<String, String> = HashMap::new();
+        
+        // Add global constants
+        for constant in &self.constants {
+            var_map.insert(constant.name.clone(), constant.value.clone());
+        }
+        
+        // Add global variables
+        for variable in &self.variables {
+            var_map.insert(variable.name.clone(), variable.value.clone());
+        }
+        
+        // Add function local variables (override global)
+        for variable in &function.local_variables {
+            var_map.insert(variable.name.clone(), variable.value.clone());
+        }
+
+        // Process function body with template substitution
+        let processed_body = {
+            let mut body = function.body.clone();
+            
+            // Replace parameter placeholders {{param}}
+            for (key, value) in args {
+                let placeholder = format!("{{{{{}}}}}", key);
+                body = body.replace(&placeholder, value);
+            }
+            
+            // Replace variable and constant placeholders {{VAR}}
+            for (key, value) in &var_map {
+                let placeholder = format!("{{{{{}}}}}", key);
+                body = body.replace(&placeholder, value);
+            }
+            
+            // Replace special variables
+            use crate::constants::{DEFAULT_USER, ENV_VAR_USER, TEMPLATE_VAR_NOW, TEMPLATE_VAR_USER};
+            use chrono::Utc;
+            use std::env;
+            body = body.replace(TEMPLATE_VAR_NOW, &Utc::now().to_rfc3339());
+            body = body.replace(
+                TEMPLATE_VAR_USER,
+                &env::var(ENV_VAR_USER).unwrap_or_else(|_| DEFAULT_USER.to_string()),
+            );
+            
+            body
+        };
+
+        // Execute function body (supports commands, functions, and shell scripts)
+        self.execute_script(
+            &processed_body,
+            env_vars,
+            cwd,
+            command_path,
+            args,
+            dry_run,
+            verbose,
+        )
     }
 
     /// Checks if a command has a default subcommand.
@@ -1113,7 +1272,7 @@ impl CliGenerator {
         // Validate parameters (if validation directives are present)
         let validate_directives = Self::get_validate_directives(&command.directives);
         if !validate_directives.is_empty() {
-            if let Err(e) = Self::validate_parameters(&validate_directives, args, command_path) {
+            if let Err(e) = self.validate_parameters(&validate_directives, args, command_path) {
                 return Err(e);
             }
         }

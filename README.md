@@ -497,6 +497,82 @@ b():
     > script: echo "B"
 ```
 
+### Functions
+
+Functions allow you to create reusable scripts that can be called from commands or other functions. Functions are defined at the global level and can:
+
+- Execute commands
+- Call other functions
+- Use variables, constants, and environment variables (from global definitions)
+- Use system environment variables
+- Have parameters
+- Define local variables
+
+**Syntax:**
+```nest
+@function function_name(param1: str, param2: bool):
+    @var LOCAL_VAR = "value"
+    echo "Function body"
+    # Can call commands, other functions, use variables, etc.
+```
+
+**Example:**
+```nest
+# Global variables
+@var APP_NAME = "myapp"
+@var VERSION = "1.0.0"
+
+# Function definition
+@function setup_env(env_name: str):
+    @var LOCAL_ENV = "{{env_name}}"
+    echo "Setting up environment: {{LOCAL_ENV}}"
+    echo "App: {{APP_NAME}} v{{VERSION}}"
+
+# Function that calls another function
+@function build_app(target: str):
+    echo "Building for target: {{target}}"
+    setup_env(env_name="{{target}}")
+    npm run build --target={{target}}
+
+# Command using functions
+build():
+    > script: |
+        setup_env(env_name="production")
+        build_app(target="x86_64")
+```
+
+**Key Points:**
+- Functions are defined at the global level (cannot be defined inside commands)
+- Functions can have parameters (same syntax as command parameters)
+- Functions can define local variables using `@var` inside the function body
+- Functions can call commands, other functions, and use variables/constants
+- Functions have access to global variables, constants, and system environment variables
+- Functions are called using the same syntax as commands: `function_name(arg="value")`
+
+**Function Parameters:**
+```nest
+@function deploy(version: str, force: bool):
+    echo "Deploying version {{version}}"
+    if [ "{{force}}" = "true" ]; then
+        echo "Force deployment enabled"
+    fi
+```
+
+**Calling Functions:**
+```nest
+deploy():
+    > script: |
+        deploy(version="1.0.0", force="true")
+        # Or call without arguments if function has defaults
+        deploy(version="1.0.0")
+```
+
+**Functions vs Commands:**
+- Functions are reusable scripts that can be called from anywhere
+- Commands are CLI entry points that can be executed directly via `nest <command>`
+- Functions cannot be executed directly - they must be called from commands or other functions
+- Functions are useful for code reuse and modularity
+
 ### Before, After, and Fallback Scripts
 
 You can define scripts that run before, after, or as a fallback for the main script:
@@ -566,6 +642,7 @@ See `nestfile.example` for a complete working example with:
 
 ### Currently Implemented
 
+✅ **Functions** - Reusable scripts with parameters and local variables
 ✅ **Command Structure**
 - Top-level commands
 - Nested subcommands

@@ -101,6 +101,26 @@ pub struct Constant {
     pub value: String,
 }
 
+/// Represents a function that can be reused in scripts.
+///
+/// Functions are defined at the global level and can:
+/// - Execute commands
+/// - Call other functions
+/// - Use variables, constants, and environment variables
+/// - Have parameters
+/// - Define local variables
+#[derive(Debug, Clone)]
+pub struct Function {
+    /// The function name
+    pub name: String,
+    /// List of parameters this function accepts
+    pub parameters: Vec<Parameter>,
+    /// The function body (script content)
+    pub body: String,
+    /// Local variables for this function
+    pub local_variables: Vec<Variable>,
+}
+
 /// Represents a command in the configuration file.
 ///
 /// Commands can have:

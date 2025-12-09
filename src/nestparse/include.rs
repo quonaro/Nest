@@ -1,6 +1,6 @@
 //! Include directive processing for Nestfile.
 //!
-//! This module handles the `include` directive which allows including
+//! This module handles the `@include` directive which allows including
 //! commands from other files or directories.
 
 use super::file::read_file_unchecked;
@@ -35,7 +35,7 @@ impl std::fmt::Display for IncludeError {
 /// Processes include directives in the content and returns merged content.
 ///
 /// This function:
-/// 1. Finds all `include` directives in the content
+/// 1. Finds all `@include` directives in the content
 /// 2. Resolves paths relative to the base file
 /// 3. Loads and merges content from included files
 /// 4. Returns the merged content with includes replaced
@@ -84,8 +84,8 @@ pub fn process_includes(
         }
         
         // Check if this is an include directive
-        if trimmed.starts_with("include ") {
-            let include_path_str = trimmed[8..].trim(); // Skip "include "
+        if trimmed.starts_with("@include ") {
+            let include_path_str = trimmed[9..].trim(); // Skip "@include "
             
             if include_path_str.is_empty() {
                 return Err(IncludeError::InvalidPath("Empty include path".to_string()));
@@ -119,9 +119,9 @@ pub fn process_includes(
 /// Resolves an include path and loads the content.
 ///
 /// Handles three types of includes:
-/// 1. Specific file: `include app1/nestfile`
-/// 2. Pattern with wildcard: `include app2/*.nest`
-/// 3. Directory: `include app3/`
+/// 1. Specific file: `@include app1/nestfile`
+/// 2. Pattern with wildcard: `@include app2/*.nest`
+/// 3. Directory: `@include app3/`
 ///
 /// # Arguments
 ///

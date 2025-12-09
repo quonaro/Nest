@@ -4,7 +4,7 @@
 //! It handles nested commands, parameters, directives, and multiline constructs.
 
 use crate::constants::{BOOL_FALSE, BOOL_TRUE, INDENT_SIZE};
-use super::ast::{Command, Parameter, Value, Directive, Variable, Constant, Dependency};
+use super::ast::{Command, Parameter, Value, Directive, Variable, Constant, Dependency, Function};
 use std::collections::HashMap;
 
 /// Parser state for processing Nestfile content.
@@ -39,6 +39,8 @@ pub struct ParseResult {
     pub variables: Vec<Variable>,
     /// List of parsed constants (cannot be redefined)
     pub constants: Vec<Constant>,
+    /// List of parsed functions (reusable scripts)
+    pub functions: Vec<Function>,
 }
 
 impl Parser {
@@ -85,6 +87,7 @@ impl Parser {
         let mut commands = Vec::new();
         let mut variables = Vec::new();
         let mut constants = Vec::new();
+        let mut functions = Vec::new();
         let mut constant_names = std::collections::HashSet::new();
         
         while self.current_index < self.lines.len() {
@@ -116,6 +119,10 @@ impl Parser {
                 constant_names.insert(const_def.name.clone());
                 constants.push(const_def);
                 continue;
+            } else if trimmed.starts_with("@function ") {
+                let func = self.parse_function()?;
+                functions.push(func);
+                continue;
             }
             
             // Check if it's a command definition (ends with : or contains opening parenthesis but not closing)
@@ -135,6 +142,7 @@ impl Parser {
             commands,
             variables,
             constants,
+            functions,
         })
     }
 
@@ -631,6 +639,101 @@ impl Parser {
                 self.current_line_number()
             ))
         }
+    }
+
+    fn parse_function(&mut self) -> Result<Function, ParseError> {
+        if self.current_index >= self.lines.len() {
+            return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
+        }
+
+        let line = &self.lines[self.current_index];
+        let indent = get_indent_size(line);
+        let trimmed = line.trim();
+        
+        // Format: @function name(params):
+        // Extract function name and parameters from "@function name(params):"
+        let func_part = trimmed.strip_prefix("@function ").unwrap_or("").trim();
+        
+        // Parse function signature manually
+        let (name, parameters) = if func_part.contains('(') {
+            // Has parameters
+            let open_paren = func_part.find('(').unwrap();
+            let name = func_part[..open_paren].trim().to_string();
+            
+            // Find closing parenthesis
+            if let Some(close_paren) = func_part.rfind(')') {
+                let params_str = &func_part[open_paren + 1..close_paren];
+                let parameters = if params_str.trim().is_empty() {
+                    Vec::new()
+                } else {
+                    self.parse_parameters(params_str, self.current_line_number())?
+                };
+                self.current_index += 1;
+                (name, parameters)
+            } else {
+                return Err(ParseError::InvalidSyntax(
+                    "Missing closing parenthesis in function signature".to_string(),
+                    self.current_line_number()
+                ));
+            }
+        } else {
+            // No parameters
+            let name = if func_part.ends_with(':') {
+                func_part[..func_part.len() - 1].trim().to_string()
+            } else {
+                func_part.to_string()
+            };
+            self.current_index += 1;
+            (name, Vec::new())
+        };
+        
+        // Parse function body (similar to command parsing)
+        let mut body_lines = Vec::new();
+        let mut local_variables = Vec::new();
+        
+        while self.current_index < self.lines.len() {
+            let next_line = self.lines[self.current_index].clone();
+            let next_indent = get_indent_size(&next_line);
+            let next_trimmed = next_line.trim();
+            
+            // If indent is less or equal, we're done with this function
+            if next_indent <= indent && !next_trimmed.is_empty() {
+                break;
+            }
+            
+            // Skip empty lines and comments
+            if next_trimmed.is_empty() || next_trimmed.starts_with('#') {
+                self.current_index += 1;
+                continue;
+            }
+            
+            // Check for local variable definition
+            if next_trimmed.starts_with("@var ") {
+                let var = self.parse_variable()?;
+                local_variables.retain(|v: &Variable| v.name != var.name);
+                local_variables.push(var);
+                continue;
+            }
+            
+            // Everything else is part of the function body
+            // Remove indentation from the line
+            let body_line = if next_indent > indent {
+                &next_line[indent as usize..]
+            } else {
+                &next_line
+            };
+            body_lines.push(body_line.to_string());
+            self.current_index += 1;
+        }
+        
+        let body = body_lines.join("\n");
+        
+        Ok(Function {
+            name,
+            parameters,
+            body,
+            local_variables,
+        })
     }
 
     fn parse_multiline_block(&mut self, base_indent: u8) -> Result<String, ParseError> {
