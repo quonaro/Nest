@@ -19,9 +19,10 @@
               <li><code>ast</code> - {{ $t('reference.cliReference.ast') }}</li>
             </ul>
           </li>
-          <li><code>--dry-run</code> - {{ $t('reference.cliReference.dryRun') }}</li>
-          <li><code>--verbose</code> - {{ $t('reference.cliReference.verbose') }}</li>
+          <li><code>--dry-run</code>, <code>-n</code> - {{ $t('reference.cliReference.dryRun') }}</li>
+          <li><code>--verbose</code>, <code>-v</code> - {{ $t('reference.cliReference.verbose') }}</li>
           <li><code>--example</code> - {{ $t('reference.cliReference.example') }}</li>
+          <li><code>--config</code>, <code>-c &lt;path&gt;</code> - {{ $t('reference.cliReference.config') }}</li>
           <li><code>update</code> - {{ $t('reference.cliReference.update') }}</li>
         </ul>
 
@@ -37,6 +38,8 @@ $ nest &lt;command&gt; positional_arg --named-arg value</code></pre>
         <pre v-pre><code>$ nest --help
 $ nest &lt;command&gt; --help
 $ nest &lt;command&gt; &lt;subcommand&gt; --help</code></pre>
+
+        <p><em>{{ $t('reference.cliReference.configNote') }}</em></p>
       </section>
 
       <section id="configuration">
@@ -63,13 +66,63 @@ $ nest &lt;command&gt; &lt;subcommand&gt; --help</code></pre>
           <li><code>> cwd: &lt;path&gt;</code> - {{ $t('reference.configuration.cwdDirective') }}</li>
           <li><code>> env: &lt;VAR=value&gt;</code> - {{ $t('reference.configuration.envDirective') }}</li>
           <li><code>> env: &lt;.env.file&gt;</code> - {{ $t('reference.configuration.envFileDirective') }}</li>
+          <li><code>> env: ${VAR:-default}</code> - {{ $t('reference.configuration.envSystemDirective') }}</li>
           <li><code>> script: &lt;command&gt;</code> - {{ $t('reference.configuration.scriptDirective') }}</li>
           <li><code>> script: |</code> - {{ $t('reference.configuration.scriptMultiDirective') }}</li>
+          <li><code>> before:</code> - {{ $t('reference.configuration.beforeDirective') }}</li>
+          <li><code>> after:</code> - {{ $t('reference.configuration.afterDirective') }}</li>
+          <li><code>> fallback:</code> - {{ $t('reference.configuration.fallbackDirective') }}</li>
+          <li><code>> depends:</code> - {{ $t('reference.configuration.dependsDirective') }}</li>
+          <li><code>> validate:</code> - {{ $t('reference.configuration.validateDirective') }}</li>
+          <li><code>> if: / > elif: / > else:</code> - {{ $t('reference.configuration.ifDirective') }}</li>
+          <li><code>> logs:json &lt;path&gt; / > logs:txt &lt;path&gt;</code> - {{ $t('reference.configuration.logsDirective') }}</li>
           <li><code>> privileged: true</code> {{ $t('reference.configuration.privilegedOr') }} <code>> privileged</code> - {{ $t('reference.configuration.privilegedDirective') }}</li>
         </ul>
 
         <h3>{{ $t('reference.configuration.fileLocation') }}</h3>
         <p>{{ $t('reference.configuration.fileLocationDesc') }}</p>
+
+        <h3>{{ $t('reference.examples.withDependencies') }}</h3>
+        <pre v-pre><code>clean():
+    > desc: Clean build artifacts
+    > script: rm -rf build/
+
+build():
+    > desc: Build the project
+    > depends: clean
+    > script: npm run build
+
+deploy():
+    > desc: Deploy application
+    > depends: build, test
+    > script: npm run deploy</code></pre>
+
+        <h3>{{ $t('reference.examples.withConditional') }}</h3>
+        <pre v-pre><code>deploy(env: str):
+    > desc: Deploy to different environments
+    > if: env == "production"
+    > script: |
+        echo "Deploying to PRODUCTION..."
+    > elif: env == "staging"
+    > script: |
+        echo "Deploying to STAGING..."
+    > else:
+    > script: |
+        echo "Deploying to development..."</code></pre>
+
+        <h3>{{ $t('reference.examples.withValidation') }}</h3>
+        <pre v-pre><code>deploy(version: str):
+    > desc: Deploy with version validation
+    > validate: version matches /^v?\d+\.\d+\.\d+$/
+    > script: |
+        echo "Deploying {{version}}"</code></pre>
+
+        <h3>{{ $t('reference.examples.withLogging') }}</h3>
+        <pre v-pre><code>deploy(version: str):
+    > desc: Deploy with JSON logging
+    > logs:json ./logs/deploy-{{version}}.json
+    > script: |
+        echo "Deploying {{version}}"</code></pre>
       </section>
 
       <section id="examples">

@@ -43,6 +43,7 @@ sudo cp target/release/nest /usr/local/bin/</code></pre>
         
         <h3>1. {{ $t('gettingStarted.createNestfile') }}</h3>
         <p>{{ $t('gettingStarted.createNestfileDesc') }}</p>
+        <p>Или используйте команду <code>nest --example</code> для загрузки примеров из GitHub.</p>
         <pre v-pre><code>greet(name: str, message: str):
     > desc: Greet someone with a message
     > script: echo "Hello {{name}}, {{message}}!"</code></pre>
@@ -69,12 +70,21 @@ $ nest greet --help</code></pre>
           <li>✅ <strong>{{ $t('gettingStarted.featureExecution') }}</strong></li>
         </ul>
 
-        <h3>{{ $t('gettingStarted.futurePlans') }}</h3>
+        <h3>{{ $t('gettingStarted.currentlyImplemented') }} (полный список)</h3>
         <ul>
-          <li>❌ {{ $t('gettingStarted.futureFunctions') }}</li>
-          <li>❌ {{ $t('gettingStarted.futureLifecycle') }}</li>
-          <li>❌ {{ $t('gettingStarted.futureDependencies') }}</li>
-          <li>❌ {{ $t('gettingStarted.futureFunctionCalls') }}</li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureCommandStructure') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureParameters') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureDirectives') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureTemplateProcessing') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureCLIFeatures') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureExecution') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureVariables') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureFunctions') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureDependencies') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureConditional') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureInclude') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureValidation') }}</strong></li>
+          <li>✅ <strong>{{ $t('gettingStarted.featureLogging') }}</strong></li>
         </ul>
       </section>
     </div>

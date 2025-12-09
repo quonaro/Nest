@@ -24,7 +24,6 @@ export default {
       concepts: 'Concepts',
       projects: 'Projects',
       commands: 'Commands',
-      templates: 'Templates',
       reference: 'Reference',
       cliReference: 'CLI Reference',
       configuration: 'Configuration'

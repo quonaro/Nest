@@ -175,6 +175,18 @@ $ nest git-commit -am "Quick fix"</code></pre>
     > env: .env.local
     > env: NODE_ENV=development
     > script: node dev-server.js</code></pre>
+
+        <h4>{{ $t('guides.directives.envSystemTitle') }}</h4>
+        <p>{{ $t('guides.directives.envSystem') }}</p>
+        <pre v-pre><code>build():
+    > desc: Build with system environment variables
+    > env: NODE_ENV=${NODE_ENV:-development}
+    > env: BUILD_NUMBER=${CI_BUILD_NUMBER:-local}
+    > script: |
+        echo "Building in $NODE_ENV mode"
+        echo "Build number: $BUILD_NUMBER"
+        npm run build</code></pre>
+        <p><em>{{ $t('guides.directives.envSystemExample') }}</em></p>
         <p><em>{{ $t('guides.directives.envMultiple') }}</em></p>
 
         <h3>{{ $t('guides.directives.scriptTitle') }}</h3>
@@ -213,6 +225,86 @@ $ nest git-commit -am "Quick fix"</code></pre>
         apt-get update
         apt-get install -y curl wget</code></pre>
         <p><em>{{ $t('guides.directives.privilegedNote') }}</em></p>
+
+        <h3>{{ $t('guides.directives.beforeTitle') }}</h3>
+        <p>{{ $t('guides.directives.beforeDirective') }}</p>
+        <pre v-pre><code>deploy():
+    > desc: Deploy with before script
+    > before: |
+        echo "Preparing deployment..."
+        ./pre-deploy.sh
+    > script: |
+        echo "Deploying..."
+        ./deploy.sh</code></pre>
+
+        <h3>{{ $t('guides.directives.afterTitle') }}</h3>
+        <p>{{ $t('guides.directives.afterDirective') }}</p>
+        <pre v-pre><code>deploy():
+    > desc: Deploy with after script
+    > script: |
+        echo "Deploying..."
+        ./deploy.sh
+    > after: |
+        echo "Deployment completed!"
+        ./post-deploy.sh</code></pre>
+
+        <h3>{{ $t('guides.directives.fallbackTitle') }}</h3>
+        <p>{{ $t('guides.directives.fallbackDirective') }}</p>
+        <pre v-pre><code>deploy():
+    > desc: Deploy with error handling
+    > script: |
+        echo "Deploying..."
+        ./deploy.sh
+    > fallback: |
+        echo "Deployment failed, rolling back..."
+        ./rollback.sh</code></pre>
+
+        <h3>{{ $t('guides.directives.dependsTitle') }}</h3>
+        <p>{{ $t('guides.directives.dependsDirective') }}</p>
+        <pre v-pre><code>build():
+    > desc: Build project
+    > depends: clean
+    > script: npm run build
+
+deploy():
+    > desc: Deploy application
+    > depends: build, test
+    > script: npm run deploy</code></pre>
+
+        <h3>{{ $t('guides.directives.validateTitle') }}</h3>
+        <p>{{ $t('guides.directives.validateDirective') }}</p>
+        <pre v-pre><code>deploy(version: str):
+    > desc: Deploy with validation
+    > validate: version matches /^v?\d+\.\d+\.\d+$/
+    > script: |
+        echo "Deploying {{version}}"</code></pre>
+
+        <h3>{{ $t('guides.directives.ifTitle') }}</h3>
+        <p>{{ $t('guides.directives.ifDirective') }}</p>
+        <pre v-pre><code>deploy(env: str):
+    > desc: Deploy to different environments
+    > if: env == "production"
+    > script: |
+        echo "Deploying to PRODUCTION..."
+    > elif: env == "staging"
+    > script: |
+        echo "Deploying to STAGING..."
+    > else:
+    > script: |
+        echo "Deploying to development..."</code></pre>
+
+        <h3>{{ $t('guides.directives.logsTitle') }}</h3>
+        <p>{{ $t('guides.directives.logsDirective') }}</p>
+        <pre v-pre><code>deploy(version: str):
+    > desc: Deploy with JSON logging
+    > logs:json ./logs/deploy-{{version}}.json
+    > script: |
+        echo "Deploying {{version}}"
+
+build():
+    > desc: Build with text logging
+    > logs:txt ./logs/build.log
+    > script: npm run build</code></pre>
       </section>
 
       <section id="nested-commands">
@@ -339,6 +431,394 @@ $ nest docker-build --pull --build-arg KEY=value</code></pre>
     > desc: Complex command with multiline parameters
     > script: |
         ./process.sh {{input}} {{output}}</code></pre>
+      </section>
+
+      <section id="variables">
+        <h2>{{ $t('guides.variables.title') }}</h2>
+        <p>{{ $t('guides.variables.desc') }}</p>
+
+        <h3>{{ $t('guides.variables.globalTitle') }}</h3>
+        <p>{{ $t('guides.variables.globalDesc') }}</p>
+        <pre v-pre><code># Global variables and constants
+@var APP_NAME = "myapp"
+@var VERSION = "1.0.0"
+@const COMPANY_NAME = "My Company"
+
+# Variables can be redefined (last definition wins)
+@var APP_NAME = "production-app"  # Overrides previous definition</code></pre>
+
+        <h4>{{ $t('guides.variables.varSyntax') }}</h4>
+        <p>{{ $t('guides.variables.varDesc') }}</p>
+        <pre v-pre><code>@var APP_NAME = "myapp"
+@var NODE_ENV = "development"
+@var APP_NAME = "production-app"  # OK: Variables can be redefined</code></pre>
+
+        <h4>{{ $t('guides.variables.constSyntax') }}</h4>
+        <p>{{ $t('guides.variables.constDesc') }}</p>
+        <pre v-pre><code>@const COMPANY_NAME = "My Company"
+@const API_URL = "https://api.example.com"
+# @const COMPANY_NAME = "Other"  # ERROR: Constants cannot be redefined</code></pre>
+
+        <h3>{{ $t('guides.variables.localTitle') }}</h3>
+        <p>{{ $t('guides.variables.localDesc') }}</p>
+        <pre v-pre><code># Global variables
+@var APP_NAME = "global-app"
+@var NODE_ENV = "development"
+
+# Command with local variables
+build():
+    # Local variable overrides global for this command only
+    @var APP_NAME = "local-app"
+    @var BUILD_DIR = "./build"
+    > script: |
+        echo "Building {{APP_NAME}} in {{BUILD_DIR}}"
+        # APP_NAME = "local-app" (not "global-app")</code></pre>
+
+        <h3>{{ $t('guides.variables.priority') }}</h3>
+        <p>{{ $t('guides.variables.priorityDesc') }}</p>
+        <ol>
+          <li>{{ $t('guides.variables.priority1') }}</li>
+          <li>{{ $t('guides.variables.priority2') }}</li>
+          <li>{{ $t('guides.variables.priority3') }}</li>
+          <li>{{ $t('guides.variables.priority4') }}</li>
+          <li>{{ $t('guides.variables.priority5') }}</li>
+          <li>{{ $t('guides.variables.priority6') }}</li>
+        </ol>
+
+        <h3>{{ $t('guides.variables.scope') }}</h3>
+        <ul>
+          <li>{{ $t('guides.variables.scopeGlobal') }}</li>
+          <li>{{ $t('guides.variables.scopeLocal') }}</li>
+          <li>{{ $t('guides.variables.scopeLocalOverride') }}</li>
+        </ul>
+      </section>
+
+      <section id="functions">
+        <h2>{{ $t('guides.functions.title') }}</h2>
+        <p>{{ $t('guides.functions.desc') }}</p>
+
+        <h3>{{ $t('guides.functions.syntax') }}</h3>
+        <p>{{ $t('guides.functions.syntaxDesc') }}</p>
+        <pre v-pre><code>@function function_name(param1: str, param2: bool):
+    @var LOCAL_VAR = "value"
+    echo "Function body"
+    # Can call commands, other functions, use variables, etc.</code></pre>
+
+        <h3>{{ $t('guides.functions.features') }}</h3>
+        <ul>
+          <li>{{ $t('guides.functions.feature1') }}</li>
+          <li>{{ $t('guides.functions.feature2') }}</li>
+          <li>{{ $t('guides.functions.feature3') }}</li>
+          <li>{{ $t('guides.functions.feature4') }}</li>
+          <li>{{ $t('guides.functions.feature5') }}</li>
+        </ul>
+
+        <h3>{{ $t('guides.functions.example') }}</h3>
+        <pre v-pre><code># Global variables
+@var APP_NAME = "myapp"
+@var VERSION = "1.0.0"
+
+# Function definition
+@function setup_env(env_name: str):
+    @var LOCAL_ENV = "{{env_name}}"
+    echo "Setting up environment: {{LOCAL_ENV}}"
+    echo "App: {{APP_NAME}} v{{VERSION}}"
+
+# Function that calls another function
+@function build_app(target: str):
+    echo "Building for target: {{target}}"
+    setup_env(env_name="{{target}}")
+    npm run build --target={{target}}
+
+# Command using functions
+build():
+    > script: |
+        setup_env(env_name="production")
+        build_app(target="x86_64")</code></pre>
+
+        <h3>{{ $t('guides.functions.calling') }}</h3>
+        <p>{{ $t('guides.functions.callingDesc') }}</p>
+        <pre v-pre><code>deploy():
+    > script: |
+        deploy(version="1.0.0", force="true")
+        # Or call without arguments if function has defaults
+        deploy(version="1.0.0")</code></pre>
+
+        <h3>{{ $t('guides.functions.vsCommands') }}</h3>
+        <ul>
+          <li>{{ $t('guides.functions.vs1') }}</li>
+          <li>{{ $t('guides.functions.vs2') }}</li>
+          <li>{{ $t('guides.functions.vs3') }}</li>
+        </ul>
+      </section>
+
+      <section id="dependencies">
+        <h2>{{ $t('guides.dependencies.title') }}</h2>
+        <p>{{ $t('guides.dependencies.desc') }}</p>
+
+        <h3>{{ $t('guides.dependencies.syntax') }}</h3>
+        <p>{{ $t('guides.dependencies.syntaxDesc') }}</p>
+        <pre v-pre><code>clean():
+    > desc: Clean build artifacts
+    > script: rm -rf build/
+
+build():
+    > desc: Build the project
+    > depends: clean
+    > script: npm run build</code></pre>
+
+        <h3>{{ $t('guides.dependencies.multiple') }}</h3>
+        <p>{{ $t('guides.dependencies.multipleDesc') }}</p>
+        <pre v-pre><code>deploy():
+    > desc: Deploy application
+    > depends: build, test
+    > script: npm run deploy</code></pre>
+
+        <h3>{{ $t('guides.dependencies.executionOrder') }}</h3>
+        <p>{{ $t('guides.dependencies.orderDesc') }}</p>
+        <pre v-pre><code>$ nest deploy
+# Executes: clean -> build -> test -> deploy</code></pre>
+
+        <h3>{{ $t('guides.dependencies.recursive') }}</h3>
+        <p>{{ $t('guides.dependencies.recursiveDesc') }}</p>
+        <pre v-pre><code>test():
+    > depends: build  # test depends on build
+    > script: npm test
+
+deploy():
+    > depends: test   # deploy depends on test (which depends on build)
+    > script: npm run deploy</code></pre>
+
+        <h3>{{ $t('guides.dependencies.paths') }}</h3>
+        <ul>
+          <li><strong>{{ $t('guides.dependencies.relative') }}</strong></li>
+          <li><strong>{{ $t('guides.dependencies.absolute') }}</strong></li>
+        </ul>
+
+        <h3>{{ $t('guides.dependencies.withArgs') }}</h3>
+        <p>{{ $t('guides.dependencies.withArgsDesc') }}</p>
+        <pre v-pre><code>build_custom(!target|t: str = "x86_64", !release|r: bool = false):
+    > desc: Build with target and release options
+    > script: echo "Building for {{target}} (release={{release}})..."
+
+deploy_with_args():
+    > desc: Deploy with specific build configuration
+    > depends: build_custom(target="arm64", release=true), test_custom(coverage=true)
+    > script: |
+        echo "Deploying with custom build configuration..."</code></pre>
+
+        <h3>{{ $t('guides.dependencies.circular') }}</h3>
+        <p>{{ $t('guides.dependencies.circularDesc') }}</p>
+        <pre v-pre><code>a():
+    > depends: b
+    > script: echo "A"
+
+b():
+    > depends: a  # ERROR: Circular dependency detected
+    > script: echo "B"</code></pre>
+      </section>
+
+      <section id="before-after-fallback">
+        <h2>{{ $t('guides.beforeAfterFallback.title') }}</h2>
+        <p>{{ $t('guides.beforeAfterFallback.desc') }}</p>
+
+        <h3>{{ $t('guides.beforeAfterFallback.executionOrder') }}</h3>
+        <ol>
+          <li>{{ $t('guides.beforeAfterFallback.order1') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.order2') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.order3') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.order4') }}</li>
+        </ol>
+
+        <h3>{{ $t('guides.beforeAfterFallback.keyPoints') }}</h3>
+        <ul>
+          <li>{{ $t('guides.beforeAfterFallback.point1') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.point2') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.point3') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.point4') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.point5') }}</li>
+        </ul>
+
+        <h3>{{ $t('guides.beforeAfterFallback.example') }}</h3>
+        <pre v-pre><code>deploy():
+    > desc: Deploy with before/after hooks and error handling
+    > before: |
+        echo "Setting up deployment environment..."
+        # Pre-deployment checks
+    > script: |
+        echo "Deploying application..."
+        # Main deployment logic
+        # If this fails, fallback will execute
+    > after: |
+        echo "Deployment completed successfully"
+        # Post-deployment tasks (only if main script succeeds)
+    > fallback: |
+        echo "Deployment failed, rolling back..."
+        # Error handling (only if main script fails)
+        # This replaces the error output</code></pre>
+      </section>
+
+      <section id="include">
+        <h2>{{ $t('guides.include.title') }}</h2>
+        <p>{{ $t('guides.include.desc') }}</p>
+
+        <h3>{{ $t('guides.include.syntax') }}</h3>
+        <ul>
+          <li>{{ $t('guides.include.type1') }}</li>
+          <li>{{ $t('guides.include.type2') }}</li>
+          <li>{{ $t('guides.include.type3') }}</li>
+        </ul>
+
+        <h3>{{ $t('guides.include.keyPoints') }}</h3>
+        <ul>
+          <li>{{ $t('guides.include.point1') }}</li>
+          <li>{{ $t('guides.include.point2') }}</li>
+          <li>{{ $t('guides.include.point3') }}</li>
+          <li>{{ $t('guides.include.point4') }}</li>
+          <li>{{ $t('guides.include.point5') }}</li>
+        </ul>
+
+        <h3>{{ $t('guides.include.example') }}</h3>
+        <pre v-pre><code># Main nestfile
+@var APP_NAME = "myapp"
+
+@include docker.nest
+@include database.nest
+
+# Commands from included files are now available
+# nest docker build
+# nest database migrate</code></pre>
+      </section>
+
+      <section id="conditional">
+        <h2>{{ $t('guides.conditional.title') }}</h2>
+        <p>{{ $t('guides.conditional.desc') }}</p>
+
+        <h3>{{ $t('guides.conditional.syntax') }}</h3>
+        <pre v-pre><code>deploy(env: str):
+    > desc: Deploy to different environments
+    > if: env == "production"
+    > script: |
+        echo "Deploying to PRODUCTION..."
+    > elif: env == "staging"
+    > script: |
+        echo "Deploying to STAGING..."
+    > else:
+    > script: |
+        echo "Deploying to development..."</code></pre>
+
+        <h3>{{ $t('guides.conditional.operators') }}</h3>
+        <ul>
+          <li><strong>{{ $t('guides.conditional.comparison') }}</strong></li>
+          <li><strong>{{ $t('guides.conditional.logical') }}</strong></li>
+        </ul>
+
+        <h3>{{ $t('guides.conditional.conditionTypes') }}</h3>
+        <ul>
+          <li>{{ $t('guides.conditional.string') }}</li>
+          <li>{{ $t('guides.conditional.numeric') }}</li>
+          <li>{{ $t('guides.conditional.boolean') }}</li>
+          <li>{{ $t('guides.conditional.complex') }}</li>
+        </ul>
+
+        <h3>{{ $t('guides.conditional.example') }}</h3>
+        <pre v-pre><code>build(!target|t: str = "x86_64", !release|r: bool = false):
+    > desc: Build with conditional logic
+    > if: target == "x86_64" && release == "true"
+    > script: |
+        echo "Building optimized x86_64 release..."
+        cargo build --release
+    > elif: target == "arm64" || target == "aarch64"
+    > script: |
+        echo "Building for ARM64..."
+        cargo build --target aarch64
+    > else:
+    > script: |
+        echo "Building default..."
+        cargo build</code></pre>
+
+        <h3>{{ $t('guides.conditional.keyPoints') }}</h3>
+        <ul>
+          <li>{{ $t('guides.conditional.point1') }}</li>
+          <li>{{ $t('guides.conditional.point2') }}</li>
+          <li>{{ $t('guides.conditional.point3') }}</li>
+          <li>{{ $t('guides.conditional.point4') }}</li>
+        </ul>
+      </section>
+
+      <section id="validation">
+        <h2>{{ $t('guides.validation.title') }}</h2>
+        <p>{{ $t('guides.validation.desc') }}</p>
+
+        <h3>{{ $t('guides.validation.syntax') }}</h3>
+        <pre v-pre><code>deploy(version: str):
+    > desc: Deploy with version validation
+    > validate: version matches /^v?\d+\.\d+\.\d+$/
+    > script: |
+        echo "Deploying {{version}}"
+
+register(email: str, username: str):
+    > desc: Register user with validation
+    > validate: email matches /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+    > validate: username matches /^[a-zA-Z0-9_]{3,20}$/
+    > script: |
+        echo "Registering {{username}} with {{email}}"</code></pre>
+
+        <h3>{{ $t('guides.validation.features') }}</h3>
+        <ul>
+          <li>{{ $t('guides.validation.feature1') }}</li>
+          <li>{{ $t('guides.validation.feature2') }}</li>
+          <li>{{ $t('guides.validation.feature3') }}</li>
+          <li>{{ $t('guides.validation.feature4') }}</li>
+        </ul>
+      </section>
+
+      <section id="logging">
+        <h2>{{ $t('guides.logging.title') }}</h2>
+        <p>{{ $t('guides.logging.desc') }}</p>
+
+        <h3>{{ $t('guides.logging.formats') }}</h3>
+        <ul>
+          <li><strong>{{ $t('guides.logging.json') }}</strong></li>
+          <li><strong>{{ $t('guides.logging.txt') }}</strong></li>
+        </ul>
+
+        <h3>{{ $t('guides.logging.contents') }}</h3>
+        <ul>
+          <li>{{ $t('guides.logging.content1') }}</li>
+          <li>{{ $t('guides.logging.content2') }}</li>
+          <li>{{ $t('guides.logging.content3') }}</li>
+          <li>{{ $t('guides.logging.content4') }}</li>
+          <li>{{ $t('guides.logging.content5') }}</li>
+        </ul>
+
+        <h3>{{ $t('guides.logging.templates') }}</h3>
+        <p>{{ $t('guides.logging.templatesDesc') }}</p>
+        <pre v-pre><code>deploy_logged(env: str):
+    > desc: Deploy with logging using template variables
+    > logs:json ./logs/{{env}}/deploy-{{now}}.json
+    > script: |
+        echo "Deploying to {{env}}"</code></pre>
+
+        <h3>{{ $t('guides.logging.keyPoints') }}</h3>
+        <ul>
+          <li>{{ $t('guides.logging.point1') }}</li>
+          <li>{{ $t('guides.logging.point2') }}</li>
+          <li>{{ $t('guides.logging.point3') }}</li>
+          <li>{{ $t('guides.logging.point4') }}</li>
+        </ul>
+
+        <h3>{{ $t('guides.logging.example') }}</h3>
+        <pre v-pre><code>deploy(version: str):
+    > desc: Deploy with JSON logging
+    > logs:json ./logs/deploy-{{version}}.json
+    > script: |
+        echo "Deploying {{version}}"
+
+build():
+    > desc: Build with text logging
+    > logs:txt ./logs/build.log
+    > script: npm run build</code></pre>
       </section>
     </div>
   </Layout>
