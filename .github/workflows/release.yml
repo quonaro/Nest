@@ -54,7 +54,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install cross-compilation tools (Linux aarch64)
-        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
+        if: matrix.platform_name == 'linux' && matrix.arch == 'aarch64'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
@@ -73,7 +73,7 @@ jobs:
             ${{ runner.os }}-cargo-${{ matrix.target }}-
 
       - name: Configure linker for aarch64
-        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
+        if: matrix.platform_name == 'linux' && matrix.arch == 'aarch64'
         run: |
           mkdir -p .cargo
           cat >> .cargo/config.toml <<EOF
@@ -92,7 +92,7 @@ jobs:
             echo "Error: Binary not found at $BINARY_PATH"
             exit 1
           fi
-          if [ "${{ matrix.arch }}" == "aarch64" ] && [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+          if [ "${{ matrix.arch }}" == "aarch64" ] && [ "${{ matrix.platform_name }}" == "linux" ]; then
             aarch64-linux-gnu-strip "$BINARY_PATH"
           else
             strip "$BINARY_PATH"
@@ -307,9 +307,64 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+  package_examples:
+    name: Package Examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify examples directory exists
+        run: |
+          if [ ! -d "examples" ]; then
+            echo "Error: examples directory not found"
+            exit 1
+          fi
+          echo "Examples directory found"
+          ls -la examples/
+
+      - name: Create examples archive
+        run: |
+          ARCHIVE_NAME="examples.tar.gz"
+          CHECKSUM_NAME="${ARCHIVE_NAME}.sha256"
+          
+          echo "=== Creating examples archive ==="
+          
+          # Create archive
+          tar czf "${ARCHIVE_NAME}" examples/
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to create archive"
+            exit 1
+          fi
+          
+          echo "Archive created successfully, size: $(ls -lh "${ARCHIVE_NAME}" | awk '{print $5}')"
+          
+          # Create checksum
+          sha256sum ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
+          
+          if [ ! -f "${CHECKSUM_NAME}" ]; then
+            echo "Error: Checksum not created"
+            exit 1
+          fi
+          
+          echo "=== Archive and checksum created successfully ==="
+          ls -lh ${ARCHIVE_NAME} ${CHECKSUM_NAME}
+          echo "Checksum content:"
+          cat ${CHECKSUM_NAME}
+
+      - name: Upload examples artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: examples
+          path: |
+            examples.tar.gz
+            examples.tar.gz.sha256
+          retention-days: 30
+          if-no-files-found: error
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, package_examples]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
@@ -331,6 +386,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+
+      - name: Download examples artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: examples
+          path: examples-artifact
 
       - name: List downloaded artifacts
         run: |
@@ -362,8 +423,16 @@ jobs:
         run: |
           mkdir -p release-files
           
-          # Copy all archives and checksums to release-files directory
+          # Copy all binaries archives and checksums to release-files directory
           find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec cp {} release-files/ \;
+          
+          # Copy examples archive and checksum
+          if [ -d "examples-artifact" ]; then
+            find examples-artifact -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec cp {} release-files/ \;
+            echo "Examples archive added to release files"
+          else
+            echo "Warning: examples-artifact directory not found"
+          fi
           
           echo "=== Release files prepared ==="
           ls -lh release-files/
@@ -409,6 +478,9 @@ jobs:
 
             Pre-built binaries for all platforms are available below.
 
+            **Examples:**
+            Download `examples.tar.gz` to get the complete examples folder with all configuration examples.
+
             ### Checksums
 
             All files include SHA256 checksums for verification.
@@ -422,5 +494,5 @@ jobs:
       - name: Cleanup artifacts
         if: always()
         run: |
-          rm -rf artifacts/ release-files/
+          rm -rf artifacts/ examples-artifact/ release-files/
 

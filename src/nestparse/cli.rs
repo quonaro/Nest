@@ -1777,14 +1777,13 @@ pub fn handle_show_ast(commands: &[Command]) {
 pub fn handle_example() {
     use std::env;
     use std::io::{self, Write};
-    use std::process::Command;
 
     use super::output::OutputFormatter;
 
     // Ask for confirmation
     print!("Do you want to download the examples folder? (y/N): ");
     io::stdout().flush().unwrap_or(());
-
+    
     let mut input = String::new();
     match io::stdin().read_line(&mut input) {
         Ok(_) => {
@@ -1818,7 +1817,137 @@ pub fn handle_example() {
         std::process::exit(1);
     }
 
-    OutputFormatter::info("Downloading examples folder from GitHub...");
+    OutputFormatter::info("Downloading examples folder from GitHub Releases...");
+    
+    // Try to download from GitHub Releases first
+    let version = env!("CARGO_PKG_VERSION");
+    let release_url = format!("https://github.com/quonaro/nest/releases/download/v{}/examples.tar.gz", version);
+    let latest_url = "https://github.com/quonaro/nest/releases/latest/download/examples.tar.gz";
+    
+    if download_examples_from_release(&current_dir, &examples_dir, &release_url, &latest_url) {
+        return;
+    }
+    
+    // Fallback to repository clone method
+    OutputFormatter::info("Release download failed, trying repository clone method...");
+    download_examples_from_repo(&current_dir, &examples_dir);
+}
+
+/// Downloads examples folder from GitHub Releases.
+/// Returns true if successful, false otherwise.
+fn download_examples_from_release(
+    current_dir: &std::path::Path,
+    examples_dir: &std::path::Path,
+    versioned_url: &str,
+    latest_url: &str,
+) -> bool {
+    use std::fs;
+    use std::process::Command;
+    use super::output::OutputFormatter;
+
+    let archive_name = "examples.tar.gz";
+    let temp_archive = current_dir.join(archive_name);
+
+    // Clean up temp archive if it exists
+    if temp_archive.exists() {
+        let _ = fs::remove_file(&temp_archive);
+    }
+
+    // Try downloading from versioned release first, then latest
+    let download_urls = vec![versioned_url, latest_url];
+    let mut download_success = false;
+
+    for url in download_urls {
+        OutputFormatter::info(&format!("Trying to download from: {}", url));
+        
+        // Try curl first
+        let curl_result = Command::new("curl")
+            .args(&["-fsSL", "-o", temp_archive.to_str().unwrap_or(archive_name), url])
+            .output();
+
+        match curl_result {
+            Ok(output) if output.status.success() => {
+                download_success = true;
+                break;
+            }
+            _ => {
+                // Try wget
+                let wget_result = Command::new("wget")
+                    .args(&["-q", "-O", temp_archive.to_str().unwrap_or(archive_name), url])
+                    .output();
+                
+                match wget_result {
+                    Ok(output) if output.status.success() => {
+                        download_success = true;
+                        break;
+                    }
+                    _ => continue,
+                }
+            }
+        }
+    }
+
+    if !download_success {
+        OutputFormatter::info("Failed to download from GitHub Releases");
+        if temp_archive.exists() {
+            let _ = fs::remove_file(&temp_archive);
+        }
+        return false;
+    }
+
+    // Verify archive exists
+    if !temp_archive.exists() {
+        OutputFormatter::error("Downloaded archive not found");
+        return false;
+    }
+
+    // Extract archive
+    OutputFormatter::info("Extracting archive...");
+    let extract_output = Command::new("tar")
+        .args(&["xzf", temp_archive.to_str().unwrap_or(archive_name), "-C", current_dir.to_str().unwrap_or(".")])
+        .output();
+
+    match extract_output {
+        Ok(output) if output.status.success() => {
+            // Verify examples directory was extracted
+            if examples_dir.exists() {
+                // Clean up archive
+                let _ = fs::remove_file(&temp_archive);
+                
+                use super::output::colors;
+                OutputFormatter::success("Examples folder downloaded successfully!");
+                println!(
+                    "  {}Location:{} {}",
+                    OutputFormatter::help_label("Location:"),
+                    colors::RESET,
+                    OutputFormatter::path(&examples_dir.display().to_string())
+                );
+                println!("\n{}Changing to examples directory...{}", colors::BRIGHT_CYAN, colors::RESET);
+                println!("Run: cd examples");
+                return true;
+            } else {
+                OutputFormatter::error("Examples directory not found after extraction");
+                let _ = fs::remove_file(&temp_archive);
+                return false;
+            }
+        }
+        Ok(_) => {
+            OutputFormatter::error("Failed to extract archive");
+            let _ = fs::remove_file(&temp_archive);
+            return false;
+        }
+        Err(_) => {
+            OutputFormatter::error("tar command not available. Please install tar.");
+            let _ = fs::remove_file(&temp_archive);
+            return false;
+        }
+    }
+}
+
+/// Downloads examples folder from repository (fallback method).
+fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std::path::Path) {
+    use std::process::Command;
+    use super::output::OutputFormatter;
 
     // Try to clone the repository (just the examples folder)
     // We'll clone into a temp directory, then move the examples folder
@@ -1828,6 +1957,8 @@ pub fn handle_example() {
     if temp_dir.exists() {
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
+
+    OutputFormatter::info("Downloading examples folder from GitHub repository...");
 
     // Clone repository (depth 1 for faster download)
     let clone_output = Command::new("git")
