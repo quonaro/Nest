@@ -227,6 +227,8 @@ Directives control command behavior:
 - **`> env:`** - Environment variables:
   - Direct assignment: `> env: NODE_ENV=production`
   - Load from file: `> env: .env.local`
+  - System variable with fallback: `> env: NODE_ENV=${NODE_ENV:-development}`
+  - System variable: `> env: DATABASE_URL=${DATABASE_URL}`
 - **`> script:`** - Script to execute:
   - Single line: `> script: echo "Hello"`
   - Multiline: `> script: |` (followed by indented script block)
@@ -265,6 +267,44 @@ nest dev lint --fix true    # Run lint with fix flag
 nest dev lint -f true       # Use short alias
 ```
 
+### Environment Variables in Scripts
+
+Environment variables set via `> env:` directives are available in scripts using standard shell syntax:
+
+```nest
+build():
+    > env: NODE_ENV=production
+    > env: PORT=3000
+    > script: |
+        echo "Building in $NODE_ENV mode"
+        echo "Port: $PORT"
+        npm run build
+```
+
+**System Environment Variables with Fallback:**
+
+You can use system environment variables with fallback values:
+
+```nest
+build():
+    > env: NODE_ENV=${NODE_ENV:-development}  # Uses system NODE_ENV or defaults to "development"
+    > env: BUILD_NUMBER=${CI_BUILD_NUMBER:-local}  # Uses CI build number or "local"
+    > script: |
+        echo "Building in $NODE_ENV mode"
+        echo "Build number: $BUILD_NUMBER"
+        npm run build
+```
+
+**Syntax:**
+- `${VAR:-default}` - Use system variable `VAR` if exists, otherwise use `default`
+- `${VAR}` - Use system variable `VAR` if exists, otherwise empty string
+
+**Priority:**
+1. System environment variables (if set)
+2. Variables from `.env` files
+3. Direct assignments in `> env:` directives
+4. Fallback values (for `${VAR:-default}` syntax)
+
 ### Template Variables
 
 Use `{{variable}}` syntax in scripts:
@@ -284,6 +324,33 @@ deploy(version: str):
         #!/bin/sh
         echo "Deploying {{version}} by {{user}} at {{now}}"
         ./deploy.sh {{version}}
+```
+
+**Using Environment Variables in Scripts:**
+
+Environment variables are available in scripts using `$VAR` syntax:
+
+```nest
+run_app():
+    > env: NODE_ENV=production
+    > env: PORT=3000
+    > script: |
+        echo "Starting app in $NODE_ENV mode on port $PORT"
+        node server.js --port $PORT
+```
+
+**Combining Templates and Environment Variables:**
+
+You can combine template variables and environment variables:
+
+```nest
+deploy(version: str):
+    > env: NODE_ENV=${NODE_ENV:-production}
+    > env: APP_VERSION={{version}}
+    > script: |
+        echo "Deploying version {{version}} to $NODE_ENV"
+        echo "App version: $APP_VERSION"
+        ./deploy.sh --version {{version}} --env $NODE_ENV
 ```
 
 ### Complete Example

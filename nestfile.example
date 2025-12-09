@@ -126,6 +126,31 @@ run_dev():
         echo "Debug: $DEBUG"
         # Your dev server command here
 
+# Command using system environment variables with fallback
+# Syntax: ${VAR:-default} - uses system VAR if exists, otherwise uses default
+build():
+    > desc: Build with system environment variables
+    > env: NODE_ENV=${NODE_ENV:-development}  # Uses system NODE_ENV or defaults to "development"
+    > env: BUILD_NUMBER=${CI_BUILD_NUMBER:-local}  # Uses CI build number or "local"
+    > script: |
+        echo "Building in $NODE_ENV mode"
+        echo "Build number: $BUILD_NUMBER"
+        # npm run build
+
+# Command using system variables without fallback
+# Syntax: ${VAR} - uses system VAR if exists, otherwise empty string
+deploy():
+    > desc: Deploy using system environment variables
+    > env: DATABASE_URL=${DATABASE_URL}  # Uses system DATABASE_URL if set
+    > env: API_KEY=${API_KEY}  # Uses system API_KEY if set
+    > script: |
+        if [ -z "$DATABASE_URL" ]; then
+            echo "Error: DATABASE_URL not set"
+            exit 1
+        fi
+        echo "Deploying with database: $DATABASE_URL"
+        # ./deploy.sh
+
 # ============================================================================
 # TEMPLATE VARIABLES
 # ============================================================================
