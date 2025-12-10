@@ -1,6 +1,6 @@
 [package]
 name = "nest"
-version = "2.1.7"
+version = "2.1.10"
 edition = "2021"
 license = "MIT"
 

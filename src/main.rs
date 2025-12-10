@@ -8,7 +8,7 @@ mod constants;
 mod nestparse;
 
 use constants::{FLAG_COMPLETE, FLAG_SHOW, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
-use nestparse::cli::{handle_example, handle_json, handle_show_ast, handle_update, handle_version, CliGenerator};
+use nestparse::cli::{handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version, CliGenerator};
 use nestparse::command_handler::CommandHandler;
 use nestparse::completion::CompletionManager;
 use nestparse::file::read_config_file;
@@ -46,6 +46,13 @@ fn main() {
     // Check for --example
     if args.iter().any(|a| a == "--example") {
         handle_example();
+        return;
+    }
+    
+    // Check for --init
+    if args.iter().any(|a| a == "--init") {
+        let force = args.iter().any(|a| a == "--force" || a == "-f");
+        handle_init(force);
         return;
     }
     

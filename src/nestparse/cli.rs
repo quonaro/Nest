@@ -1909,6 +1909,139 @@ pub fn handle_example() {
     download_examples_from_repo(&current_dir, &examples_dir);
 }
 
+/// Handles the --init flag.
+///
+/// Creates a basic nestfile in the current directory with example commands.
+///
+/// # Arguments
+///
+/// * `force` - If true, overwrite existing nestfile without confirmation
+///
+/// # Errors
+///
+/// Exits with code 1 if:
+/// - File cannot be created
+/// - File cannot be written
+pub fn handle_init(force: bool) {
+    use std::env;
+    use std::fs;
+    use super::path::find_config_file;
+    use super::output::OutputFormatter;
+
+    // Get current directory
+    let current_dir = match env::current_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            OutputFormatter::error(&format!("Error getting current directory: {}", e));
+            std::process::exit(1);
+        }
+    };
+
+    // Check if nestfile already exists
+    if let Some(existing_file) = find_config_file() {
+        if !force {
+            OutputFormatter::info(&format!(
+                "Configuration file already exists: {}",
+                existing_file.display()
+            ));
+            OutputFormatter::info("Use --force or -f to overwrite it.");
+            std::process::exit(0);
+        }
+        // Force mode: overwrite without confirmation
+        OutputFormatter::info(&format!(
+            "Overwriting existing configuration file: {}",
+            existing_file.display()
+        ));
+    }
+
+    // Create basic nestfile template
+    let nestfile_content = r#"# Nestfile - Task Runner Configuration
+# This file defines commands that can be executed with: nest <command>
+
+# ============================================================================
+# BASIC COMMANDS
+# ============================================================================
+
+hello():
+    > desc: Print a greeting message
+    > script: |
+        echo "Hello from Nest!"
+
+build():
+    > desc: Build the project
+    > script: |
+        echo "Building project..."
+        # Add your build commands here
+
+test():
+    > desc: Run tests
+    > script: |
+        echo "Running tests..."
+        # Add your test commands here
+
+clean():
+    > desc: Clean build artifacts
+    > script: |
+        echo "Cleaning build artifacts..."
+        # Add your clean commands here
+
+# ============================================================================
+# COMMANDS WITH PARAMETERS
+# ============================================================================
+
+# Example command with parameters
+# deploy(version: str, !env|e: str = "production"):
+#     > desc: Deploy application
+#     > script: |
+#         echo "Deploying version {{version}} to {{env}}"
+#         # Add your deployment commands here
+
+# ============================================================================
+# VARIABLES AND CONSTANTS
+# ============================================================================
+
+# @var APP_NAME = "myapp"
+# @var VERSION = "1.0.0"
+# @const BUILD_DIR = "./dist"
+
+# ============================================================================
+# NESTED COMMANDS (GROUPS)
+# ============================================================================
+
+# dev:
+#     > desc: Development commands
+#     
+#     dev start():
+#         > desc: Start development server
+#         > script: |
+#             echo "Starting development server..."
+#     
+#     dev test():
+#         > desc: Run development tests
+#         > script: |
+#             echo "Running development tests..."
+
+# For more examples, see: nest --example
+"#;
+
+    let nestfile_path = current_dir.join("nestfile");
+
+    // Write nestfile
+    match fs::write(&nestfile_path, nestfile_content) {
+        Ok(_) => {
+            OutputFormatter::info(&format!(
+                "Created nestfile at: {}",
+                nestfile_path.display()
+            ));
+            OutputFormatter::info("You can now add commands to your nestfile and run them with: nest <command>");
+        }
+        Err(e) => {
+            OutputFormatter::error(&format!("Failed to create nestfile: {}", e));
+            std::process::exit(1);
+        }
+    }
+}
+
 /// Downloads examples folder from GitHub Releases.
 /// Returns true if successful, false otherwise.
 fn download_examples_from_release(
