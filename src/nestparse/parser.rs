@@ -631,6 +631,10 @@ impl Parser {
                     // Else-if conditional execution directive: elif: condition
                     Ok((Directive::Elif(directive_value.to_string()), false))
                 }
+                "else" => {
+                    // Else directive: else: (value is ignored, can be empty)
+                    Ok((Directive::Else, false))
+                }
                 _ => Err(ParseError::InvalidSyntax(
                     format!("Unknown directive: {}", directive_name),
                     self.current_line_number(),
