@@ -176,6 +176,8 @@ pub struct Command {
     pub local_variables: Vec<Variable>,
     /// Local constants for this command (can override global constants)
     pub local_constants: Vec<Constant>,
+    /// Source file path where this command was defined (for proper path resolution)
+    pub source_file: Option<std::path::PathBuf>,
 }
 
 impl fmt::Display for Command {

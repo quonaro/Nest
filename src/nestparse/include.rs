@@ -239,7 +239,13 @@ fn load_single_file(
     // Recursively process includes in the included file
     let processed_content = process_includes(&content, &canonical_path, visited)?;
 
-    Ok(Some(processed_content))
+    // Add source file marker at the beginning of included content
+    // This allows the parser to track which file each command came from
+    let mut result = String::new();
+    result.push_str(&format!("# @source: {}\n", canonical_path.display()));
+    result.push_str(&processed_content);
+
+    Ok(Some(result))
 }
 
 /// Loads content from files matching a pattern.

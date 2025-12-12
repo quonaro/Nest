@@ -17,6 +17,8 @@ pub struct Parser {
     lines: Vec<String>,
     /// Current position in the file (line index)
     current_index: usize,
+    /// Current source file path (for tracking where commands come from)
+    current_source_file: Option<std::path::PathBuf>,
 }
 
 /// Errors that can occur during parsing.
@@ -59,8 +61,10 @@ impl Parser {
         Self {
             lines,
             current_index: 0,
+            current_source_file: None,
         }
     }
+
 
     /// Gets the current line number (1-based).
     fn current_line_number(&self) -> usize {
@@ -94,6 +98,16 @@ impl Parser {
         while self.current_index < self.lines.len() {
             let line = &self.lines[self.current_index];
             let trimmed = line.trim();
+
+            // Check for source file marker: # @source: /path/to/file
+            if trimmed.starts_with("# @source: ") {
+                let source_path = trimmed[12..].trim();
+                if !source_path.is_empty() {
+                    self.current_source_file = Some(std::path::PathBuf::from(source_path));
+                }
+                self.current_index += 1;
+                continue;
+            }
 
             // Skip empty lines and comments
             if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -184,6 +198,16 @@ impl Parser {
                 break;
             }
 
+            // Check for source file marker: # @source: /path/to/file
+            if next_trimmed.starts_with("# @source: ") {
+                let source_path = next_trimmed[12..].trim();
+                if !source_path.is_empty() {
+                    self.current_source_file = Some(std::path::PathBuf::from(source_path));
+                }
+                self.current_index += 1;
+                continue;
+            }
+
             // Skip empty lines and comments
             if next_trimmed.is_empty() || next_trimmed.starts_with('#') {
                 self.current_index += 1;
@@ -241,6 +265,7 @@ impl Parser {
             has_wildcard,
             local_variables,
             local_constants,
+            source_file: self.current_source_file.clone(),
         })
     }
 

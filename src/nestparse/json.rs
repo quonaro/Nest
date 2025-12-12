@@ -182,6 +182,7 @@ impl From<&Command> for JsonCommand {
             directives: command.directives.iter().map(|d| d.into()).collect(),
             children: command.children.iter().map(|c| c.into()).collect(),
             has_wildcard: command.has_wildcard,
+            // Note: source_file is not included in JSON output as it's internal metadata
         }
     }
 }

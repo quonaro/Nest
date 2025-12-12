@@ -210,7 +210,14 @@ fn load_and_parse_config(config_path_arg: Option<&str>) -> Result<(ParseResult, 
     let processed_content = process_includes(&content, &config_path, &mut visited)
         .map_err(|e| format!("Include error: {}", e))?;
 
-    let mut parser = Parser::new(&processed_content);
+    // Add source file marker for the main file at the beginning
+    let mut content_with_source = String::new();
+    if let Ok(canonical_path) = config_path.canonicalize() {
+        content_with_source.push_str(&format!("# @source: {}\n", canonical_path.display()));
+    }
+    content_with_source.push_str(&processed_content);
+
+    let mut parser = Parser::new(&content_with_source);
     let parse_result = parser
         .parse()
         .map_err(|e| {
