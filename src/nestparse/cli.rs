@@ -460,10 +460,33 @@ impl CliGenerator {
             (Directive::Cwd(s), "cwd") => Some(s.clone()),
             (Directive::Env(s), "env") => Some(s.clone()),
             (Directive::Script(s), "script") => Some(s.clone()),
+            (Directive::ScriptHide(s), "script") => Some(s.clone()),
             (Directive::Before(s), "before") => Some(s.clone()),
+            (Directive::BeforeHide(s), "before") => Some(s.clone()),
             (Directive::After(s), "after") => Some(s.clone()),
+            (Directive::AfterHide(s), "after") => Some(s.clone()),
             (Directive::Fallback(s), "fallback") => Some(s.clone()),
+            (Directive::FallbackHide(s), "fallback") => Some(s.clone()),
             (Directive::Validate(s), "validate") => Some(s.clone()),
+            _ => None,
+        })
+    }
+
+    /// Gets directive value and checks if output should be hidden.
+    /// Returns (value, hide_output) tuple.
+    fn get_directive_value_with_hide(
+        directives: &[Directive],
+        name: &str,
+    ) -> Option<(String, bool)> {
+        directives.iter().find_map(|d| match (d, name) {
+            (Directive::Script(s), "script") => Some((s.clone(), false)),
+            (Directive::ScriptHide(s), "script") => Some((s.clone(), true)),
+            (Directive::Before(s), "before") => Some((s.clone(), false)),
+            (Directive::BeforeHide(s), "before") => Some((s.clone(), true)),
+            (Directive::After(s), "after") => Some((s.clone(), false)),
+            (Directive::AfterHide(s), "after") => Some((s.clone(), true)),
+            (Directive::Fallback(s), "fallback") => Some((s.clone(), false)),
+            (Directive::FallbackHide(s), "fallback") => Some((s.clone(), true)),
             _ => None,
         })
     }
@@ -486,6 +509,85 @@ impl CliGenerator {
                 _ => None,
             })
             .unwrap_or(false)
+    }
+
+    fn get_require_confirm_directive(directives: &[Directive]) -> Option<String> {
+        directives.iter().find_map(|d| match d {
+            Directive::RequireConfirm(message) => Some(message.clone()),
+            _ => None,
+        })
+    }
+
+    /// Prompts user for confirmation before executing a command.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - Optional custom confirmation message. If None or empty, uses default message.
+    /// * `command_path` - Path to the command being executed (for default message)
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(true)` if user confirmed (y), `Ok(false)` if user declined (n),
+    /// or `Err(message)` if there was an error reading input.
+    fn prompt_confirmation(
+        message: Option<&str>,
+        command_path: Option<&[String]>,
+    ) -> Result<bool, String> {
+        use std::io::{self, Write};
+
+        let prompt_text = if let Some(msg) = message {
+            if msg.trim().is_empty() {
+                // Empty message - use default
+                let command_name = if let Some(path) = command_path {
+                    path.join(" ")
+                } else {
+                    "this command".to_string()
+                };
+                format!(
+                    "Are you sure you want to execute '{}'? [y/n]: ",
+                    command_name
+                )
+            } else {
+                // Custom message
+                format!("{} [y/n]: ", msg.trim())
+            }
+        } else {
+            // No message - use default
+            let command_name = if let Some(path) = command_path {
+                path.join(" ")
+            } else {
+                "this command".to_string()
+            };
+            format!(
+                "Are you sure you want to execute '{}'? [y/n]: ",
+                command_name
+            )
+        };
+
+        // Print prompt and flush to ensure it's displayed
+        print!("{}", prompt_text);
+        io::stdout()
+            .flush()
+            .map_err(|e| format!("Failed to flush stdout: {}", e))?;
+
+        // Read user input
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| format!("Failed to read input: {}", e))?;
+
+        // Parse input (trim whitespace and convert to lowercase)
+        let trimmed = input.trim().to_lowercase();
+
+        match trimmed.as_str() {
+            "y" | "yes" => Ok(true),
+            "n" | "no" => Ok(false),
+            _ => {
+                // Invalid input - ask again
+                println!("Please enter 'y' for yes or 'n' for no.");
+                Self::prompt_confirmation(message, command_path)
+            }
+        }
     }
 
     fn get_logs_directive(directives: &[Directive]) -> Option<(String, String)> {
@@ -617,7 +719,9 @@ impl CliGenerator {
                 // Look for the next script directive
                 let mut found_script = false;
                 for j in (i + 1)..directives.len() {
-                    if let Directive::Script(script) = &directives[j] {
+                    if let Directive::Script(script) | Directive::ScriptHide(script) =
+                        &directives[j]
+                    {
                         match block_type {
                             "if" => {
                                 blocks.push(ConditionalBlock::If(
@@ -999,6 +1103,7 @@ impl CliGenerator {
         dry_run: bool,
         verbose: bool,
         parent_args: &HashMap<String, String>,
+        hide_output: bool,
     ) -> Result<(), String> {
         if dry_run {
             use super::output::OutputFormatter;
@@ -1024,7 +1129,14 @@ impl CliGenerator {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
-                    Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose)?;
+                    Self::execute_shell_script(
+                        &shell_script,
+                        env_vars,
+                        cwd,
+                        args,
+                        verbose,
+                        hide_output,
+                    )?;
                     current_shell_block.clear();
                 }
 
@@ -1045,7 +1157,7 @@ impl CliGenerator {
                     );
                     // Execute immediately - store in variable to ensure it lives long enough
                     let cmd = processed_command;
-                    Self::execute_shell_script(&cmd, env_vars, cwd, args, verbose)?;
+                    Self::execute_shell_script(&cmd, env_vars, cwd, args, verbose, hide_output)?;
                 }
                 continue;
             }
@@ -1055,7 +1167,14 @@ impl CliGenerator {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
-                    Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose)?;
+                    Self::execute_shell_script(
+                        &shell_script,
+                        env_vars,
+                        cwd,
+                        args,
+                        verbose,
+                        hide_output,
+                    )?;
                     current_shell_block.clear();
                 }
 
@@ -1077,6 +1196,7 @@ impl CliGenerator {
                             command_path,
                             dry_run,
                             verbose,
+                            hide_output,
                         )?;
                         continue;
                     }
@@ -1214,7 +1334,14 @@ impl CliGenerator {
             let shell_script = current_shell_block.join("\n");
             // Don't trim - preserve all whitespace and structure
             if !shell_script.trim().is_empty() {
-                Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose)?;
+                Self::execute_shell_script(
+                    &shell_script,
+                    env_vars,
+                    cwd,
+                    args,
+                    verbose,
+                    hide_output,
+                )?;
             }
         }
 
@@ -1266,6 +1393,7 @@ impl CliGenerator {
         cwd: Option<&str>,
         args: &HashMap<String, String>,
         _verbose: bool,
+        hide_output: bool,
     ) -> Result<(), String> {
         // Detect shell from shebang and remove it
         let (shell, script_without_shebang) = Self::detect_shell_and_remove_shebang(script);
@@ -1276,6 +1404,7 @@ impl CliGenerator {
             cwd,
             args,
             _verbose,
+            hide_output,
         )
     }
 
@@ -1287,6 +1416,7 @@ impl CliGenerator {
         cwd: Option<&str>,
         args: &HashMap<String, String>,
         _verbose: bool,
+        hide_output: bool,
     ) -> Result<(), String> {
         use std::process::{Command as ProcessCommand, Stdio};
 
@@ -1316,9 +1446,14 @@ impl CliGenerator {
             cmd.env(key, value);
         }
 
-        // Capture output
-        cmd.stdout(Stdio::inherit());
-        cmd.stderr(Stdio::inherit());
+        // Capture output - hide if requested
+        if hide_output {
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+        } else {
+            cmd.stdout(Stdio::inherit());
+            cmd.stderr(Stdio::inherit());
+        }
 
         let status = cmd
             .status()
@@ -1401,6 +1536,67 @@ impl CliGenerator {
         (parent_variables, parent_constants)
     }
 
+    /// Collects directives (CWD, AFTER, BEFORE, FALLBACK) from all parent commands in the path.
+    ///
+    /// This function traverses the command path and collects directives from each parent command.
+    /// The order is from root to leaf, so directives from closer parents can override directives
+    /// from farther parents. However, if a directive is defined in the current command, it takes
+    /// precedence over all parent directives.
+    ///
+    /// # Arguments
+    ///
+    /// * `command_path` - The path to the command (e.g., ["test", "async"])
+    ///
+    /// # Returns
+    ///
+    /// Returns a HashMap with directive names as keys and (value, hide_output) tuples as values.
+    /// Only includes directives that are inheritable: CWD, AFTER, BEFORE, FALLBACK.
+    fn collect_parent_directives(
+        &self,
+        command_path: &[String],
+    ) -> std::collections::HashMap<String, (String, bool)> {
+        let mut parent_directives = std::collections::HashMap::new();
+
+        // If path is empty or has only one element, no parents
+        if command_path.len() <= 1 {
+            return parent_directives;
+        }
+
+        // Traverse path from root to parent (excluding the last element which is the current command)
+        // We collect in order from root to leaf, so when we process them,
+        // later ones (closer parents) will override earlier ones (farther parents)
+        let mut current = &self.commands;
+        for name in command_path.iter().take(command_path.len() - 1) {
+            if let Some(cmd) = current.iter().find(|c| &c.name == name) {
+                // Collect inheritable directives from this parent command
+                // Closer parents override farther parents (we always insert/update)
+                if let Some(cwd) = Self::get_directive_value(&cmd.directives, "cwd") {
+                    parent_directives.insert("cwd".to_string(), (cwd, false));
+                }
+                if let Some((after, hide_after)) =
+                    Self::get_directive_value_with_hide(&cmd.directives, "after")
+                {
+                    parent_directives.insert("after".to_string(), (after, hide_after));
+                }
+                if let Some((before, hide_before)) =
+                    Self::get_directive_value_with_hide(&cmd.directives, "before")
+                {
+                    parent_directives.insert("before".to_string(), (before, hide_before));
+                }
+                if let Some((fallback, hide_fallback)) =
+                    Self::get_directive_value_with_hide(&cmd.directives, "fallback")
+                {
+                    parent_directives.insert("fallback".to_string(), (fallback, hide_fallback));
+                }
+                current = &cmd.children;
+            } else {
+                break;
+            }
+        }
+
+        parent_directives
+    }
+
     /// Finds a function by its name.
     ///
     /// # Arguments
@@ -1445,6 +1641,7 @@ impl CliGenerator {
         command_path: Option<&[String]>,
         dry_run: bool,
         verbose: bool,
+        hide_output: bool,
     ) -> Result<(), String> {
         if verbose {
             use super::output::OutputFormatter;
@@ -1514,6 +1711,7 @@ impl CliGenerator {
 
         // Execute function body (supports commands, functions, and shell scripts)
         // Functions don't inherit parent args - they use their own args
+        // Functions inherit hide_output from the calling script
         let empty_parent_args = HashMap::new();
         self.execute_script(
             &processed_body,
@@ -1524,6 +1722,7 @@ impl CliGenerator {
             dry_run,
             verbose,
             &empty_parent_args,
+            hide_output, // Inherit hide_output from calling script
         )
     }
 
@@ -1753,9 +1952,38 @@ impl CliGenerator {
             }
         }
 
+        // Check if confirmation is required
+        if !dry_run {
+            if let Some(confirm_message) = Self::get_require_confirm_directive(&command.directives)
+            {
+                match Self::prompt_confirmation(Some(&confirm_message), command_path) {
+                    Ok(true) => {
+                        // User confirmed - continue execution
+                    }
+                    Ok(false) => {
+                        // User declined - return without error
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        return Err(format!("Confirmation prompt failed: {}", e));
+                    }
+                }
+            }
+        }
+
         // Prepare environment
         let env_vars = EnvironmentManager::extract_env_vars(&command.directives);
-        let cwd = Self::get_directive_value(&command.directives, "cwd");
+
+        // Collect parent directives (CWD, AFTER, BEFORE, FALLBACK)
+        let parent_directives = if let Some(path) = command_path {
+            self.collect_parent_directives(path)
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        // Use directive from command if present, otherwise use inherited directive
+        let cwd = Self::get_directive_value(&command.directives, "cwd")
+            .or_else(|| parent_directives.get("cwd").map(|(s, _)| s.clone()));
         let privileged = Self::get_privileged_directive(&command.directives);
         let logs = Self::get_logs_directive(&command.directives);
 
@@ -1771,8 +1999,10 @@ impl CliGenerator {
         // Don't override with current args - parent args are for inheritance only
         // Current args will be processed separately with highest priority
 
-        // Execute before script (if present)
-        if let Some(before_script) = Self::get_directive_value(&command.directives, "before") {
+        // Execute before script (if present in command or inherited from parent)
+        let before_info = Self::get_directive_value_with_hide(&command.directives, "before")
+            .or_else(|| parent_directives.get("before").cloned());
+        if let Some((before_script, hide_before)) = before_info {
             let processed_before = TemplateProcessor::process(
                 &before_script,
                 args,
@@ -1799,6 +2029,7 @@ impl CliGenerator {
                 dry_run,
                 verbose,
                 &merged_parent_args,
+                hide_before,
             ) {
                 return Err(format!("Before script failed: {}", e));
             }
@@ -1886,6 +2117,11 @@ impl CliGenerator {
                 .ok_or_else(|| "Command has no script directive".to_string())?
         };
 
+        // Check if script output should be hidden
+        let hide_script = Self::get_directive_value_with_hide(&command.directives, "script")
+            .map(|(_, hide)| hide)
+            .unwrap_or(false);
+
         let processed_script = TemplateProcessor::process(
             &script,
             args,
@@ -1949,14 +2185,16 @@ impl CliGenerator {
             dry_run,
             verbose,
             &merged_parent_args,
+            hide_script,
         );
 
         // Handle main script result first (before logging to avoid partial move)
         let result = match main_result {
             Ok(()) => {
-                // Main script succeeded - execute after script (if present)
-                if let Some(after_script) = Self::get_directive_value(&command.directives, "after")
-                {
+                // Main script succeeded - execute after script (if present in command or inherited from parent)
+                let after_info = Self::get_directive_value_with_hide(&command.directives, "after")
+                    .or_else(|| parent_directives.get("after").cloned());
+                if let Some((after_script, hide_after)) = after_info {
                     let processed_after = TemplateProcessor::process(
                         &after_script,
                         args,
@@ -1983,6 +2221,7 @@ impl CliGenerator {
                         dry_run,
                         verbose,
                         &merged_parent_args,
+                        hide_after,
                     ) {
                         return Err(format!("After script failed: {}", e));
                     }
@@ -1990,10 +2229,11 @@ impl CliGenerator {
                 Ok(())
             }
             Err(error_msg) => {
-                // Main script failed - execute fallback script (if present)
-                if let Some(fallback_script) =
-                    Self::get_directive_value(&command.directives, "fallback")
-                {
+                // Main script failed - execute fallback script (if present in command or inherited from parent)
+                let fallback_info =
+                    Self::get_directive_value_with_hide(&command.directives, "fallback")
+                        .or_else(|| parent_directives.get("fallback").cloned());
+                if let Some((fallback_script, hide_fallback)) = fallback_info {
                     // Add error message to args for template processing
                     let mut fallback_args = args.clone();
                     fallback_args.insert("SYSTEM_ERROR_MESSAGE".to_string(), error_msg.clone());
@@ -2025,6 +2265,7 @@ impl CliGenerator {
                         dry_run,
                         verbose,
                         &merged_parent_args,
+                        hide_fallback,
                     ) {
                         return Err(format!("Fallback script failed: {}", e));
                     }

@@ -282,14 +282,15 @@ fn validate_command_recursive(
 
     for directive in &command.directives {
         match directive {
-            Directive::Script(_) => has_script = true,
+            Directive::Script(_) | Directive::ScriptHide(_) => has_script = true,
             Directive::Desc(_) => {}
             Directive::Depends(_) => {}
-            Directive::Before(_) => {}
-            Directive::After(_) => {}
-            Directive::Fallback(_) => {}
+            Directive::Before(_) | Directive::BeforeHide(_) => {}
+            Directive::After(_) | Directive::AfterHide(_) => {}
+            Directive::Fallback(_) | Directive::FallbackHide(_) => {}
             Directive::Validate(_) => {}
             Directive::Privileged(_) => {}
+            Directive::RequireConfirm(_) => {}
             Directive::Cwd(path) => {
                 cwd_paths.push(path.clone());
             }

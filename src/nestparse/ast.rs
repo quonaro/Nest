@@ -66,13 +66,22 @@ pub enum Directive {
     Env(String),
     /// Script to execute (can be single line or multiline)
     Script(String),
+    /// Script to execute with hidden output (can be single line or multiline)
+    ScriptHide(String),
     /// Script to execute before the main script (can be single line or multiline)
     Before(String),
+    /// Script to execute before the main script with hidden output (can be single line or multiline)
+    BeforeHide(String),
     /// Script to execute after the main script (can be single line or multiline)
     After(String),
+    /// Script to execute after the main script with hidden output (can be single line or multiline)
+    AfterHide(String),
     /// Script to execute if the main script fails (can be single line or multiline)
     /// Replaces error output with this script's output
     Fallback(String),
+    /// Script to execute if the main script fails with hidden output (can be single line or multiline)
+    /// Replaces error output with this script's output
+    FallbackHide(String),
     /// Whether this command requires privileged access (sudo/administrator)
     Privileged(bool),
     /// Dependencies - commands that must be executed before this command
@@ -93,6 +102,9 @@ pub enum Directive {
     /// Else-if branch for conditional execution
     /// String contains the condition expression
     Elif(String),
+    /// Require user confirmation before executing the command
+    /// String contains the confirmation message (optional, uses default if empty)
+    RequireConfirm(String),
 }
 
 /// Represents a variable that can be redefined.

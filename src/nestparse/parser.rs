@@ -525,8 +525,18 @@ impl Parser {
         let content = trimmed.strip_prefix('>').unwrap_or(trimmed).trim();
 
         if let Some(colon_pos) = content.find(':') {
-            let directive_name = content[..colon_pos].trim();
+            let directive_name_with_modifiers = content[..colon_pos].trim();
             let directive_value = content[colon_pos + 1..].trim();
+
+            // Parse directive name and modifiers (e.g., "script[hide]" -> ("script", true))
+            let (directive_name, hide_output) = if let Some(bracket_start) = directive_name_with_modifiers.find('[') {
+                let name = directive_name_with_modifiers[..bracket_start].trim();
+                let modifier = &directive_name_with_modifiers[bracket_start..];
+                let hide = modifier == "[hide]";
+                (name, hide)
+            } else {
+                (directive_name_with_modifiers, false)
+            };
 
             match directive_name {
                 "desc" => Ok((Directive::Desc(directive_value.to_string()), false)),
@@ -564,10 +574,18 @@ impl Parser {
                     if directive_value == "|" {
                         // Parse multiline block
                         let script_content = self.parse_multiline_block(indent)?;
-                        Ok((Directive::Script(script_content), true))
+                        if hide_output {
+                            Ok((Directive::ScriptHide(script_content), true))
+                        } else {
+                            Ok((Directive::Script(script_content), true))
+                        }
                     } else {
                         // Single line script
-                        Ok((Directive::Script(directive_value.to_string()), false))
+                        if hide_output {
+                            Ok((Directive::ScriptHide(directive_value.to_string()), false))
+                        } else {
+                            Ok((Directive::Script(directive_value.to_string()), false))
+                        }
                     }
                 }
                 "before" => {
@@ -575,10 +593,18 @@ impl Parser {
                     if directive_value == "|" {
                         // Parse multiline block
                         let script_content = self.parse_multiline_block(indent)?;
-                        Ok((Directive::Before(script_content), true))
+                        if hide_output {
+                            Ok((Directive::BeforeHide(script_content), true))
+                        } else {
+                            Ok((Directive::Before(script_content), true))
+                        }
                     } else {
                         // Single line script
-                        Ok((Directive::Before(directive_value.to_string()), false))
+                        if hide_output {
+                            Ok((Directive::BeforeHide(directive_value.to_string()), false))
+                        } else {
+                            Ok((Directive::Before(directive_value.to_string()), false))
+                        }
                     }
                 }
                 "after" => {
@@ -586,10 +612,18 @@ impl Parser {
                     if directive_value == "|" {
                         // Parse multiline block
                         let script_content = self.parse_multiline_block(indent)?;
-                        Ok((Directive::After(script_content), true))
+                        if hide_output {
+                            Ok((Directive::AfterHide(script_content), true))
+                        } else {
+                            Ok((Directive::After(script_content), true))
+                        }
                     } else {
                         // Single line script
-                        Ok((Directive::After(directive_value.to_string()), false))
+                        if hide_output {
+                            Ok((Directive::AfterHide(directive_value.to_string()), false))
+                        } else {
+                            Ok((Directive::After(directive_value.to_string()), false))
+                        }
                     }
                 }
                 "fallback" => {
@@ -597,10 +631,18 @@ impl Parser {
                     if directive_value == "|" {
                         // Parse multiline block
                         let script_content = self.parse_multiline_block(indent)?;
-                        Ok((Directive::Fallback(script_content), true))
+                        if hide_output {
+                            Ok((Directive::FallbackHide(script_content), true))
+                        } else {
+                            Ok((Directive::Fallback(script_content), true))
+                        }
                     } else {
                         // Single line script
-                        Ok((Directive::Fallback(directive_value.to_string()), false))
+                        if hide_output {
+                            Ok((Directive::FallbackHide(directive_value.to_string()), false))
+                        } else {
+                            Ok((Directive::Fallback(directive_value.to_string()), false))
+                        }
                     }
                 }
                 "validate" => {
@@ -640,6 +682,10 @@ impl Parser {
                 "else" => {
                     // Else directive: else: (value is ignored, can be empty)
                     Ok((Directive::Else, false))
+                }
+                "require_confirm" => {
+                    // Require confirmation directive: require_confirm: message (optional)
+                    Ok((Directive::RequireConfirm(directive_value.to_string()), false))
                 }
                 _ => Err(ParseError::InvalidSyntax(
                     format!("Unknown directive: {}", directive_name),

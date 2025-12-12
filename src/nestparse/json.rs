@@ -91,6 +91,9 @@ pub enum JsonDirective {
     /// Else conditional directive
     #[serde(rename = "else")]
     Else,
+    /// Require confirmation directive
+    #[serde(rename = "require_confirm")]
+    RequireConfirm(String),
 }
 
 /// JSON representation of a Command.
@@ -145,10 +148,14 @@ impl From<&Directive> for JsonDirective {
                 JsonDirective::Depends(json_deps)
             },
             Directive::Before(s) => JsonDirective::Before(s.clone()),
+            Directive::BeforeHide(s) => JsonDirective::Before(s.clone()),
             Directive::After(s) => JsonDirective::After(s.clone()),
+            Directive::AfterHide(s) => JsonDirective::After(s.clone()),
             Directive::Fallback(s) => JsonDirective::Fallback(s.clone()),
+            Directive::FallbackHide(s) => JsonDirective::Fallback(s.clone()),
             Directive::Validate(s) => JsonDirective::Validate(s.clone()),
             Directive::Script(s) => JsonDirective::Script(s.clone()),
+            Directive::ScriptHide(s) => JsonDirective::Script(s.clone()),
             Directive::Privileged(value) => JsonDirective::Privileged(*value),
             Directive::Logs(path, format) => JsonDirective::Logs {
                 path: path.clone(),
@@ -157,6 +164,7 @@ impl From<&Directive> for JsonDirective {
             Directive::If(condition) => JsonDirective::If(condition.clone()),
             Directive::Elif(condition) => JsonDirective::Elif(condition.clone()),
             Directive::Else => JsonDirective::Else,
+            Directive::RequireConfirm(message) => JsonDirective::RequireConfirm(message.clone()),
         }
     }
 }

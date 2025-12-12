@@ -43,34 +43,49 @@ pub fn print_command(command: &Command, indent: usize) {
                 }).collect();
                 println!("{}    > depends: {}", indent_str, deps_str.join(", "));
             }
-            Directive::Before(s) => {
+            Directive::Before(s) | Directive::BeforeHide(s) => {
+                let directive_name = if matches!(directive, Directive::BeforeHide(_)) {
+                    "before[hide]"
+                } else {
+                    "before"
+                };
                 if s.contains('\n') {
-                    println!("{}    > before: |", indent_str);
+                    println!("{}    > {}: |", indent_str, directive_name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > before: {}", indent_str, s);
+                    println!("{}    > {}: {}", indent_str, directive_name, s);
                 }
             }
-            Directive::After(s) => {
+            Directive::After(s) | Directive::AfterHide(s) => {
+                let directive_name = if matches!(directive, Directive::AfterHide(_)) {
+                    "after[hide]"
+                } else {
+                    "after"
+                };
                 if s.contains('\n') {
-                    println!("{}    > after: |", indent_str);
+                    println!("{}    > {}: |", indent_str, directive_name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > after: {}", indent_str, s);
+                    println!("{}    > {}: {}", indent_str, directive_name, s);
                 }
             }
-            Directive::Fallback(s) => {
+            Directive::Fallback(s) | Directive::FallbackHide(s) => {
+                let directive_name = if matches!(directive, Directive::FallbackHide(_)) {
+                    "fallback[hide]"
+                } else {
+                    "fallback"
+                };
                 if s.contains('\n') {
-                    println!("{}    > fallback: |", indent_str);
+                    println!("{}    > {}: |", indent_str, directive_name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > fallback: {}", indent_str, s);
+                    println!("{}    > {}: {}", indent_str, directive_name, s);
                 }
             }
             Directive::Validate(s) => {
@@ -79,14 +94,19 @@ pub fn print_command(command: &Command, indent: usize) {
             Directive::Privileged(value) => {
                 println!("{}    > privileged: {}", indent_str, value);
             }
-            Directive::Script(s) => {
+            Directive::Script(s) | Directive::ScriptHide(s) => {
+                let directive_name = if matches!(directive, Directive::ScriptHide(_)) {
+                    "script[hide]"
+                } else {
+                    "script"
+                };
                 if s.contains('\n') {
-                    println!("{}    > script: |", indent_str);
+                    println!("{}    > {}: |", indent_str, directive_name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > script: {}", indent_str, s);
+                    println!("{}    > {}: {}", indent_str, directive_name, s);
                 }
             }
             Directive::Logs(path, format) => {
@@ -100,6 +120,13 @@ pub fn print_command(command: &Command, indent: usize) {
             }
             Directive::Else => {
                 println!("{}    > else", indent_str);
+            }
+            Directive::RequireConfirm(message) => {
+                if message.trim().is_empty() {
+                    println!("{}    > require_confirm:", indent_str);
+                } else {
+                    println!("{}    > require_confirm: {}", indent_str, message);
+                }
             }
         }
     }
