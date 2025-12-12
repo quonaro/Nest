@@ -519,8 +519,19 @@ impl CliGenerator {
         use std::io::Write;
 
         // Process template in log path
-        let processed_path =
-            TemplateProcessor::process(log_path, args, &[], &[], &[], &[], &[], &[]);
+        // Log path doesn't need parent args (it's just a path)
+        let empty_parent_args = HashMap::new();
+        let processed_path = TemplateProcessor::process(
+            log_path,
+            args,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &empty_parent_args,
+        );
 
         // Create parent directories if needed
         if let Some(parent) = std::path::Path::new(&processed_path).parent() {
@@ -987,6 +998,7 @@ impl CliGenerator {
         args: &HashMap<String, String>,
         dry_run: bool,
         verbose: bool,
+        parent_args: &HashMap<String, String>,
     ) -> Result<(), String> {
         if dry_run {
             use super::output::OutputFormatter;
@@ -1029,6 +1041,7 @@ impl CliGenerator {
                         &[],
                         &[],
                         &[],
+                        parent_args,
                     );
                     // Execute immediately - store in variable to ensure it lives long enough
                     let cmd = processed_command;
@@ -1148,6 +1161,7 @@ impl CliGenerator {
                             &[],
                             &[],
                             &[],
+                            parent_args,
                         );
                         current_shell_block.push(processed_line);
                         continue;
@@ -1174,6 +1188,8 @@ impl CliGenerator {
                     }
 
                     let mut visited = std::collections::HashSet::new();
+                    // Commands called from scripts don't inherit parent args
+                    let empty_parent_args = HashMap::new();
                     self.execute_command_with_deps(
                         cmd,
                         &call_args,
@@ -1181,6 +1197,7 @@ impl CliGenerator {
                         dry_run,
                         verbose,
                         &mut visited,
+                        &empty_parent_args,
                     )?;
                 } else {
                     // Neither command nor function found - treat as shell command
@@ -1496,6 +1513,8 @@ impl CliGenerator {
         };
 
         // Execute function body (supports commands, functions, and shell scripts)
+        // Functions don't inherit parent args - they use their own args
+        let empty_parent_args = HashMap::new();
         self.execute_script(
             &processed_body,
             env_vars,
@@ -1504,6 +1523,7 @@ impl CliGenerator {
             args,
             dry_run,
             verbose,
+            &empty_parent_args,
         )
     }
 
@@ -1611,6 +1631,8 @@ impl CliGenerator {
                 visited.insert(dep_path.clone());
 
                 // Execute dependency recursively (with its own dependencies and provided arguments)
+                // Dependencies don't inherit parent args - they use their own provided args
+                let empty_parent_args = HashMap::new();
                 self.execute_command_with_deps(
                     dep_command,
                     &dep.args,
@@ -1618,6 +1640,7 @@ impl CliGenerator {
                     dry_run,
                     verbose,
                     visited,
+                    &empty_parent_args,
                 )?;
 
                 // Remove from visited after execution (allow reuse in different branches)
@@ -1636,6 +1659,16 @@ impl CliGenerator {
     /// Executes a command with its dependencies.
     ///
     /// This is an internal method that handles dependency resolution.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command to execute
+    /// * `args` - Arguments for the current command
+    /// * `command_path` - Path to the command (e.g., ["grp", "start"])
+    /// * `dry_run` - Whether to perform a dry run
+    /// * `verbose` - Whether to show verbose output
+    /// * `visited` - Set of visited commands (for cycle detection)
+    /// * `parent_args` - Arguments from parent commands (for inheritance)
     fn execute_command_with_deps(
         &self,
         command: &Command,
@@ -1644,6 +1677,7 @@ impl CliGenerator {
         dry_run: bool,
         verbose: bool,
         visited: &mut std::collections::HashSet<Vec<String>>,
+        parent_args: &HashMap<String, String>,
     ) -> Result<(), String> {
         let command_path_unwrapped = command_path.unwrap_or(&[]);
         let command_path_for_logging = command_path;
@@ -1732,6 +1766,11 @@ impl CliGenerator {
             (Vec::new(), Vec::new())
         };
 
+        // Merge parent args with current args (current args take priority)
+        let merged_parent_args = parent_args.clone();
+        // Don't override with current args - parent args are for inheritance only
+        // Current args will be processed separately with highest priority
+
         // Execute before script (if present)
         if let Some(before_script) = Self::get_directive_value(&command.directives, "before") {
             let processed_before = TemplateProcessor::process(
@@ -1743,6 +1782,7 @@ impl CliGenerator {
                 &command.local_constants,
                 &parent_variables,
                 &parent_constants,
+                &merged_parent_args,
             );
 
             if verbose {
@@ -1758,6 +1798,7 @@ impl CliGenerator {
                 args,
                 dry_run,
                 verbose,
+                &merged_parent_args,
             ) {
                 return Err(format!("Before script failed: {}", e));
             }
@@ -1784,6 +1825,7 @@ impl CliGenerator {
                                 &command.local_constants,
                                 &parent_variables,
                                 &parent_constants,
+                                &merged_parent_args,
                             ) {
                                 Ok(true) => {
                                     matched_script = Some(script.clone());
@@ -1810,6 +1852,7 @@ impl CliGenerator {
                                 &command.local_constants,
                                 &parent_variables,
                                 &parent_constants,
+                                &merged_parent_args,
                             ) {
                                 Ok(true) => {
                                     matched_script = Some(script.clone());
@@ -1852,6 +1895,7 @@ impl CliGenerator {
             &command.local_constants,
             &parent_variables,
             &parent_constants,
+            &merged_parent_args,
         );
 
         // Check privileged access BEFORE execution
@@ -1904,6 +1948,7 @@ impl CliGenerator {
             args,
             dry_run,
             verbose,
+            &merged_parent_args,
         );
 
         // Handle main script result first (before logging to avoid partial move)
@@ -1921,6 +1966,7 @@ impl CliGenerator {
                         &command.local_constants,
                         &parent_variables,
                         &parent_constants,
+                        &merged_parent_args,
                     );
 
                     if verbose {
@@ -1936,6 +1982,7 @@ impl CliGenerator {
                         args,
                         dry_run,
                         verbose,
+                        &merged_parent_args,
                     ) {
                         return Err(format!("After script failed: {}", e));
                     }
@@ -1960,6 +2007,7 @@ impl CliGenerator {
                         &command.local_constants,
                         &parent_variables,
                         &parent_constants,
+                        &merged_parent_args,
                     );
 
                     if verbose {
@@ -1976,6 +2024,7 @@ impl CliGenerator {
                         args,
                         dry_run,
                         verbose,
+                        &merged_parent_args,
                     ) {
                         return Err(format!("Fallback script failed: {}", e));
                     }
@@ -2017,6 +2066,7 @@ impl CliGenerator {
         result
     }
 
+    #[allow(dead_code)]
     pub fn execute_command(
         &self,
         command: &Command,
@@ -2026,7 +2076,41 @@ impl CliGenerator {
         verbose: bool,
     ) -> Result<(), String> {
         let mut visited = std::collections::HashSet::new();
-        self.execute_command_with_deps(command, args, command_path, dry_run, verbose, &mut visited)
+        let parent_args = HashMap::new(); // Top-level command has no parent args
+        self.execute_command_with_deps(
+            command,
+            args,
+            command_path,
+            dry_run,
+            verbose,
+            &mut visited,
+            &parent_args,
+        )
+    }
+
+    /// Executes a command with parent arguments.
+    ///
+    /// This is a convenience method that calls execute_command_with_deps
+    /// with the provided parent arguments.
+    pub fn execute_command_with_parent_args(
+        &self,
+        command: &Command,
+        args: &HashMap<String, String>,
+        command_path: Option<&[String]>,
+        dry_run: bool,
+        verbose: bool,
+        parent_args: &HashMap<String, String>,
+    ) -> Result<(), String> {
+        let mut visited = std::collections::HashSet::new();
+        self.execute_command_with_deps(
+            command,
+            args,
+            command_path,
+            dry_run,
+            verbose,
+            &mut visited,
+            parent_args,
+        )
     }
 }
 

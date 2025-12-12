@@ -30,13 +30,14 @@ impl TemplateProcessor {
     ///
     /// Priority order:
     /// 1. Parameters (from args) - highest priority
-    /// 2. Local variables (from command) - override parent and global variables
-    /// 3. Local constants (from command) - override parent and global constants
-    /// 4. Parent variables (from parent commands, nearest to farthest) - override global variables
-    /// 5. Parent constants (from parent commands, nearest to farthest) - override global constants
-    /// 6. Global variables (can be redefined, last definition wins)
-    /// 7. Global constants (cannot be redefined)
-    /// 8. Special variables ({{now}}, {{user}}) - lowest priority, only if not defined above
+    /// 2. Parent parameters (from parent commands, nearest to farthest) - override parent variables/constants
+    /// 3. Local variables (from command) - override parent and global variables
+    /// 4. Local constants (from command) - override parent and global constants
+    /// 5. Parent variables (from parent commands, nearest to farthest) - override global variables
+    /// 6. Parent constants (from parent commands, nearest to farthest) - override global constants
+    /// 7. Global variables (can be redefined, last definition wins)
+    /// 8. Global constants (cannot be redefined)
+    /// 9. Special variables ({{now}}, {{user}}) - lowest priority, only if not defined above
     ///
     /// # Arguments
     ///
@@ -48,6 +49,7 @@ impl TemplateProcessor {
     /// * `local_constants` - List of local constants (from command, optional)
     /// * `parent_variables` - List of parent variables (from parent commands, optional)
     /// * `parent_constants` - List of parent constants (from parent commands, optional)
+    /// * `parent_args` - HashMap of parent command parameter names to values (from parent commands, optional)
     ///
     /// # Returns
     ///
@@ -60,7 +62,7 @@ impl TemplateProcessor {
     /// let mut args = HashMap::new();
     /// args.insert("name".to_string(), "world".to_string());
     /// let script = "echo Hello {{name}}!";
-    /// let processed = TemplateProcessor::process(script, &args, &[], &[], &[], &[], &[], &[]);
+    /// let processed = TemplateProcessor::process(script, &args, &[], &[], &[], &[], &[], &[], &std::collections::HashMap::new());
     /// assert_eq!(processed, "echo Hello world!");
     /// ```
     pub fn process(
@@ -72,6 +74,7 @@ impl TemplateProcessor {
         local_constants: &[Constant],
         parent_variables: &[Variable],
         parent_constants: &[Constant],
+        parent_args: &HashMap<String, String>,
     ) -> String {
         let mut processed = script.to_string();
 
@@ -112,6 +115,14 @@ impl TemplateProcessor {
         for (key, value) in args {
             let placeholder = format!("{{{{{}}}}}", key);
             processed = processed.replace(&placeholder, value);
+        }
+
+        // Replace parent parameter placeholders {{param}} (second highest priority, only if not in args)
+        for (key, value) in parent_args {
+            if !args.contains_key(key) {
+                let placeholder = format!("{{{{{}}}}}", key);
+                processed = processed.replace(&placeholder, value);
+            }
         }
 
         // Replace shell-style $* with wildcard arguments (for compatibility)

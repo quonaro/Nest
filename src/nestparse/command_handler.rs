@@ -96,11 +96,16 @@ impl CommandHandler {
             }
         };
 
+        // Extract parent command arguments (from the group command)
+        let parent_args = Self::extract_parent_args(root_matches, command_path, generator);
+
         // Get flags from root matches (they're global)
         let dry_run = root_matches.get_flag(FLAG_DRY_RUN);
         let verbose = root_matches.get_flag(FLAG_VERBOSE);
 
-        generator.execute_command(default_cmd, &args, Some(&default_path), dry_run, verbose)
+        // Execute with parent args - we need to modify execute_command to accept parent_args
+        // For now, we'll pass empty parent args and handle it in execute_command_with_deps
+        generator.execute_command_with_parent_args(default_cmd, &args, Some(&default_path), dry_run, verbose, &parent_args)
     }
 
     /// Handles execution of a regular (non-group) command.
@@ -153,11 +158,16 @@ impl CommandHandler {
             }
         };
 
+        // Extract parent command arguments (if this is a nested command)
+        // Use root_matches to access parent command arguments
+        let parent_args = Self::extract_parent_args(root_matches, command_path, generator);
+
         // Get flags from root matches (they're global)
         let dry_run = root_matches.get_flag(FLAG_DRY_RUN);
         let verbose = root_matches.get_flag(FLAG_VERBOSE);
 
-        generator.execute_command(command, &args, Some(command_path), dry_run, verbose)
+        // Execute with parent args
+        generator.execute_command_with_parent_args(command, &args, Some(command_path), dry_run, verbose, &parent_args)
     }
 
     fn get_group_matches(matches: &ArgMatches) -> &ArgMatches {
@@ -165,5 +175,71 @@ impl CommandHandler {
             .subcommand()
             .map(|(_, sub_matches)| sub_matches)
             .unwrap_or(matches)
+    }
+
+    /// Extracts arguments from parent commands in the command path.
+    ///
+    /// For a command path like ["grp", "start"], this extracts arguments
+    /// from the "grp" parent command.
+    ///
+    /// # Arguments
+    ///
+    /// * `root_matches` - Root ArgMatches containing all command information
+    /// * `command_path` - Full path to the command (e.g., ["grp", "start"])
+    /// * `generator` - CLI generator for finding commands
+    fn extract_parent_args(
+        root_matches: &ArgMatches,
+        command_path: &[String],
+        generator: &CliGenerator,
+    ) -> std::collections::HashMap<String, String> {
+        let mut parent_args = std::collections::HashMap::new();
+
+        // If command_path has only one element, there are no parents
+        if command_path.len() <= 1 {
+            return parent_args;
+        }
+
+        // Traverse up the command path to extract parent arguments
+        // For path ["grp", "start"], we need to get args from "grp"
+        let mut current_matches = root_matches;
+        let mut current_path = Vec::new();
+
+        // Navigate to each parent command's matches
+        for name in command_path.iter().take(command_path.len() - 1) {
+            current_path.push(name.clone());
+            
+            // Find the parent command to get its parameters
+            if let Some(parent_cmd) = generator.find_command(&current_path) {
+                // Navigate to this parent command's matches
+                if let Some((_, sub_matches)) = current_matches.subcommand() {
+                    current_matches = sub_matches;
+                } else {
+                    // If we can't find subcommand matches, skip this parent
+                    continue;
+                }
+
+                // Extract arguments from parent command
+                let parent_cmd_args = if parent_cmd.has_wildcard {
+                    ArgumentExtractor::extract_wildcard_args(current_matches)
+                } else {
+                    match ArgumentExtractor::extract_from_matches(
+                        current_matches,
+                        &parent_cmd.parameters,
+                        generator,
+                        &current_path,
+                    ) {
+                        Ok(args) => args,
+                        Err(_) => std::collections::HashMap::new(), // Skip if extraction fails
+                    }
+                };
+
+                // Merge parent args (later parents override earlier ones)
+                for (key, value) in parent_cmd_args {
+                    parent_args.insert(key, value);
+                }
+            }
+        }
+
+        parent_args
     }
 }

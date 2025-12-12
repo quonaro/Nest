@@ -3,8 +3,8 @@
 //! This module handles parsing and evaluating conditional expressions
 //! with support for comparison operators (==, !=, <=, >=) and logical operators (&&, ||, !).
 
+use super::ast::{Constant, Variable};
 use super::template::TemplateProcessor;
-use super::ast::{Variable, Constant};
 use std::collections::HashMap;
 
 /// Represents a condition that can be evaluated.
@@ -46,6 +46,7 @@ enum ComparisonOp {
 /// * `local_constants` - Local constants for template substitution
 /// * `parent_variables` - Parent variables for template substitution
 /// * `parent_constants` - Parent constants for template substitution
+/// * `parent_args` - Parent command arguments for template substitution
 ///
 /// # Returns
 ///
@@ -60,6 +61,7 @@ pub fn evaluate_condition(
     local_constants: &[Constant],
     parent_variables: &[Variable],
     parent_constants: &[Constant],
+    parent_args: &HashMap<String, String>,
 ) -> Result<bool, String> {
     let trimmed = condition.trim();
     if trimmed.is_empty() {
@@ -68,7 +70,7 @@ pub fn evaluate_condition(
 
     // Parse the condition expression
     let expr = parse_condition(trimmed)?;
-    
+
     // Evaluate the expression
     evaluate_expr(
         &expr,
@@ -79,6 +81,7 @@ pub fn evaluate_condition(
         local_constants,
         parent_variables,
         parent_constants,
+        parent_args,
     )
 }
 
@@ -150,9 +153,17 @@ fn parse_condition(condition: &str) -> Result<ConditionExpr, String> {
     // If no operator found, treat as boolean value
     let lower = trimmed.to_lowercase();
     if lower == "true" {
-        Ok(ConditionExpr::Comparison("true".to_string(), ComparisonOp::Equal, "true".to_string()))
+        Ok(ConditionExpr::Comparison(
+            "true".to_string(),
+            ComparisonOp::Equal,
+            "true".to_string(),
+        ))
     } else if lower == "false" {
-        Ok(ConditionExpr::Comparison("false".to_string(), ComparisonOp::Equal, "false".to_string()))
+        Ok(ConditionExpr::Comparison(
+            "false".to_string(),
+            ComparisonOp::Equal,
+            "false".to_string(),
+        ))
     } else {
         Err(format!("Invalid condition: {}", condition))
     }
@@ -163,7 +174,7 @@ fn find_logical_operator(s: &str, op: &str) -> Option<usize> {
     let mut depth = 0;
     let mut in_quotes = false;
     let mut quote_char = '\0';
-    
+
     for (i, ch) in s.char_indices() {
         match ch {
             '"' | '\'' if !in_quotes => {
@@ -177,14 +188,14 @@ fn find_logical_operator(s: &str, op: &str) -> Option<usize> {
             ')' if !in_quotes => depth -= 1,
             _ => {}
         }
-        
+
         if depth == 0 && !in_quotes && i + op.len() <= s.len() {
             if s[i..].starts_with(op) {
                 return Some(i);
             }
         }
     }
-    
+
     None
 }
 
@@ -197,14 +208,14 @@ fn find_comparison_operator(s: &str) -> Option<(ComparisonOp, usize)> {
         ("<=", ComparisonOp::LessOrEqual),
         (">=", ComparisonOp::GreaterOrEqual),
     ];
-    
+
     let mut depth = 0;
     let mut in_quotes = false;
     let mut quote_char = '\0';
-    
+
     // Find all operator positions
     let mut positions = Vec::new();
-    
+
     for (i, ch) in s.char_indices() {
         match ch {
             '"' | '\'' if !in_quotes => {
@@ -218,7 +229,7 @@ fn find_comparison_operator(s: &str) -> Option<(ComparisonOp, usize)> {
             ')' if !in_quotes => depth -= 1,
             _ => {}
         }
-        
+
         if depth == 0 && !in_quotes {
             for (op_str, op) in &operators {
                 if i + op_str.len() <= s.len() && s[i..].starts_with(op_str) {
@@ -227,7 +238,7 @@ fn find_comparison_operator(s: &str) -> Option<(ComparisonOp, usize)> {
             }
         }
     }
-    
+
     // Return the first (leftmost) operator
     positions.first().map(|(pos, op)| (*op, *pos))
 }
@@ -242,6 +253,7 @@ fn evaluate_expr(
     local_constants: &[Constant],
     parent_variables: &[Variable],
     parent_constants: &[Constant],
+    parent_args: &HashMap<String, String>,
 ) -> Result<bool, String> {
     match expr {
         ConditionExpr::Comparison(left, op, right) => {
@@ -255,6 +267,7 @@ fn evaluate_expr(
                 local_constants,
                 parent_variables,
                 parent_constants,
+                parent_args,
             );
             let right_val = TemplateProcessor::process(
                 right,
@@ -265,12 +278,13 @@ fn evaluate_expr(
                 local_constants,
                 parent_variables,
                 parent_constants,
+                parent_args,
             );
-            
+
             // Try to parse as numbers for <= and >=
             let left_num = left_val.trim().parse::<f64>();
             let right_num = right_val.trim().parse::<f64>();
-            
+
             match op {
                 ComparisonOp::Equal => Ok(left_val.trim() == right_val.trim()),
                 ComparisonOp::NotEqual => Ok(left_val.trim() != right_val.trim()),
@@ -306,6 +320,7 @@ fn evaluate_expr(
                 local_constants,
                 parent_variables,
                 parent_constants,
+                parent_args,
             )?;
             Ok(!result)
         }
@@ -319,6 +334,7 @@ fn evaluate_expr(
                 local_constants,
                 parent_variables,
                 parent_constants,
+                parent_args,
             )?;
             // Short-circuit evaluation
             if !left_result {
@@ -333,6 +349,7 @@ fn evaluate_expr(
                 local_constants,
                 parent_variables,
                 parent_constants,
+                parent_args,
             )?;
             Ok(left_result && right_result)
         }
@@ -346,6 +363,7 @@ fn evaluate_expr(
                 local_constants,
                 parent_variables,
                 parent_constants,
+                parent_args,
             )?;
             // Short-circuit evaluation
             if left_result {
@@ -360,9 +378,9 @@ fn evaluate_expr(
                 local_constants,
                 parent_variables,
                 parent_constants,
+                parent_args,
             )?;
             Ok(left_result || right_result)
         }
     }
 }
-

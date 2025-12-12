@@ -492,12 +492,18 @@ impl Parser {
             return Ok(Value::Bool(false));
         }
 
-        // Array
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            let content = &trimmed[1..trimmed.len() - 1];
+        // Array - support both [item1, item2] and (item1, item2) formats
+        if (trimmed.starts_with('[') && trimmed.ends_with(']'))
+            || (trimmed.starts_with('(') && trimmed.ends_with(')'))
+        {
+            let content = if trimmed.starts_with('[') {
+                &trimmed[1..trimmed.len() - 1]
+            } else {
+                &trimmed[1..trimmed.len() - 1]
+            };
             let items: Vec<String> = content
                 .split(',')
-                .map(|s| s.trim().trim_matches('"').to_string())
+                .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
             return Ok(Value::Array(items));
