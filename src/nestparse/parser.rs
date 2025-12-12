@@ -3,8 +3,8 @@
 //! This module parses the Nestfile syntax into an Abstract Syntax Tree (AST).
 //! It handles nested commands, parameters, directives, and multiline constructs.
 
+use super::ast::{Command, Constant, Dependency, Directive, Function, Parameter, Value, Variable};
 use crate::constants::{BOOL_FALSE, BOOL_TRUE, INDENT_SIZE};
-use super::ast::{Command, Parameter, Value, Directive, Variable, Constant, Dependency, Function};
 use std::collections::HashMap;
 
 /// Parser state for processing Nestfile content.
@@ -89,17 +89,17 @@ impl Parser {
         let mut constants = Vec::new();
         let mut functions = Vec::new();
         let mut constant_names = std::collections::HashSet::new();
-        
+
         while self.current_index < self.lines.len() {
             let line = &self.lines[self.current_index];
             let trimmed = line.trim();
-            
+
             // Skip empty lines and comments
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 self.current_index += 1;
                 continue;
             }
-            
+
             // Check for variable or constant definition (@var or @const)
             if trimmed.starts_with("@var ") {
                 let var = self.parse_variable()?;
@@ -112,8 +112,11 @@ impl Parser {
                 // Check if constant already exists (disallow redefinition)
                 if constant_names.contains(&const_def.name) {
                     return Err(ParseError::InvalidSyntax(
-                        format!("Constant '{}' is already defined and cannot be redefined", const_def.name),
-                        self.current_line_number()
+                        format!(
+                            "Constant '{}' is already defined and cannot be redefined",
+                            const_def.name
+                        ),
+                        self.current_line_number(),
                     ));
                 }
                 constant_names.insert(const_def.name.clone());
@@ -124,12 +127,12 @@ impl Parser {
                 functions.push(func);
                 continue;
             }
-            
+
             // Check if it's a command definition (ends with : or contains opening parenthesis but not closing)
             // A line like "):" should not be recognized as a command
-            let is_command = !trimmed.starts_with('>') && 
-                (trimmed.ends_with(':') || (trimmed.contains('(') && !trimmed.contains(')')));
-            
+            let is_command = !trimmed.starts_with('>')
+                && (trimmed.ends_with(':') || (trimmed.contains('(') && !trimmed.contains(')')));
+
             if is_command {
                 let command = self.parse_command(0)?;
                 commands.push(command);
@@ -137,7 +140,7 @@ impl Parser {
                 self.current_index += 1;
             }
         }
-        
+
         Ok(ParseResult {
             commands,
             variables,
@@ -153,39 +156,39 @@ impl Parser {
 
         let line = &self.lines[self.current_index];
         let indent = get_indent_size(line);
-        
+
         if indent < base_indent {
             return Err(ParseError::InvalidIndent(self.current_line_number()));
         }
 
         // Parse function signature: name(params): (may be multiline)
         let (name, parameters, has_wildcard) = self.parse_function_signature_multiline(indent)?;
-        
+
         // current_index already incremented in parse_function_signature_multiline
-        
+
         let mut directives = Vec::new();
         let mut children = Vec::new();
         let mut local_variables = Vec::new();
         let mut local_constants = Vec::new();
         let mut local_constant_names = std::collections::HashSet::new();
-        
+
         // Parse directives, local variables/constants, and children
         while self.current_index < self.lines.len() {
             let next_line = self.lines[self.current_index].clone();
             let next_indent = get_indent_size(&next_line);
             let next_trimmed = next_line.trim();
-            
+
             // If indent is less or equal, we're done with this command
             if next_indent <= indent && !next_trimmed.is_empty() {
                 break;
             }
-            
+
             // Skip empty lines and comments
             if next_trimmed.is_empty() || next_trimmed.starts_with('#') {
                 self.current_index += 1;
                 continue;
             }
-            
+
             // Check for local variable or constant definition (@var or @const)
             if next_trimmed.starts_with("@var ") {
                 let var = self.parse_variable()?;
@@ -206,7 +209,7 @@ impl Parser {
                 local_constants.push(const_def);
                 continue;
             }
-            
+
             // Check if it's a directive (> desc:, > env:, etc.)
             if next_trimmed.starts_with('>') {
                 let (directive, is_multiline) = self.parse_directive(&next_line, next_indent)?;
@@ -218,16 +221,17 @@ impl Parser {
             }
             // Check if it's a child command
             // A line like "):" should not be recognized as a command
-            else if !next_trimmed.starts_with('>') && 
-                    (next_trimmed.ends_with(':') || (next_trimmed.contains('(') && !next_trimmed.contains(')'))) {
+            else if !next_trimmed.starts_with('>')
+                && (next_trimmed.ends_with(':')
+                    || (next_trimmed.contains('(') && !next_trimmed.contains(')')))
+            {
                 let child = self.parse_command(indent)?;
                 children.push(child);
-            }
-            else {
+            } else {
                 self.current_index += 1;
             }
         }
-        
+
         Ok(Command {
             name,
             parameters,
@@ -239,30 +243,33 @@ impl Parser {
         })
     }
 
-    fn parse_function_signature_multiline(&mut self, base_indent: u8) -> Result<(String, Vec<Parameter>, bool), ParseError> {
+    fn parse_function_signature_multiline(
+        &mut self,
+        base_indent: u8,
+    ) -> Result<(String, Vec<Parameter>, bool), ParseError> {
         if self.current_index >= self.lines.len() {
             return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
         }
 
         let line = &self.lines[self.current_index];
         let trimmed = line.trim();
-        
+
         // Find opening parenthesis
         if let Some(open_paren) = trimmed.find('(') {
             let name = trimmed[..open_paren].trim().to_string();
-            
+
             // Check if closing parenthesis is on the same line
             if let Some(close_paren) = trimmed.rfind(')') {
                 // Single line signature
                 let params_str = &trimmed[open_paren + 1..close_paren];
                 let trimmed_params = params_str.trim();
-                
+
                 // Check for wildcard parameter
                 if trimmed_params == "*" {
                     self.current_index += 1;
                     return Ok((name, Vec::new(), true));
                 }
-                
+
                 let parameters = if trimmed_params.is_empty() {
                     Vec::new()
                 } else {
@@ -274,18 +281,18 @@ impl Parser {
                 // Multiline signature - collect lines until we find closing parenthesis
                 let mut params_lines = Vec::new();
                 self.current_index += 1; // Move past the line with opening parenthesis
-                
+
                 while self.current_index < self.lines.len() {
                     let next_line = &self.lines[self.current_index];
                     let next_indent = get_indent_size(next_line);
                     let next_trimmed = next_line.trim();
-                    
+
                     // Skip empty lines and comments
                     if next_trimmed.is_empty() || next_trimmed.starts_with('#') {
                         self.current_index += 1;
                         continue;
                     }
-                    
+
                     // If we find closing parenthesis, we're done
                     if next_trimmed.contains(')') {
                         // Extract the part before closing parenthesis and ':'
@@ -299,15 +306,15 @@ impl Parser {
                         self.current_index += 1;
                         break;
                     }
-                    
+
                     // If indent is less than base, something's wrong
                     if next_indent <= base_indent && !next_trimmed.is_empty() {
                         return Err(ParseError::InvalidSyntax(
                             "Missing closing parenthesis in function signature".to_string(),
-                            self.current_line_number()
+                            self.current_line_number(),
                         ));
                     }
-                    
+
                     // Add this line to params (remove inline comments if any)
                     let line_without_comment = if let Some(comment_pos) = next_trimmed.find('#') {
                         next_trimmed[..comment_pos].trim()
@@ -319,21 +326,21 @@ impl Parser {
                     }
                     self.current_index += 1;
                 }
-                
+
                 let params_str = params_lines.join(" ");
                 let trimmed_params = params_str.trim();
-                
+
                 // Check for wildcard parameter
                 if trimmed_params == "*" {
                     return Ok((name, Vec::new(), true));
                 }
-                
+
                 let parameters = if trimmed_params.is_empty() {
                     Vec::new()
                 } else {
                     self.parse_parameters(&params_str, self.current_line_number())?
                 };
-                
+
                 Ok((name, parameters, false))
             }
         } else {
@@ -348,12 +355,16 @@ impl Parser {
         }
     }
 
-    fn parse_parameters(&self, params_str: &str, line_number: usize) -> Result<Vec<Parameter>, ParseError> {
+    fn parse_parameters(
+        &self,
+        params_str: &str,
+        line_number: usize,
+    ) -> Result<Vec<Parameter>, ParseError> {
         let mut parameters = Vec::new();
         let mut current_param = String::new();
         let mut paren_depth = 0;
         let mut param_strings = Vec::new();
-        
+
         // First, collect all parameter strings
         for ch in params_str.chars() {
             match ch {
@@ -376,66 +387,74 @@ impl Parser {
                 }
             }
         }
-        
+
         if !current_param.trim().is_empty() {
             param_strings.push(current_param.trim().to_string());
         }
-        
+
         // Check if * is present and validate it's the only parameter
         let has_wildcard = param_strings.iter().any(|p| p.trim() == "*");
         if has_wildcard {
             if param_strings.len() > 1 {
                 return Err(ParseError::InvalidSyntax(
-                    "Wildcard parameter (*) cannot be used together with other parameters".to_string(),
-                    line_number
+                    "Wildcard parameter (*) cannot be used together with other parameters"
+                        .to_string(),
+                    line_number,
                 ));
             }
             // If * is the only parameter, it should have been handled earlier in parse_command_signature
             // If we reach here with only *, something went wrong, but we'll return a clear error
             return Err(ParseError::InvalidSyntax(
                 "Invalid parameter: *".to_string(),
-                line_number
+                line_number,
             ));
         }
-        
+
         // Parse all parameters normally
         for param_str in param_strings {
             parameters.push(self.parse_parameter(&param_str, line_number)?);
         }
-        
+
         Ok(parameters)
     }
 
-    fn parse_parameter(&self, param_str: &str, line_number: usize) -> Result<Parameter, ParseError> {
+    fn parse_parameter(
+        &self,
+        param_str: &str,
+        line_number: usize,
+    ) -> Result<Parameter, ParseError> {
         // Format: [!]name|alias: type = default
         // ! prefix means named argument (uses --name)
         let parts: Vec<&str> = param_str.split(':').collect();
-        
+
         if parts.len() < 2 {
-            return Err(ParseError::InvalidSyntax(format!("Invalid parameter: {}", param_str), line_number));
+            return Err(ParseError::InvalidSyntax(
+                format!("Invalid parameter: {}", param_str),
+                line_number,
+            ));
         }
-        
+
         let name_part = parts[0].trim();
         let type_default_str: String = parts[1..].join(":");
         let type_default = type_default_str.trim();
-        
+
         // Check if it's a named argument (starts with !)
         let (is_named, name_part_clean) = if name_part.starts_with('!') {
             (true, &name_part[1..])
         } else {
             (false, name_part)
         };
-        
+
         // Parse name and alias
         let (name, alias) = if let Some(pipe_pos) = name_part_clean.find('|') {
             (
                 name_part_clean[..pipe_pos].trim().to_string(),
-                Some(name_part_clean[pipe_pos + 1..].trim().to_string())
+                Some(name_part_clean[pipe_pos + 1..].trim().to_string()),
             )
         } else {
             (name_part_clean.to_string(), None)
         };
-        
+
         // Parse type and default
         let (param_type, default) = if let Some(eq_pos) = type_default.find('=') {
             let param_type = type_default[..eq_pos].trim().to_string();
@@ -445,7 +464,7 @@ impl Parser {
         } else {
             (type_default.to_string(), None)
         };
-        
+
         Ok(Parameter {
             name,
             alias,
@@ -457,13 +476,13 @@ impl Parser {
 
     fn parse_value(&self, value_str: &str) -> Result<Value, ParseError> {
         let trimmed = value_str.trim();
-        
+
         // String literal
         if trimmed.starts_with('"') && trimmed.ends_with('"') {
             let s = trimmed[1..trimmed.len() - 1].to_string();
             return Ok(Value::String(s));
         }
-        
+
         // Boolean
         if trimmed == BOOL_TRUE {
             return Ok(Value::Bool(true));
@@ -471,36 +490,37 @@ impl Parser {
         if trimmed == BOOL_FALSE {
             return Ok(Value::Bool(false));
         }
-        
+
         // Array
         if trimmed.starts_with('[') && trimmed.ends_with(']') {
             let content = &trimmed[1..trimmed.len() - 1];
-            let items: Vec<String> = content.split(',')
+            let items: Vec<String> = content
+                .split(',')
                 .map(|s| s.trim().trim_matches('"').to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
             return Ok(Value::Array(items));
         }
-        
+
         // Number
         if let Ok(num) = trimmed.parse::<f64>() {
             return Ok(Value::Number(num));
         }
-        
+
         // Default to string
         Ok(Value::String(trimmed.to_string()))
     }
 
     fn parse_directive(&mut self, line: &str, indent: u8) -> Result<(Directive, bool), ParseError> {
         let trimmed = line.trim();
-        
+
         // Remove '>' prefix
         let content = trimmed.strip_prefix('>').unwrap_or(trimmed).trim();
-        
+
         if let Some(colon_pos) = content.find(':') {
             let directive_name = content[..colon_pos].trim();
             let directive_value = content[colon_pos + 1..].trim();
-            
+
             match directive_name {
                 "desc" => Ok((Directive::Desc(directive_value.to_string()), false)),
                 "cwd" => Ok((Directive::Cwd(directive_value.to_string()), false)),
@@ -521,8 +541,11 @@ impl Parser {
                             "false" | "0" | "no" => false,
                             _ => {
                                 return Err(ParseError::InvalidSyntax(
-                                    format!("Invalid privileged value: {}. Expected true or false", directive_value),
-                                    self.current_line_number()
+                                    format!(
+                                        "Invalid privileged value: {}. Expected true or false",
+                                        directive_value
+                                    ),
+                                    self.current_line_number(),
                                 ));
                             }
                         }
@@ -589,14 +612,14 @@ impl Parser {
                     }
                     let format = parts[0].trim().to_lowercase();
                     let path = parts[1].trim().to_string();
-                    
+
                     if format != "json" && format != "txt" {
                         return Err(ParseError::InvalidSyntax(
                             format!("Invalid logs format: {}. Expected 'json' or 'txt'", format),
-                            self.current_line_number()
+                            self.current_line_number(),
                         ));
                     }
-                    
+
                     Ok((Directive::Logs(path, format), false))
                 }
                 "if" => {
@@ -607,7 +630,10 @@ impl Parser {
                     // Else-if conditional execution directive: elif: condition
                     Ok((Directive::Elif(directive_value.to_string()), false))
                 }
-                _ => Err(ParseError::InvalidSyntax(format!("Unknown directive: {}", directive_name), self.current_line_number()))
+                _ => Err(ParseError::InvalidSyntax(
+                    format!("Unknown directive: {}", directive_name),
+                    self.current_line_number(),
+                )),
             }
         } else {
             // No colon - check if it's a standalone privileged directive or else directive
@@ -616,7 +642,10 @@ impl Parser {
             } else if content == "else" {
                 Ok((Directive::Else, false))
             } else {
-                Err(ParseError::InvalidSyntax(format!("Invalid directive format: {}", trimmed), self.current_line_number()))
+                Err(ParseError::InvalidSyntax(
+                    format!("Invalid directive format: {}", trimmed),
+                    self.current_line_number(),
+                ))
             }
         }
     }
@@ -628,33 +657,33 @@ impl Parser {
 
         let line = &self.lines[self.current_index];
         let trimmed = line.trim();
-        
+
         // Format: @var NAME = "value" or @var NAME = value
         let var_part = trimmed.strip_prefix("@var ").unwrap_or("").trim();
-        
+
         if let Some(eq_pos) = var_part.find('=') {
             let name = var_part[..eq_pos].trim().to_string();
             let value_str = var_part[eq_pos + 1..].trim();
-            
+
             if name.is_empty() {
                 return Err(ParseError::InvalidSyntax(
                     "Variable name cannot be empty".to_string(),
-                    self.current_line_number()
+                    self.current_line_number(),
                 ));
             }
-            
+
             // Parse value (remove quotes if present)
-            let value = value_str
-                .trim_matches('"')
-                .trim_matches('\'')
-                .to_string();
-            
+            let value = value_str.trim_matches('"').trim_matches('\'').to_string();
+
             self.current_index += 1;
             Ok(Variable { name, value })
         } else {
             Err(ParseError::InvalidSyntax(
-                format!("Invalid variable syntax. Expected: @var NAME = value, got: {}", trimmed),
-                self.current_line_number()
+                format!(
+                    "Invalid variable syntax. Expected: @var NAME = value, got: {}",
+                    trimmed
+                ),
+                self.current_line_number(),
             ))
         }
     }
@@ -666,33 +695,33 @@ impl Parser {
 
         let line = &self.lines[self.current_index];
         let trimmed = line.trim();
-        
+
         // Format: @const NAME = "value" or @const NAME = value
         let const_part = trimmed.strip_prefix("@const ").unwrap_or("").trim();
-        
+
         if let Some(eq_pos) = const_part.find('=') {
             let name = const_part[..eq_pos].trim().to_string();
             let value_str = const_part[eq_pos + 1..].trim();
-            
+
             if name.is_empty() {
                 return Err(ParseError::InvalidSyntax(
                     "Constant name cannot be empty".to_string(),
-                    self.current_line_number()
+                    self.current_line_number(),
                 ));
             }
-            
+
             // Parse value (remove quotes if present)
-            let value = value_str
-                .trim_matches('"')
-                .trim_matches('\'')
-                .to_string();
-            
+            let value = value_str.trim_matches('"').trim_matches('\'').to_string();
+
             self.current_index += 1;
             Ok(Constant { name, value })
         } else {
             Err(ParseError::InvalidSyntax(
-                format!("Invalid constant syntax. Expected: @const NAME = value, got: {}", trimmed),
-                self.current_line_number()
+                format!(
+                    "Invalid constant syntax. Expected: @const NAME = value, got: {}",
+                    trimmed
+                ),
+                self.current_line_number(),
             ))
         }
     }
@@ -705,17 +734,17 @@ impl Parser {
         let line = &self.lines[self.current_index];
         let indent = get_indent_size(line);
         let trimmed = line.trim();
-        
+
         // Format: @function name(params):
         // Extract function name and parameters from "@function name(params):"
         let func_part = trimmed.strip_prefix("@function ").unwrap_or("").trim();
-        
+
         // Parse function signature manually
         let (name, parameters) = if func_part.contains('(') {
             // Has parameters
             let open_paren = func_part.find('(').unwrap();
             let name = func_part[..open_paren].trim().to_string();
-            
+
             // Find closing parenthesis
             if let Some(close_paren) = func_part.rfind(')') {
                 let params_str = &func_part[open_paren + 1..close_paren];
@@ -729,7 +758,7 @@ impl Parser {
             } else {
                 return Err(ParseError::InvalidSyntax(
                     "Missing closing parenthesis in function signature".to_string(),
-                    self.current_line_number()
+                    self.current_line_number(),
                 ));
             }
         } else {
@@ -742,27 +771,27 @@ impl Parser {
             self.current_index += 1;
             (name, Vec::new())
         };
-        
+
         // Parse function body (similar to command parsing)
         let mut body_lines = Vec::new();
         let mut local_variables = Vec::new();
-        
+
         while self.current_index < self.lines.len() {
             let next_line = self.lines[self.current_index].clone();
             let next_indent = get_indent_size(&next_line);
             let next_trimmed = next_line.trim();
-            
+
             // If indent is less or equal, we're done with this function
             if next_indent <= indent && !next_trimmed.is_empty() {
                 break;
             }
-            
+
             // Skip empty lines and comments
             if next_trimmed.is_empty() || next_trimmed.starts_with('#') {
                 self.current_index += 1;
                 continue;
             }
-            
+
             // Check for local variable definition
             if next_trimmed.starts_with("@var ") {
                 let var = self.parse_variable()?;
@@ -770,7 +799,7 @@ impl Parser {
                 local_variables.push(var);
                 continue;
             }
-            
+
             // Everything else is part of the function body
             // Remove indentation from the line
             let body_line = if next_indent > indent {
@@ -781,9 +810,9 @@ impl Parser {
             body_lines.push(body_line.to_string());
             self.current_index += 1;
         }
-        
+
         let body = body_lines.join("\n");
-        
+
         Ok(Function {
             name,
             parameters,
@@ -795,27 +824,27 @@ impl Parser {
     fn parse_multiline_block(&mut self, base_indent: u8) -> Result<String, ParseError> {
         let mut content = String::new();
         self.current_index += 1; // Move past the "> script: |" line
-        
+
         while self.current_index < self.lines.len() {
             let line = &self.lines[self.current_index];
             let line_indent = get_indent_size(line);
             let trimmed = line.trim();
-            
+
             // If indent is less or equal to base, block is finished
             if line_indent <= base_indent && !trimmed.is_empty() {
                 break;
             }
-            
+
             // Empty line at base level also ends the block
             if line_indent == base_indent && trimmed.is_empty() {
                 break;
             }
-            
+
             // Add line to content
             if !content.is_empty() {
                 content.push('\n');
             }
-            
+
             // Remove the base indent + one level (4 spaces) from content
             let content_line = if line_indent > base_indent {
                 let spaces_to_remove = (base_indent + INDENT_SIZE) as usize;
@@ -827,11 +856,11 @@ impl Parser {
             } else {
                 line
             };
-            
+
             content.push_str(content_line);
             self.current_index += 1;
         }
-        
+
         Ok(content)
     }
 }
@@ -860,41 +889,41 @@ impl Parser {
     fn parse_dependencies(&self, value: &str) -> Result<Vec<Dependency>, ParseError> {
         let mut dependencies = Vec::new();
         let mut current = value.trim();
-        
+
         while !current.is_empty() {
             // Find the next dependency (accounting for parentheses and quotes)
             let (dep_str, remainder) = self.split_next_dependency(current)?;
-            
+
             if dep_str.is_empty() {
                 break;
             }
-            
+
             let dep = self.parse_single_dependency(dep_str.trim())?;
             dependencies.push(dep);
-            
+
             current = remainder.trim();
         }
-        
+
         Ok(dependencies)
     }
-    
+
     /// Splits the next dependency from the string, handling nested parentheses and quotes.
     fn split_next_dependency<'a>(&self, s: &'a str) -> Result<(&'a str, &'a str), ParseError> {
         let mut depth = 0;
         let mut in_quotes = false;
         let mut quote_char = '\0';
         let mut start = 0;
-        
+
         // Skip leading whitespace
         while start < s.len() && s.chars().nth(start).unwrap().is_whitespace() {
             start += 1;
         }
-        
+
         for (i, ch) in s.char_indices() {
             if i < start {
                 continue;
             }
-            
+
             match ch {
                 '"' | '\'' if !in_quotes => {
                     in_quotes = true;
@@ -916,7 +945,7 @@ impl Parser {
                 _ => {}
             }
         }
-        
+
         // No comma found, this is the last dependency
         if start < s.len() {
             Ok((&s[start..], ""))
@@ -924,19 +953,19 @@ impl Parser {
             Ok(("", ""))
         }
     }
-    
+
     /// Parses a single dependency string into a Dependency struct.
     fn parse_single_dependency(&self, dep_str: &str) -> Result<Dependency, ParseError> {
         // Check if dependency has arguments
         if let Some(open_paren) = dep_str.find('(') {
             let command_path = dep_str[..open_paren].trim().to_string();
-            
+
             // Find matching closing parenthesis
             let mut depth = 0;
             let mut in_quotes = false;
             let mut quote_char = '\0';
             let mut close_paren = None;
-            
+
             for (i, ch) in dep_str[open_paren..].char_indices() {
                 match ch {
                     '"' | '\'' if !in_quotes => {
@@ -959,21 +988,18 @@ impl Parser {
                     _ => {}
                 }
             }
-            
+
             let close_paren = close_paren.ok_or_else(|| {
                 ParseError::InvalidSyntax(
                     format!("Unclosed parentheses in dependency: {}", dep_str),
                     self.current_line_number(),
                 )
             })?;
-            
+
             let args_str = &dep_str[open_paren + 1..close_paren];
             let args = self.parse_dependency_args(args_str)?;
-            
-            Ok(Dependency {
-                command_path,
-                args,
-            })
+
+            Ok(Dependency { command_path, args })
         } else {
             // No arguments
             Ok(Dependency {
@@ -982,53 +1008,52 @@ impl Parser {
             })
         }
     }
-    
+
     /// Parses arguments from a dependency argument string.
     /// Format: `name="value", name2=true, name3=123`
     fn parse_dependency_args(&self, args_str: &str) -> Result<HashMap<String, String>, ParseError> {
         let mut args = HashMap::new();
-        
+
         if args_str.trim().is_empty() {
             return Ok(args);
         }
-        
+
         // Split by comma, but respect quotes
         let mut current = args_str.trim();
         while !current.is_empty() {
             let (arg_str, remainder) = self.split_next_arg(current)?;
-            
+
             if arg_str.is_empty() {
                 break;
             }
-            
+
             // Parse name=value
-            let equals_pos = arg_str.find('=')
-                .ok_or_else(|| {
-                    ParseError::InvalidSyntax(
-                        format!("Invalid argument format (expected name=value): {}", arg_str),
-                        self.current_line_number(),
-                    )
-                })?;
-            
+            let equals_pos = arg_str.find('=').ok_or_else(|| {
+                ParseError::InvalidSyntax(
+                    format!("Invalid argument format (expected name=value): {}", arg_str),
+                    self.current_line_number(),
+                )
+            })?;
+
             let name = arg_str[..equals_pos].trim().to_string();
             let value_str = arg_str[equals_pos + 1..].trim();
-            
+
             // Parse value (string, bool, or number)
             let value = self.parse_dependency_value(value_str)?;
-            
+
             args.insert(name, value);
-            
+
             current = remainder.trim();
         }
-        
+
         Ok(args)
     }
-    
+
     /// Splits the next argument from the string, handling quotes.
     fn split_next_arg<'a>(&self, s: &'a str) -> Result<(&'a str, &'a str), ParseError> {
         let mut in_quotes = false;
         let mut quote_char = '\0';
-        
+
         for (i, ch) in s.char_indices() {
             match ch {
                 '"' | '\'' if !in_quotes => {
@@ -1044,17 +1069,18 @@ impl Parser {
                 _ => {}
             }
         }
-        
+
         Ok((s, ""))
     }
-    
+
     /// Parses a dependency argument value (string, bool, or number).
     fn parse_dependency_value(&self, value_str: &str) -> Result<String, ParseError> {
         let trimmed = value_str.trim();
-        
+
         // String value (quoted)
-        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
-           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
+        if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        {
             // Remove quotes
             let unquoted = &trimmed[1..trimmed.len() - 1];
             // Unescape quotes
@@ -1078,4 +1104,3 @@ impl Parser {
         }
     }
 }
-
