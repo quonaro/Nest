@@ -24,17 +24,19 @@ impl TemplateProcessor {
     /// - `{{param}}` - Replaced with the value from `args` for key "param"
     /// - `{{VAR}}` - Replaced with variable value (can be redefined)
     /// - `{{CONST}}` - Replaced with constant value (cannot be redefined)
-    /// - `{{now}}` - Replaced with current UTC time in RFC3339 format
-    /// - `{{user}}` - Replaced with the USER environment variable (or "unknown" if not set)
+    /// - `{{now}}` - Replaced with current UTC time in RFC3339 format (only if not overridden)
+    /// - `{{user}}` - Replaced with the USER environment variable (only if not overridden)
     /// - `{{SYSTEM_ERROR_MESSAGE}}` - Replaced with error message (available in fallback scripts)
     ///
     /// Priority order:
     /// 1. Parameters (from args) - highest priority
-    /// 2. Local variables (from command) - override global variables
-    /// 3. Local constants (from command) - override global constants
-    /// 4. Global variables (can be redefined, last definition wins)
-    /// 5. Global constants (cannot be redefined)
-    /// 6. Special variables ({{now}}, {{user}}) - lowest priority
+    /// 2. Local variables (from command) - override parent and global variables
+    /// 3. Local constants (from command) - override parent and global constants
+    /// 4. Parent variables (from parent commands, nearest to farthest) - override global variables
+    /// 5. Parent constants (from parent commands, nearest to farthest) - override global constants
+    /// 6. Global variables (can be redefined, last definition wins)
+    /// 7. Global constants (cannot be redefined)
+    /// 8. Special variables ({{now}}, {{user}}) - lowest priority, only if not defined above
     ///
     /// # Arguments
     ///
@@ -44,6 +46,8 @@ impl TemplateProcessor {
     /// * `global_constants` - List of global constants
     /// * `local_variables` - List of local variables (from command, optional)
     /// * `local_constants` - List of local constants (from command, optional)
+    /// * `parent_variables` - List of parent variables (from parent commands, optional)
+    /// * `parent_constants` - List of parent constants (from parent commands, optional)
     ///
     /// # Returns
     ///
@@ -56,7 +60,7 @@ impl TemplateProcessor {
     /// let mut args = HashMap::new();
     /// args.insert("name".to_string(), "world".to_string());
     /// let script = "echo Hello {{name}}!";
-    /// let processed = TemplateProcessor::process(script, &args, &[], &[], &[], &[]);
+    /// let processed = TemplateProcessor::process(script, &args, &[], &[], &[], &[], &[], &[]);
     /// assert_eq!(processed, "echo Hello world!");
     /// ```
     pub fn process(
@@ -66,10 +70,12 @@ impl TemplateProcessor {
         global_constants: &[Constant],
         local_variables: &[Variable],
         local_constants: &[Constant],
+        parent_variables: &[Variable],
+        parent_constants: &[Constant],
     ) -> String {
         let mut processed = script.to_string();
 
-        // Build variable map with priority: local > global
+        // Build variable map with priority: local > parent > global > special
         let mut var_map: HashMap<String, String> = HashMap::new();
 
         // 1. Add global constants first (lowest priority for constants)
@@ -82,12 +88,22 @@ impl TemplateProcessor {
             var_map.insert(variable.name.clone(), variable.value.clone());
         }
 
-        // 3. Add local constants (override global constants/variables)
+        // 3. Add parent constants (override global constants/variables)
+        for constant in parent_constants {
+            var_map.insert(constant.name.clone(), constant.value.clone());
+        }
+
+        // 4. Add parent variables (override parent constants and global variables)
+        for variable in parent_variables {
+            var_map.insert(variable.name.clone(), variable.value.clone());
+        }
+
+        // 5. Add local constants (override parent and global constants/variables)
         for constant in local_constants {
             var_map.insert(constant.name.clone(), constant.value.clone());
         }
 
-        // 4. Add local variables (highest priority for variables, override everything)
+        // 6. Add local variables (highest priority for variables, override everything)
         for variable in local_variables {
             var_map.insert(variable.name.clone(), variable.value.clone());
         }
@@ -126,12 +142,19 @@ impl TemplateProcessor {
             processed = processed.replace(&placeholder, value);
         }
 
-        // Replace special variables (lowest priority, but checked after to avoid conflicts)
-        processed = processed.replace(TEMPLATE_VAR_NOW, &Utc::now().to_rfc3339());
-        processed = processed.replace(
-            TEMPLATE_VAR_USER,
-            &env::var(ENV_VAR_USER).unwrap_or_else(|_| DEFAULT_USER.to_string()),
-        );
+        // Replace special variables (lowest priority, only if not already defined)
+        // Check if "now" is already in var_map, if not, use special variable
+        if !var_map.contains_key("now") {
+            processed = processed.replace(TEMPLATE_VAR_NOW, &Utc::now().to_rfc3339());
+        }
+
+        // Check if "user" is already in var_map, if not, use special variable
+        if !var_map.contains_key("user") {
+            processed = processed.replace(
+                TEMPLATE_VAR_USER,
+                &env::var(ENV_VAR_USER).unwrap_or_else(|_| DEFAULT_USER.to_string()),
+            );
+        }
 
         // Replace system error message (from args if available, otherwise empty)
         // This variable is available in fallback scripts

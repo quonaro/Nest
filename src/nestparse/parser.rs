@@ -3,9 +3,10 @@
 //! This module parses the Nestfile syntax into an Abstract Syntax Tree (AST).
 //! It handles nested commands, parameters, directives, and multiline constructs.
 
-use super::ast::{Command, Constant, Dependency, Directive, Function, Parameter, Value, Variable};
+use super::ast::{Constant, Dependency, Directive, Function, Parameter, Value, Variable};
 use crate::constants::{BOOL_FALSE, BOOL_TRUE, INDENT_SIZE};
 use std::collections::HashMap;
+use std::process::Command as ProcessCommand;
 
 /// Parser state for processing Nestfile content.
 ///
@@ -34,7 +35,7 @@ pub enum ParseError {
 #[derive(Debug)]
 pub struct ParseResult {
     /// List of parsed commands
-    pub commands: Vec<Command>,
+    pub commands: Vec<super::ast::Command>,
     /// List of parsed variables (can be redefined)
     pub variables: Vec<Variable>,
     /// List of parsed constants (cannot be redefined)
@@ -149,7 +150,7 @@ impl Parser {
         })
     }
 
-    fn parse_command(&mut self, base_indent: u8) -> Result<Command, ParseError> {
+    fn parse_command(&mut self, base_indent: u8) -> Result<super::ast::Command, ParseError> {
         if self.current_index >= self.lines.len() {
             return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
         }
@@ -232,7 +233,7 @@ impl Parser {
             }
         }
 
-        Ok(Command {
+        Ok(super::ast::Command {
             name,
             parameters,
             directives,
@@ -673,7 +674,10 @@ impl Parser {
             }
 
             // Parse value (remove quotes if present)
-            let value = value_str.trim_matches('"').trim_matches('\'').to_string();
+            let mut value = value_str.trim_matches('"').trim_matches('\'').to_string();
+
+            // Execute command substitutions $(...) if present
+            value = self.execute_command_substitutions(&value, self.current_line_number())?;
 
             self.current_index += 1;
             Ok(Variable { name, value })
@@ -711,7 +715,10 @@ impl Parser {
             }
 
             // Parse value (remove quotes if present)
-            let value = value_str.trim_matches('"').trim_matches('\'').to_string();
+            let mut value = value_str.trim_matches('"').trim_matches('\'').to_string();
+
+            // Execute command substitutions $(...) if present
+            value = self.execute_command_substitutions(&value, self.current_line_number())?;
 
             self.current_index += 1;
             Ok(Constant { name, value })
@@ -862,6 +869,129 @@ impl Parser {
         }
 
         Ok(content)
+    }
+
+    /// Executes command substitutions in the format $(command) and replaces them with command output.
+    ///
+    /// This function finds all occurrences of $(...) in the string and executes the commands,
+    /// replacing the $(...) with the command output (trimmed of whitespace).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The string value that may contain $(...) command substitutions
+    /// * `line_number` - The line number for error reporting
+    ///
+    /// # Returns
+    ///
+    /// Returns the string with all $(...) replaced by command outputs, or an error if command execution fails.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// // Input: "Path: $(which python)"
+    /// // Output: "Path: /usr/bin/python"
+    /// ```
+    fn execute_command_substitutions(
+        &self,
+        value: &str,
+        line_number: usize,
+    ) -> Result<String, ParseError> {
+        let mut result = String::new();
+        let mut chars = value.chars().peekable();
+        let mut in_substitution = false;
+        let mut command = String::new();
+        let mut paren_depth = 0;
+
+        while let Some(ch) = chars.next() {
+            if !in_substitution {
+                if ch == '$' {
+                    if let Some(&'(') = chars.peek() {
+                        // Found $(
+                        chars.next(); // consume '('
+                        in_substitution = true;
+                        paren_depth = 1;
+                        command.clear();
+                        continue;
+                    }
+                }
+                result.push(ch);
+            } else {
+                // We're inside $(...)
+                match ch {
+                    '(' => {
+                        paren_depth += 1;
+                        command.push(ch);
+                    }
+                    ')' => {
+                        paren_depth -= 1;
+                        if paren_depth == 0 {
+                            // End of substitution, execute command
+                            let output = self.execute_command(&command.trim(), line_number)?;
+                            result.push_str(&output);
+                            in_substitution = false;
+                            command.clear();
+                        } else {
+                            command.push(ch);
+                        }
+                    }
+                    _ => {
+                        command.push(ch);
+                    }
+                }
+            }
+        }
+
+        // If we're still in a substitution at the end, it's an error
+        if in_substitution {
+            return Err(ParseError::InvalidSyntax(
+                format!("Unclosed command substitution $(...) in value: {}", value),
+                line_number,
+            ));
+        }
+
+        Ok(result)
+    }
+
+    /// Executes a shell command and returns its output as a string.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The shell command to execute
+    /// * `line_number` - The line number for error reporting
+    ///
+    /// # Returns
+    ///
+    /// Returns the command output (stdout) trimmed of whitespace, or an error if execution fails.
+    fn execute_command(&self, command: &str, line_number: usize) -> Result<String, ParseError> {
+        let output = if cfg!(windows) {
+            // On Windows, use cmd /c
+            ProcessCommand::new("cmd").arg("/c").arg(command).output()
+        } else {
+            // On Unix-like systems, use sh -c
+            ProcessCommand::new("sh").arg("-c").arg(command).output()
+        }
+        .map_err(|e| {
+            ParseError::InvalidSyntax(
+                format!("Failed to execute command '{}': {}", command, e),
+                line_number,
+            )
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ParseError::InvalidSyntax(
+                format!(
+                    "Command '{}' failed with exit code {}: {}",
+                    command,
+                    output.status.code().unwrap_or(-1),
+                    stderr.trim()
+                ),
+                line_number,
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.trim().to_string())
     }
 }
 

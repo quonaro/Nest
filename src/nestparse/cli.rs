@@ -519,7 +519,8 @@ impl CliGenerator {
         use std::io::Write;
 
         // Process template in log path
-        let processed_path = TemplateProcessor::process(log_path, args, &[], &[], &[], &[]);
+        let processed_path =
+            TemplateProcessor::process(log_path, args, &[], &[], &[], &[], &[], &[]);
 
         // Create parent directories if needed
         if let Some(parent) = std::path::Path::new(&processed_path).parent() {
@@ -1026,6 +1027,8 @@ impl CliGenerator {
                         &self.constants,
                         &[],
                         &[],
+                        &[],
+                        &[],
                     );
                     // Execute immediately - store in variable to ensure it lives long enough
                     let cmd = processed_command;
@@ -1141,6 +1144,8 @@ impl CliGenerator {
                             args,
                             &self.variables,
                             &self.constants,
+                            &[],
+                            &[],
                             &[],
                             &[],
                         );
@@ -1333,6 +1338,50 @@ impl CliGenerator {
         }
 
         found
+    }
+
+    /// Collects variables and constants from all parent commands in the path.
+    ///
+    /// This function traverses the command path and collects local variables
+    /// and constants from each parent command. The order is from root to leaf,
+    /// so variables from closer parents can override variables from farther parents.
+    ///
+    /// # Arguments
+    ///
+    /// * `command_path` - The path to the command (e.g., ["database", "backup"])
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple of (parent_variables, parent_constants) collected from all parents.
+    /// Variables are ordered from root to leaf, so when processed, later ones override earlier ones.
+    fn collect_parent_variables(
+        &self,
+        command_path: &[String],
+    ) -> (Vec<super::ast::Variable>, Vec<super::ast::Constant>) {
+        let mut parent_variables = Vec::new();
+        let mut parent_constants = Vec::new();
+
+        // If path is empty or has only one element, no parents
+        if command_path.len() <= 1 {
+            return (parent_variables, parent_constants);
+        }
+
+        // Traverse path from root to parent (excluding the last element which is the current command)
+        // We collect in order from root to leaf, so when we add them to var_map in TemplateProcessor,
+        // later ones (closer parents) will override earlier ones (farther parents)
+        let mut current = &self.commands;
+        for name in command_path.iter().take(command_path.len() - 1) {
+            if let Some(cmd) = current.iter().find(|c| &c.name == name) {
+                // Add variables and constants from this parent command
+                parent_variables.extend(cmd.local_variables.iter().cloned());
+                parent_constants.extend(cmd.local_constants.iter().cloned());
+                current = &cmd.children;
+            } else {
+                break;
+            }
+        }
+
+        (parent_variables, parent_constants)
     }
 
     /// Finds a function by its name.
@@ -1676,6 +1725,13 @@ impl CliGenerator {
         let privileged = Self::get_privileged_directive(&command.directives);
         let logs = Self::get_logs_directive(&command.directives);
 
+        // Collect parent variables and constants
+        let (parent_variables, parent_constants) = if let Some(path) = command_path {
+            self.collect_parent_variables(path)
+        } else {
+            (Vec::new(), Vec::new())
+        };
+
         // Execute before script (if present)
         if let Some(before_script) = Self::get_directive_value(&command.directives, "before") {
             let processed_before = TemplateProcessor::process(
@@ -1685,6 +1741,8 @@ impl CliGenerator {
                 &self.constants,
                 &command.local_variables,
                 &command.local_constants,
+                &parent_variables,
+                &parent_constants,
             );
 
             if verbose {
@@ -1724,6 +1782,8 @@ impl CliGenerator {
                                 &self.constants,
                                 &command.local_variables,
                                 &command.local_constants,
+                                &parent_variables,
+                                &parent_constants,
                             ) {
                                 Ok(true) => {
                                     matched_script = Some(script.clone());
@@ -1748,6 +1808,8 @@ impl CliGenerator {
                                 &self.constants,
                                 &command.local_variables,
                                 &command.local_constants,
+                                &parent_variables,
+                                &parent_constants,
                             ) {
                                 Ok(true) => {
                                     matched_script = Some(script.clone());
@@ -1788,6 +1850,8 @@ impl CliGenerator {
             &self.constants,
             &command.local_variables,
             &command.local_constants,
+            &parent_variables,
+            &parent_constants,
         );
 
         // Check privileged access BEFORE execution
@@ -1855,6 +1919,8 @@ impl CliGenerator {
                         &self.constants,
                         &command.local_variables,
                         &command.local_constants,
+                        &parent_variables,
+                        &parent_constants,
                     );
 
                     if verbose {
@@ -1892,6 +1958,8 @@ impl CliGenerator {
                         &self.constants,
                         &command.local_variables,
                         &command.local_constants,
+                        &parent_variables,
+                        &parent_constants,
                     );
 
                     if verbose {

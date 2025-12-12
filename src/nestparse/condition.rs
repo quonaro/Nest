@@ -44,6 +44,8 @@ enum ComparisonOp {
 /// * `global_constants` - Global constants for template substitution
 /// * `local_variables` - Local variables for template substitution
 /// * `local_constants` - Local constants for template substitution
+/// * `parent_variables` - Parent variables for template substitution
+/// * `parent_constants` - Parent constants for template substitution
 ///
 /// # Returns
 ///
@@ -56,6 +58,8 @@ pub fn evaluate_condition(
     global_constants: &[Constant],
     local_variables: &[Variable],
     local_constants: &[Constant],
+    parent_variables: &[Variable],
+    parent_constants: &[Constant],
 ) -> Result<bool, String> {
     let trimmed = condition.trim();
     if trimmed.is_empty() {
@@ -73,6 +77,8 @@ pub fn evaluate_condition(
         global_constants,
         local_variables,
         local_constants,
+        parent_variables,
+        parent_constants,
     )
 }
 
@@ -234,6 +240,8 @@ fn evaluate_expr(
     global_constants: &[Constant],
     local_variables: &[Variable],
     local_constants: &[Constant],
+    parent_variables: &[Variable],
+    parent_constants: &[Constant],
 ) -> Result<bool, String> {
     match expr {
         ConditionExpr::Comparison(left, op, right) => {
@@ -245,6 +253,8 @@ fn evaluate_expr(
                 global_constants,
                 local_variables,
                 local_constants,
+                parent_variables,
+                parent_constants,
             );
             let right_val = TemplateProcessor::process(
                 right,
@@ -253,6 +263,8 @@ fn evaluate_expr(
                 global_constants,
                 local_variables,
                 local_constants,
+                parent_variables,
+                parent_constants,
             );
             
             // Try to parse as numbers for <= and >=
@@ -292,6 +304,8 @@ fn evaluate_expr(
                 global_constants,
                 local_variables,
                 local_constants,
+                parent_variables,
+                parent_constants,
             )?;
             Ok(!result)
         }
@@ -303,6 +317,8 @@ fn evaluate_expr(
                 global_constants,
                 local_variables,
                 local_constants,
+                parent_variables,
+                parent_constants,
             )?;
             // Short-circuit evaluation
             if !left_result {
@@ -315,6 +331,8 @@ fn evaluate_expr(
                 global_constants,
                 local_variables,
                 local_constants,
+                parent_variables,
+                parent_constants,
             )?;
             Ok(left_result && right_result)
         }
@@ -326,6 +344,8 @@ fn evaluate_expr(
                 global_constants,
                 local_variables,
                 local_constants,
+                parent_variables,
+                parent_constants,
             )?;
             // Short-circuit evaluation
             if left_result {
@@ -338,6 +358,8 @@ fn evaluate_expr(
                 global_constants,
                 local_variables,
                 local_constants,
+                parent_variables,
+                parent_constants,
             )?;
             Ok(left_result || right_result)
         }
