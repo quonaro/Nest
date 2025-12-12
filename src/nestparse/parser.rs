@@ -352,7 +352,9 @@ impl Parser {
         let mut parameters = Vec::new();
         let mut current_param = String::new();
         let mut paren_depth = 0;
+        let mut param_strings = Vec::new();
         
+        // First, collect all parameter strings
         for ch in params_str.chars() {
             match ch {
                 '(' => {
@@ -365,7 +367,7 @@ impl Parser {
                 }
                 ',' if paren_depth == 0 => {
                     if !current_param.trim().is_empty() {
-                        parameters.push(self.parse_parameter(current_param.trim(), line_number)?);
+                        param_strings.push(current_param.trim().to_string());
                     }
                     current_param.clear();
                 }
@@ -376,7 +378,29 @@ impl Parser {
         }
         
         if !current_param.trim().is_empty() {
-            parameters.push(self.parse_parameter(current_param.trim(), line_number)?);
+            param_strings.push(current_param.trim().to_string());
+        }
+        
+        // Check if * is present and validate it's the only parameter
+        let has_wildcard = param_strings.iter().any(|p| p.trim() == "*");
+        if has_wildcard {
+            if param_strings.len() > 1 {
+                return Err(ParseError::InvalidSyntax(
+                    "Wildcard parameter (*) cannot be used together with other parameters".to_string(),
+                    line_number
+                ));
+            }
+            // If * is the only parameter, it should have been handled earlier in parse_command_signature
+            // If we reach here with only *, something went wrong, but we'll return a clear error
+            return Err(ParseError::InvalidSyntax(
+                "Invalid parameter: *".to_string(),
+                line_number
+            ));
+        }
+        
+        // Parse all parameters normally
+        for param_str in param_strings {
+            parameters.push(self.parse_parameter(&param_str, line_number)?);
         }
         
         Ok(parameters)

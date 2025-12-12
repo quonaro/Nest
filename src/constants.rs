@@ -113,6 +113,9 @@ pub const TEMPLATE_VAR_NOW: &str = "{{now}}";
 /// Template variable for current user.
 pub const TEMPLATE_VAR_USER: &str = "{{user}}";
 
+/// Template variable for system error message (available in fallback scripts).
+pub const TEMPLATE_VAR_ERROR: &str = "{{SYSTEM_ERROR_MESSAGE}}";
+
 // Environment Variables
 
 /// Environment variable name for current user.

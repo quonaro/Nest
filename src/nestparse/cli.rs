@@ -4,13 +4,14 @@
 //! command structure. It handles nested commands, parameters, flags, and
 //! special cases like default subcommands.
 
-use super::ast::{Command, Directive, Parameter, Value, Variable, Constant, Function};
+use super::ast::{Command, Constant, Directive, Function, Parameter, Value, Variable};
 use super::condition;
 use super::env::EnvironmentManager;
 use super::template::TemplateProcessor;
 use crate::constants::{
-    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_COMPLETE, FLAG_CONFIG, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW,
-    FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON, SHORT_VERSION,
+    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_COMPLETE, FLAG_CONFIG, FLAG_DRY_RUN,
+    FLAG_EXAMPLE, FLAG_SHOW, FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON,
+    SHORT_VERSION,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
@@ -68,7 +69,12 @@ impl CliGenerator {
     /// # Returns
     ///
     /// Returns a new `CliGenerator` instance ready to build CLI interfaces.
-    pub fn new(commands: Vec<Command>, variables: Vec<Variable>, constants: Vec<Constant>, functions: Vec<Function>) -> Self {
+    pub fn new(
+        commands: Vec<Command>,
+        variables: Vec<Variable>,
+        constants: Vec<Constant>,
+        functions: Vec<Function>,
+    ) -> Self {
         let default_param_ids = Self::preallocate_default_param_ids(&commands);
         Self {
             commands,
@@ -219,7 +225,7 @@ impl CliGenerator {
         let mut subcmd = ClapCommand::new(cmd_name).arg_required_else_help(false);
 
         subcmd = Self::add_description(subcmd, &command.directives);
-        
+
         // If command has wildcard, add trailing var arg and skip regular parameters
         if command.has_wildcard {
             subcmd = Self::add_wildcard_arg(subcmd);
@@ -235,7 +241,7 @@ impl CliGenerator {
         app = app.subcommand(subcmd);
         app
     }
-    
+
     fn add_wildcard_arg(mut subcmd: ClapCommand) -> ClapCommand {
         // Add a trailing var arg that accepts all remaining arguments
         // allow_hyphen_values(true) allows arguments starting with -- or -
@@ -463,7 +469,8 @@ impl CliGenerator {
     }
 
     fn get_depends_directive(directives: &[Directive]) -> Vec<super::ast::Dependency> {
-        directives.iter()
+        directives
+            .iter()
             .find_map(|d| match d {
                 Directive::Depends(deps) => Some(deps.clone()),
                 _ => None,
@@ -472,10 +479,13 @@ impl CliGenerator {
     }
 
     fn get_privileged_directive(directives: &[Directive]) -> bool {
-        directives.iter().find_map(|d| match d {
-            Directive::Privileged(value) => Some(*value),
-            _ => None,
-        }).unwrap_or(false)
+        directives
+            .iter()
+            .find_map(|d| match d {
+                Directive::Privileged(value) => Some(*value),
+                _ => None,
+            })
+            .unwrap_or(false)
     }
 
     fn get_logs_directive(directives: &[Directive]) -> Option<(String, String)> {
@@ -486,7 +496,8 @@ impl CliGenerator {
     }
 
     fn get_validate_directives(directives: &[Directive]) -> Vec<String> {
-        directives.iter()
+        directives
+            .iter()
             .filter_map(|d| match d {
                 Directive::Validate(s) => Some(s.clone()),
                 _ => None,
@@ -502,20 +513,13 @@ impl CliGenerator {
         args: &HashMap<String, String>,
         result: &Result<(), String>,
     ) -> Result<(), String> {
-        use std::fs::OpenOptions;
-        use std::io::Write;
         use chrono::Utc;
         use serde_json::json;
+        use std::fs::OpenOptions;
+        use std::io::Write;
 
         // Process template in log path
-        let processed_path = TemplateProcessor::process(
-            log_path,
-            args,
-            &[],
-            &[],
-            &[],
-            &[],
-        );
+        let processed_path = TemplateProcessor::process(log_path, args, &[], &[], &[], &[]);
 
         // Create parent directories if needed
         if let Some(parent) = std::path::Path::new(&processed_path).parent() {
@@ -553,21 +557,22 @@ impl CliGenerator {
                 writeln!(file, "[{}] Command: {}", timestamp, command_name)
                     .map_err(|e| format!("Failed to write log: {}", e))?;
                 if !args.is_empty() {
-                    let args_str: Vec<String> = args
-                        .iter()
-                        .map(|(k, v)| format!("{}={}", k, v))
-                        .collect();
+                    let args_str: Vec<String> =
+                        args.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
                     writeln!(file, "  Args: {}", args_str.join(", "))
                         .map_err(|e| format!("Failed to write log: {}", e))?;
                 }
-                writeln!(file, "  Status: {}", if success { "SUCCESS" } else { "FAILED" })
-                    .map_err(|e| format!("Failed to write log: {}", e))?;
+                writeln!(
+                    file,
+                    "  Status: {}",
+                    if success { "SUCCESS" } else { "FAILED" }
+                )
+                .map_err(|e| format!("Failed to write log: {}", e))?;
                 if let Some(err) = error_msg {
                     writeln!(file, "  Error: {}", err)
                         .map_err(|e| format!("Failed to write log: {}", e))?;
                 }
-                writeln!(file)
-                    .map_err(|e| format!("Failed to write log: {}", e))?;
+                writeln!(file).map_err(|e| format!("Failed to write log: {}", e))?;
             }
             _ => {
                 return Err(format!("Unknown log format: {}", log_format));
@@ -584,7 +589,7 @@ impl CliGenerator {
     fn parse_conditional_blocks(directives: &[Directive]) -> Vec<ConditionalBlock> {
         let mut blocks = Vec::new();
         let mut i = 0;
-        
+
         while i < directives.len() {
             let (condition_type, condition_value) = match &directives[i] {
                 Directive::If(cond) => (Some("if"), Some(cond.clone())),
@@ -595,7 +600,7 @@ impl CliGenerator {
                     continue;
                 }
             };
-            
+
             if let Some(block_type) = condition_type {
                 // Look for the next script directive
                 let mut found_script = false;
@@ -603,10 +608,16 @@ impl CliGenerator {
                     if let Directive::Script(script) = &directives[j] {
                         match block_type {
                             "if" => {
-                                blocks.push(ConditionalBlock::If(condition_value.unwrap(), script.clone()));
+                                blocks.push(ConditionalBlock::If(
+                                    condition_value.unwrap(),
+                                    script.clone(),
+                                ));
                             }
                             "elif" => {
-                                blocks.push(ConditionalBlock::Elif(condition_value.unwrap(), script.clone()));
+                                blocks.push(ConditionalBlock::Elif(
+                                    condition_value.unwrap(),
+                                    script.clone(),
+                                ));
                             }
                             "else" => {
                                 blocks.push(ConditionalBlock::Else(script.clone()));
@@ -619,11 +630,14 @@ impl CliGenerator {
                     }
                     // If we encounter another conditional directive before script, it's an error
                     // but we'll handle it gracefully by skipping
-                    if matches!(&directives[j], Directive::If(_) | Directive::Elif(_) | Directive::Else) {
+                    if matches!(
+                        &directives[j],
+                        Directive::If(_) | Directive::Elif(_) | Directive::Else
+                    ) {
                         break;
                     }
                 }
-                
+
                 if !found_script {
                     // No script found for this conditional, skip it
                     i += 1;
@@ -632,7 +646,7 @@ impl CliGenerator {
                 i += 1;
             }
         }
-        
+
         blocks
     }
 
@@ -657,12 +671,12 @@ impl CliGenerator {
         command_path: &[String],
     ) -> Result<(), String> {
         use regex::Regex;
-        
+
         for validate_rule in validate_directives {
             // Parse validation rule: "param_name matches /regex/"
             // Format: <param_name> matches /<pattern>/
             let trimmed = validate_rule.trim();
-            
+
             // Check for "matches" keyword
             if !trimmed.contains("matches") {
                 return Err(format!(
@@ -670,7 +684,7 @@ impl CliGenerator {
                     trimmed
                 ));
             }
-            
+
             // Split by "matches"
             let parts: Vec<&str> = trimmed.splitn(2, "matches").collect();
             if parts.len() != 2 {
@@ -679,10 +693,10 @@ impl CliGenerator {
                     trimmed
                 ));
             }
-            
+
             let param_name = parts[0].trim();
             let pattern_part = parts[1].trim();
-            
+
             // Extract regex pattern from /pattern/ or /pattern/flags
             let pattern = if pattern_part.starts_with('/') && pattern_part.len() > 1 {
                 // Find closing /
@@ -702,13 +716,13 @@ impl CliGenerator {
                         break;
                     }
                 }
-                
+
                 if let Some(end) = end_pos {
                     // Extract pattern (without leading /)
                     let pattern_str = &pattern_part[1..end - 1];
                     // Unescape the pattern
                     let unescaped = pattern_str.replace("\\/", "/");
-                    
+
                     // Check for flags after closing /
                     let flags = pattern_part[end..].trim();
                     let regex = if flags.is_empty() {
@@ -721,7 +735,7 @@ impl CliGenerator {
                         }
                         regex_builder.build()
                     };
-                    
+
                     match regex {
                         Ok(re) => re,
                         Err(e) => {
@@ -743,14 +757,15 @@ impl CliGenerator {
                     trimmed
                 ));
             };
-            
+
             // Get parameter value
-            let param_value = args.get(param_name)
-                .ok_or_else(|| format!(
+            let param_value = args.get(param_name).ok_or_else(|| {
+                format!(
                     "Validation error: parameter '{}' not found in arguments",
                     param_name
-                ))?;
-            
+                )
+            })?;
+
             // Validate
             if !pattern.is_match(param_value) {
                 let command_str = command_path.join(" ");
@@ -760,7 +775,7 @@ impl CliGenerator {
                 ));
             }
         }
-        
+
         Ok(())
     }
 
@@ -773,45 +788,52 @@ impl CliGenerator {
     /// - `group:command(arg="value")` - nested command with arguments
     ///
     /// Returns (command_path, args) if it's a command call, None otherwise.
-    fn parse_command_call(line: &str) -> Option<(String, std::collections::HashMap<String, String>)> {
+    fn parse_command_call(
+        line: &str,
+    ) -> Option<(String, std::collections::HashMap<String, String>)> {
         let trimmed = line.trim();
-        
+
         // Check if line looks like a command call
         // Command calls should start with alphanumeric or underscore, and may contain colons
         // They should not contain shell operators like |, &&, ||, ;, >, <, etc.
         if trimmed.is_empty() || trimmed.starts_with('#') {
             return None;
         }
-        
+
         // Check for shell operators that indicate this is not a command call
-        let shell_operators = ["|", "&&", "||", ";", ">", "<", ">>", "<<", "&", "$", "`", "[", "]", "="];
+        let shell_operators = [
+            "|", "&&", "||", ";", ">", "<", ">>", "<<", "&", "$", "`", "[", "]", "=",
+        ];
         if shell_operators.iter().any(|&op| trimmed.contains(op)) {
             return None;
         }
-        
+
         // Check for shell keywords that indicate this is not a command call
-        let shell_keywords = ["if", "then", "else", "elif", "fi", "case", "esac", "for", "while", "until", "do", "done", "function"];
+        let shell_keywords = [
+            "if", "then", "else", "elif", "fi", "case", "esac", "for", "while", "until", "do",
+            "done", "function",
+        ];
         let first_word = trimmed.split_whitespace().next().unwrap_or("");
         if shell_keywords.iter().any(|&kw| first_word == kw) {
             return None;
         }
-        
+
         // Try to parse as command call
         // Pattern: [group:]command[(args)]
         let command_path: String;
         let mut args = std::collections::HashMap::new();
-        
+
         // Check if there are parentheses (arguments)
         if let Some(open_paren) = trimmed.find('(') {
             // Extract command path (before parentheses)
             command_path = trimmed[..open_paren].trim().to_string();
-            
+
             // Find matching closing parenthesis
             let mut depth = 0;
             let mut in_quotes = false;
             let mut quote_char = '\0';
             let mut close_paren = None;
-            
+
             for (i, ch) in trimmed[open_paren..].char_indices() {
                 match ch {
                     '"' | '\'' if !in_quotes => {
@@ -834,7 +856,7 @@ impl CliGenerator {
                     _ => {}
                 }
             }
-            
+
             if let Some(close) = close_paren {
                 let args_str = &trimmed[open_paren + 1..close];
                 // Parse arguments using similar logic to dependency parsing
@@ -847,64 +869,66 @@ impl CliGenerator {
             // No arguments - just command path
             command_path = trimmed.to_string();
         }
-        
+
         // Validate command path (should contain only alphanumeric, underscore, colon, hyphen)
         if command_path.is_empty() {
             return None;
         }
-        
+
         // Check if it looks like a valid command path
-        let is_valid = command_path.chars().all(|c| {
-            c.is_alphanumeric() || c == ':' || c == '_' || c == '-'
-        }) && !command_path.starts_with(':') && !command_path.ends_with(':');
-        
+        let is_valid = command_path
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == ':' || c == '_' || c == '-')
+            && !command_path.starts_with(':')
+            && !command_path.ends_with(':');
+
         if !is_valid {
             return None;
         }
-        
+
         Some((command_path, args))
     }
-    
+
     /// Parses arguments from a command call argument string.
     /// Format: `name="value", name2=true, name3=123`
     fn parse_command_args(args_str: &str) -> Result<std::collections::HashMap<String, String>, ()> {
         let mut args = std::collections::HashMap::new();
-        
+
         if args_str.trim().is_empty() {
             return Ok(args);
         }
-        
+
         // Split by comma, but respect quotes
         let mut current = args_str.trim();
         while !current.is_empty() {
             let (arg_str, remainder) = Self::split_next_arg(current)?;
-            
+
             if arg_str.is_empty() {
                 break;
             }
-            
+
             // Parse name=value
             let equals_pos = arg_str.find('=').ok_or(())?;
-            
+
             let name = arg_str[..equals_pos].trim().to_string();
             let value_str = arg_str[equals_pos + 1..].trim();
-            
+
             // Parse value (string, bool, or number)
             let value = Self::parse_command_value(value_str);
-            
+
             args.insert(name, value);
-            
+
             current = remainder.trim();
         }
-        
+
         Ok(args)
     }
-    
+
     /// Splits the next argument from the string, handling quotes.
     fn split_next_arg(s: &str) -> Result<(&str, &str), ()> {
         let mut in_quotes = false;
         let mut quote_char = '\0';
-        
+
         for (i, ch) in s.char_indices() {
             match ch {
                 '"' | '\'' if !in_quotes => {
@@ -920,17 +944,18 @@ impl CliGenerator {
                 _ => {}
             }
         }
-        
+
         Ok((s, ""))
     }
-    
+
     /// Parses a command argument value (string, bool, or number).
     fn parse_command_value(value_str: &str) -> String {
         let trimmed = value_str.trim();
-        
+
         // String value (quoted)
-        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
-           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
+        if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        {
             // Remove quotes
             let unquoted = &trimmed[1..trimmed.len() - 1];
             // Unescape quotes
@@ -970,32 +995,54 @@ impl CliGenerator {
 
         // Process script line by line
         let lines: Vec<&str> = script.lines().collect();
-        let mut current_shell_block = Vec::new();
-        
+        let mut current_shell_block: Vec<String> = Vec::new();
+
         for line in lines {
             let trimmed_line = line.trim();
-            
+
             // Preserve empty lines in shell blocks (they might be needed for syntax)
             if trimmed_line.is_empty() {
-                current_shell_block.push(line);
+                current_shell_block.push(line.to_string());
                 continue;
             }
-            
+
+            // Check for shell: prefix (explicit external command call)
+            if trimmed_line.starts_with("shell:") {
+                // Execute any accumulated shell commands first
+                if !current_shell_block.is_empty() {
+                    let shell_script = current_shell_block.join("\n");
+                    Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose)?;
+                    current_shell_block.clear();
+                }
+
+                // Remove "shell:" prefix and process template variables (e.g., $*)
+                let external_command = trimmed_line[6..].trim_start(); // "shell:" is 6 chars
+                if !external_command.is_empty() {
+                    // Process template variables in the command (e.g., $* -> arguments) and execute
+                    let processed_command = TemplateProcessor::process(
+                        external_command,
+                        args,
+                        &self.variables,
+                        &self.constants,
+                        &[],
+                        &[],
+                    );
+                    // Execute immediately - store in variable to ensure it lives long enough
+                    let cmd = processed_command;
+                    Self::execute_shell_script(&cmd, env_vars, cwd, args, verbose)?;
+                }
+                continue;
+            }
+
             // Try to parse as command or function call
             if let Some((call_name, call_args)) = Self::parse_command_call(trimmed_line) {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
-                    Self::execute_shell_script(
-                        &shell_script,
-                        env_vars,
-                        cwd,
-                        args,
-                        verbose,
-                    )?;
+                    Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose)?;
                     current_shell_block.clear();
                 }
-                
+
                 // Check if it's a function call (single name, no colons)
                 if !call_name.contains(':') {
                     if let Some(func) = self.find_function(&call_name) {
@@ -1005,7 +1052,7 @@ impl CliGenerator {
                         for (key, value) in env::vars() {
                             merged_env.insert(key, value);
                         }
-                        
+
                         self.execute_function(
                             func,
                             &call_args,
@@ -1018,7 +1065,7 @@ impl CliGenerator {
                         continue;
                     }
                 }
-                
+
                 // Try to find as command
                 let resolved_path: Vec<String> = if call_name.contains(':') {
                     // Absolute path from root (e.g., "dev:build")
@@ -1032,7 +1079,8 @@ impl CliGenerator {
                             vec![cmd_name]
                         } else {
                             // Nested command - dependency is relative to parent
-                            let mut resolved = current_path[..current_path.len().saturating_sub(1)].to_vec();
+                            let mut resolved =
+                                current_path[..current_path.len().saturating_sub(1)].to_vec();
                             resolved.push(cmd_name);
                             resolved
                         }
@@ -1040,14 +1088,75 @@ impl CliGenerator {
                         vec![cmd_name]
                     }
                 };
-                
+
+                // Check if resolved path matches current command (recursive call)
+                if let Some(current_path) = command_path {
+                    if resolved_path == current_path {
+                        // This is a recursive call - treat as shell command instead
+                        use super::output::colors;
+                        use super::output::OutputFormatter;
+                        let path_str = current_path.join(" ");
+                        let full_path_str = resolved_path.join(":");
+                        OutputFormatter::warning(&format!(
+                            "{}⚠️  Warning:{} Command '{}' in script would call itself recursively.\n\
+                             {}   Treating '{}' as external shell command instead.\n\
+                             {}   To explicitly call this nest command, use: {}{}{}\n\
+                             {}   To explicitly call external command, use: {}shell:{}{}",
+                            colors::YELLOW, colors::RESET,
+                            path_str,
+                            colors::GRAY, call_name,
+                            colors::GRAY, colors::BRIGHT_CYAN, full_path_str, colors::RESET,
+                            colors::GRAY, colors::BRIGHT_CYAN, call_name, colors::RESET
+                        ));
+                        // Build command with arguments for shell execution
+                        // For wildcard commands, arguments are in args["*"]
+                        let mut shell_cmd = call_name.clone();
+
+                        // Add wildcard arguments if available (for wildcard commands)
+                        if let Some(wildcard_args) = args.get("*") {
+                            if !wildcard_args.is_empty() {
+                                shell_cmd.push_str(" ");
+                                shell_cmd.push_str(wildcard_args);
+                            }
+                        } else if !call_args.is_empty() {
+                            // For regular commands with arguments, add them
+                            let args_str: Vec<String> = call_args
+                                .iter()
+                                .map(|(k, v)| {
+                                    // Quote values that contain spaces
+                                    if v.contains(' ') {
+                                        format!("{}=\"{}\"", k, v)
+                                    } else {
+                                        format!("{}={}", k, v)
+                                    }
+                                })
+                                .collect();
+                            shell_cmd.push_str(" ");
+                            shell_cmd.push_str(&args_str.join(" "));
+                        }
+
+                        // Process template variables (e.g., $*) before treating as shell command
+                        let processed_line = TemplateProcessor::process(
+                            &shell_cmd,
+                            args,
+                            &self.variables,
+                            &self.constants,
+                            &[],
+                            &[],
+                        );
+                        current_shell_block.push(processed_line);
+                        continue;
+                    }
+                }
+
                 if let Some(cmd) = self.find_command(&resolved_path) {
                     if verbose {
                         use super::output::OutputFormatter;
                         let args_str = if call_args.is_empty() {
                             String::new()
                         } else {
-                            let args_display: Vec<String> = call_args.iter()
+                            let args_display: Vec<String> = call_args
+                                .iter()
                                 .map(|(k, v)| format!("{}=\"{}\"", k, v))
                                 .collect();
                             format!("({})", args_display.join(", "))
@@ -1058,7 +1167,7 @@ impl CliGenerator {
                             args_str
                         ));
                     }
-                    
+
                     let mut visited = std::collections::HashSet::new();
                     self.execute_command_with_deps(
                         cmd,
@@ -1070,32 +1179,26 @@ impl CliGenerator {
                     )?;
                 } else {
                     // Neither command nor function found - treat as shell command
-                    current_shell_block.push(line);
+                    current_shell_block.push(line.to_string());
                 }
             } else {
                 // Not a command/function call - treat as shell command
-                current_shell_block.push(line);
+                current_shell_block.push(line.to_string());
             }
         }
-        
+
         // Execute any remaining shell commands
         if !current_shell_block.is_empty() {
             let shell_script = current_shell_block.join("\n");
             // Don't trim - preserve all whitespace and structure
             if !shell_script.trim().is_empty() {
-                Self::execute_shell_script(
-                    &shell_script,
-                    env_vars,
-                    cwd,
-                    args,
-                    verbose,
-                )?;
+                Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose)?;
             }
         }
 
         Ok(())
     }
-    
+
     /// Detects shell from shebang and removes it from script.
     /// Returns (shell_command, script_without_shebang)
     fn detect_shell_and_remove_shebang(script: &str) -> (&str, String) {
@@ -1104,7 +1207,7 @@ impl CliGenerator {
             // Extract shell from shebang
             let shebang_line = trimmed.lines().next().unwrap_or("");
             let shell_path = shebang_line.trim_start_matches("#!").trim();
-            
+
             // Determine shell command
             let shell = if shell_path.contains("bash") {
                 "bash"
@@ -1117,7 +1220,7 @@ impl CliGenerator {
             } else {
                 "sh" // default
             };
-            
+
             // Remove shebang line from script
             // Skip the first line (shebang) and join remaining lines
             let lines: Vec<&str> = script.lines().collect();
@@ -1127,7 +1230,7 @@ impl CliGenerator {
             } else {
                 String::new()
             };
-            
+
             (shell, script_without_shebang)
         } else {
             ("sh", script.to_string())
@@ -1153,7 +1256,7 @@ impl CliGenerator {
             _verbose,
         )
     }
-    
+
     /// Executes a shell script with specified shell (helper function).
     fn execute_shell_script_with_shell(
         script: &str,
@@ -1164,10 +1267,10 @@ impl CliGenerator {
         _verbose: bool,
     ) -> Result<(), String> {
         use std::process::{Command as ProcessCommand, Stdio};
-        
+
         // Trim only leading/trailing whitespace to avoid issues, but preserve internal structure
         let script_to_execute = script.trim();
-        
+
         if script_to_execute.is_empty() {
             return Ok(());
         }
@@ -1282,31 +1385,31 @@ impl CliGenerator {
             let args_str = if args.is_empty() {
                 String::new()
             } else {
-                let args_display: Vec<String> = args.iter()
+                let args_display: Vec<String> = args
+                    .iter()
                     .map(|(k, v)| format!("{}=\"{}\"", k, v))
                     .collect();
                 format!("({})", args_display.join(", "))
             };
             OutputFormatter::info(&format!(
                 "Executing function: {}{}",
-                function.name,
-                args_str
+                function.name, args_str
             ));
         }
 
         // Build variable map: function local > global
         let mut var_map: HashMap<String, String> = HashMap::new();
-        
+
         // Add global constants
         for constant in &self.constants {
             var_map.insert(constant.name.clone(), constant.value.clone());
         }
-        
+
         // Add global variables
         for variable in &self.variables {
             var_map.insert(variable.name.clone(), variable.value.clone());
         }
-        
+
         // Add function local variables (override global)
         for variable in &function.local_variables {
             var_map.insert(variable.name.clone(), variable.value.clone());
@@ -1315,21 +1418,23 @@ impl CliGenerator {
         // Process function body with template substitution
         let processed_body = {
             let mut body = function.body.clone();
-            
+
             // Replace parameter placeholders {{param}}
             for (key, value) in args {
                 let placeholder = format!("{{{{{}}}}}", key);
                 body = body.replace(&placeholder, value);
             }
-            
+
             // Replace variable and constant placeholders {{VAR}}
             for (key, value) in &var_map {
                 let placeholder = format!("{{{{{}}}}}", key);
                 body = body.replace(&placeholder, value);
             }
-            
+
             // Replace special variables
-            use crate::constants::{DEFAULT_USER, ENV_VAR_USER, TEMPLATE_VAR_NOW, TEMPLATE_VAR_USER};
+            use crate::constants::{
+                DEFAULT_USER, ENV_VAR_USER, TEMPLATE_VAR_NOW, TEMPLATE_VAR_USER,
+            };
             use chrono::Utc;
             use std::env;
             body = body.replace(TEMPLATE_VAR_NOW, &Utc::now().to_rfc3339());
@@ -1337,7 +1442,7 @@ impl CliGenerator {
                 TEMPLATE_VAR_USER,
                 &env::var(ENV_VAR_USER).unwrap_or_else(|_| DEFAULT_USER.to_string()),
             );
-            
+
             body
         };
 
@@ -1423,7 +1528,10 @@ impl CliGenerator {
             //         "parent:command" (absolute path from root)
             let dep_path: Vec<String> = if dep.command_path.contains(':') {
                 // Absolute path from root (e.g., "dev:build")
-                dep.command_path.split(':').map(|s| s.trim().to_string()).collect()
+                dep.command_path
+                    .split(':')
+                    .map(|s| s.trim().to_string())
+                    .collect()
             } else {
                 // Relative dependency - resolve from current command's parent
                 let dep_name = dep.command_path.trim().to_string();
@@ -1432,7 +1540,8 @@ impl CliGenerator {
                     vec![dep_name]
                 } else {
                     // Nested command - dependency is relative to parent
-                    let mut resolved = current_path[..current_path.len().saturating_sub(1)].to_vec();
+                    let mut resolved =
+                        current_path[..current_path.len().saturating_sub(1)].to_vec();
                     resolved.push(dep_name);
                     resolved
                 }
@@ -1490,21 +1599,58 @@ impl CliGenerator {
         let command_path_unwrapped = command_path.unwrap_or(&[]);
         let command_path_for_logging = command_path;
 
+        // Check for recursive call (command calling itself)
+        if let Some(path) = command_path {
+            if visited.contains(path) {
+                use super::output::colors;
+                let path_str = path.join(" ");
+                return Err(format!(
+                    "\n{}╔═══════════════════════════════════════════════════════════════╗{}\n\
+                     {}║{}  {}❌ Recursive Command Call Detected{}                      {}\n\
+                     {}╚═══════════════════════════════════════════════════════════════╝{}\n\n\
+                     {}📋 Command:{} nest {}\n\n\
+                     {}⚠️  ERROR:{} Command 'nest {}' is calling itself recursively, which causes a stack overflow.\n\n\
+                     {}💡 Solution:{} To call an external system command with the same name, use the {}shell:{} prefix:\n\
+                     {}   Example:{} shell:uv run\n\n\
+                     {}   Or use the full path to the external command:\n\
+                     {}   Example:{} /usr/bin/uv run  (or $(which uv) run)\n\n\
+                     {}ℹ{} The command was not executed to prevent stack overflow.{}",
+                    colors::RED, colors::RESET,
+                    colors::RED, colors::RESET, colors::BRIGHT_RED, colors::RESET,
+                    colors::RED, colors::RESET,
+                    colors::CYAN, colors::RESET, path_str,
+                    colors::YELLOW, colors::RESET, path_str,
+                    colors::CYAN, colors::RESET, colors::BRIGHT_CYAN, "shell:", colors::RESET,
+                    colors::GRAY, colors::RESET,
+                    colors::GRAY, colors::RESET,
+                    colors::GRAY, colors::RESET,
+                    colors::BRIGHT_CYAN, colors::RESET
+                ));
+            }
+            // Mark command as visited before execution
+            visited.insert(path.to_vec());
+        }
+
         // Execute dependencies first
         let depends = Self::get_depends_directive(&command.directives);
         if !depends.is_empty() {
             if verbose {
                 use super::output::OutputFormatter;
-                let deps_str: Vec<String> = depends.iter().map(|dep| {
-                    if dep.args.is_empty() {
-                        dep.command_path.clone()
-                    } else {
-                        let args_str: Vec<String> = dep.args.iter()
-                            .map(|(k, v)| format!("{}=\"{}\"", k, v))
-                            .collect();
-                        format!("{}({})", dep.command_path, args_str.join(", "))
-                    }
-                }).collect();
+                let deps_str: Vec<String> = depends
+                    .iter()
+                    .map(|dep| {
+                        if dep.args.is_empty() {
+                            dep.command_path.clone()
+                        } else {
+                            let args_str: Vec<String> = dep
+                                .args
+                                .iter()
+                                .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                                .collect();
+                            format!("{}({})", dep.command_path, args_str.join(", "))
+                        }
+                    })
+                    .collect();
                 OutputFormatter::info(&format!(
                     "Executing dependencies for {}: {}",
                     command_path_unwrapped.join(" "),
@@ -1517,7 +1663,9 @@ impl CliGenerator {
         // Validate parameters (if validation directives are present)
         let validate_directives = Self::get_validate_directives(&command.directives);
         if !validate_directives.is_empty() {
-            if let Err(e) = self.validate_parameters(&validate_directives, args, command_path_unwrapped) {
+            if let Err(e) =
+                self.validate_parameters(&validate_directives, args, command_path_unwrapped)
+            {
                 return Err(e);
             }
         }
@@ -1538,12 +1686,12 @@ impl CliGenerator {
                 &command.local_variables,
                 &command.local_constants,
             );
-            
+
             if verbose {
                 use super::output::OutputFormatter;
                 OutputFormatter::info("Executing before script...");
             }
-            
+
             if let Err(e) = self.execute_script(
                 &processed_before,
                 &env_vars,
@@ -1560,11 +1708,11 @@ impl CliGenerator {
         // Execute main script with conditional logic
         // Check if there are conditional directives (if/elif/else)
         let conditional_blocks = Self::parse_conditional_blocks(&command.directives);
-        
+
         let script = if !conditional_blocks.is_empty() {
             // Find the first matching condition
             let mut matched_script = None;
-            
+
             'condition_loop: for block in &conditional_blocks {
                 match block {
                     ConditionalBlock::If(condition, script) => {
@@ -1583,7 +1731,10 @@ impl CliGenerator {
                                 }
                                 Ok(false) => {}
                                 Err(e) => {
-                                    return Err(format!("Error evaluating condition '{}': {}", condition, e));
+                                    return Err(format!(
+                                        "Error evaluating condition '{}': {}",
+                                        condition, e
+                                    ));
                                 }
                             }
                         }
@@ -1604,7 +1755,10 @@ impl CliGenerator {
                                 }
                                 Ok(false) => {}
                                 Err(e) => {
-                                    return Err(format!("Error evaluating condition '{}': {}", condition, e));
+                                    return Err(format!(
+                                        "Error evaluating condition '{}': {}",
+                                        condition, e
+                                    ));
                                 }
                             }
                         }
@@ -1617,7 +1771,7 @@ impl CliGenerator {
                     }
                 }
             }
-            
+
             matched_script.ok_or_else(|| {
                 "No matching condition found and no else block provided".to_string()
             })?
@@ -1640,7 +1794,10 @@ impl CliGenerator {
         if privileged && !dry_run {
             use super::executor::CommandExecutor;
             if !CommandExecutor::check_privileged_access() {
-                return Err(CommandExecutor::format_privileged_error(command, Some(command_path_unwrapped)));
+                return Err(CommandExecutor::format_privileged_error(
+                    command,
+                    Some(command_path_unwrapped),
+                ));
             }
         }
 
@@ -1685,26 +1842,12 @@ impl CliGenerator {
             verbose,
         );
 
-        // Log output if logs directive is present
-        if let Some((log_path, log_format)) = logs {
-            if !dry_run {
-                // Note: For now, we'll log a summary since execute_script doesn't return output
-                // In a full implementation, we'd need to capture stdout/stderr
-                if let Err(e) = Self::write_log_entry(&log_path, &log_format, command_path_for_logging, args, &main_result) {
-                    // Don't fail the command if logging fails, just warn
-                    if verbose {
-                        use super::output::OutputFormatter;
-                        OutputFormatter::warning(&format!("Failed to write log: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Handle main script result
-        match main_result {
+        // Handle main script result first (before logging to avoid partial move)
+        let result = match main_result {
             Ok(()) => {
                 // Main script succeeded - execute after script (if present)
-                if let Some(after_script) = Self::get_directive_value(&command.directives, "after") {
+                if let Some(after_script) = Self::get_directive_value(&command.directives, "after")
+                {
                     let processed_after = TemplateProcessor::process(
                         &after_script,
                         args,
@@ -1713,12 +1856,12 @@ impl CliGenerator {
                         &command.local_variables,
                         &command.local_constants,
                     );
-                    
+
                     if verbose {
                         use super::output::OutputFormatter;
                         OutputFormatter::info("Executing after script...");
                     }
-                    
+
                     if let Err(e) = self.execute_script(
                         &processed_after,
                         &env_vars,
@@ -1733,23 +1876,29 @@ impl CliGenerator {
                 }
                 Ok(())
             }
-            Err(_) => {
+            Err(error_msg) => {
                 // Main script failed - execute fallback script (if present)
-                if let Some(fallback_script) = Self::get_directive_value(&command.directives, "fallback") {
+                if let Some(fallback_script) =
+                    Self::get_directive_value(&command.directives, "fallback")
+                {
+                    // Add error message to args for template processing
+                    let mut fallback_args = args.clone();
+                    fallback_args.insert("SYSTEM_ERROR_MESSAGE".to_string(), error_msg.clone());
+
                     let processed_fallback = TemplateProcessor::process(
                         &fallback_script,
-                        args,
+                        &fallback_args,
                         &self.variables,
                         &self.constants,
                         &command.local_variables,
                         &command.local_constants,
                     );
-                    
+
                     if verbose {
                         use super::output::OutputFormatter;
                         OutputFormatter::info("Executing fallback script...");
                     }
-                    
+
                     // Execute fallback and return its output instead of error
                     if let Err(e) = self.execute_script(
                         &processed_fallback,
@@ -1766,10 +1915,38 @@ impl CliGenerator {
                     Ok(())
                 } else {
                     // No fallback - return original error
-                    main_result
+                    Err(error_msg)
+                }
+            }
+        };
+
+        // Log output if logs directive is present (after match to avoid partial move)
+        if let Some((log_path, log_format)) = logs {
+            if !dry_run {
+                // Note: For now, we'll log a summary since execute_script doesn't return output
+                // In a full implementation, we'd need to capture stdout/stderr
+                if let Err(e) = Self::write_log_entry(
+                    &log_path,
+                    &log_format,
+                    command_path_for_logging,
+                    args,
+                    &result,
+                ) {
+                    // Don't fail the command if logging fails, just warn
+                    if verbose {
+                        use super::output::OutputFormatter;
+                        OutputFormatter::warning(&format!("Failed to write log: {}", e));
+                    }
                 }
             }
         }
+
+        // Remove command from visited after execution (allows reuse in different contexts)
+        if let Some(path) = command_path {
+            visited.remove(path);
+        }
+
+        result
     }
 
     pub fn execute_command(
@@ -1859,7 +2036,7 @@ pub fn handle_example() {
     // Ask for confirmation
     print!("Do you want to download the examples folder? (y/N): ");
     io::stdout().flush().unwrap_or(());
-    
+
     let mut input = String::new();
     match io::stdin().read_line(&mut input) {
         Ok(_) => {
@@ -1894,16 +2071,19 @@ pub fn handle_example() {
     }
 
     OutputFormatter::info("Downloading examples folder from GitHub Releases...");
-    
+
     // Try to download from GitHub Releases first
     let version = env!("CARGO_PKG_VERSION");
-    let release_url = format!("https://github.com/quonaro/nest/releases/download/v{}/examples.tar.gz", version);
+    let release_url = format!(
+        "https://github.com/quonaro/nest/releases/download/v{}/examples.tar.gz",
+        version
+    );
     let latest_url = "https://github.com/quonaro/nest/releases/latest/download/examples.tar.gz";
-    
+
     if download_examples_from_release(&current_dir, &examples_dir, &release_url, &latest_url) {
         return;
     }
-    
+
     // Fallback to repository clone method
     OutputFormatter::info("Release download failed, trying repository clone method...");
     download_examples_from_repo(&current_dir, &examples_dir);
@@ -1923,10 +2103,10 @@ pub fn handle_example() {
 /// - File cannot be created
 /// - File cannot be written
 pub fn handle_init(force: bool) {
+    use super::output::OutputFormatter;
+    use super::path::find_config_file;
     use std::env;
     use std::fs;
-    use super::path::find_config_file;
-    use super::output::OutputFormatter;
 
     // Get current directory
     let current_dir = match env::current_dir() {
@@ -2029,11 +2209,10 @@ clean():
     // Write nestfile
     match fs::write(&nestfile_path, nestfile_content) {
         Ok(_) => {
-            OutputFormatter::info(&format!(
-                "Created nestfile at: {}",
-                nestfile_path.display()
-            ));
-            OutputFormatter::info("You can now add commands to your nestfile and run them with: nest <command>");
+            OutputFormatter::info(&format!("Created nestfile at: {}", nestfile_path.display()));
+            OutputFormatter::info(
+                "You can now add commands to your nestfile and run them with: nest <command>",
+            );
         }
         Err(e) => {
             OutputFormatter::error(&format!("Failed to create nestfile: {}", e));
@@ -2050,9 +2229,9 @@ fn download_examples_from_release(
     versioned_url: &str,
     latest_url: &str,
 ) -> bool {
+    use super::output::OutputFormatter;
     use std::fs;
     use std::process::Command;
-    use super::output::OutputFormatter;
 
     let archive_name = "examples.tar.gz";
     let temp_archive = current_dir.join(archive_name);
@@ -2068,10 +2247,15 @@ fn download_examples_from_release(
 
     for url in download_urls {
         OutputFormatter::info(&format!("Trying to download from: {}", url));
-        
+
         // Try curl first
         let curl_result = Command::new("curl")
-            .args(&["-fsSL", "-o", temp_archive.to_str().unwrap_or(archive_name), url])
+            .args(&[
+                "-fsSL",
+                "-o",
+                temp_archive.to_str().unwrap_or(archive_name),
+                url,
+            ])
             .output();
 
         match curl_result {
@@ -2082,9 +2266,14 @@ fn download_examples_from_release(
             _ => {
                 // Try wget
                 let wget_result = Command::new("wget")
-                    .args(&["-q", "-O", temp_archive.to_str().unwrap_or(archive_name), url])
+                    .args(&[
+                        "-q",
+                        "-O",
+                        temp_archive.to_str().unwrap_or(archive_name),
+                        url,
+                    ])
                     .output();
-                
+
                 match wget_result {
                     Ok(output) if output.status.success() => {
                         download_success = true;
@@ -2113,7 +2302,12 @@ fn download_examples_from_release(
     // Extract archive
     OutputFormatter::info("Extracting archive...");
     let extract_output = Command::new("tar")
-        .args(&["xzf", temp_archive.to_str().unwrap_or(archive_name), "-C", current_dir.to_str().unwrap_or(".")])
+        .args(&[
+            "xzf",
+            temp_archive.to_str().unwrap_or(archive_name),
+            "-C",
+            current_dir.to_str().unwrap_or("."),
+        ])
         .output();
 
     match extract_output {
@@ -2122,7 +2316,7 @@ fn download_examples_from_release(
             if examples_dir.exists() {
                 // Clean up archive
                 let _ = fs::remove_file(&temp_archive);
-                
+
                 use super::output::colors;
                 OutputFormatter::success("Examples folder downloaded successfully!");
                 println!(
@@ -2131,7 +2325,11 @@ fn download_examples_from_release(
                     colors::RESET,
                     OutputFormatter::path(&examples_dir.display().to_string())
                 );
-                println!("\n{}Changing to examples directory...{}", colors::BRIGHT_CYAN, colors::RESET);
+                println!(
+                    "\n{}Changing to examples directory...{}",
+                    colors::BRIGHT_CYAN,
+                    colors::RESET
+                );
                 println!("Run: cd examples");
                 return true;
             } else {
@@ -2155,13 +2353,13 @@ fn download_examples_from_release(
 
 /// Downloads examples folder from repository (fallback method).
 fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std::path::Path) {
-    use std::process::Command;
     use super::output::OutputFormatter;
+    use std::process::Command;
 
     // Try to clone the repository (just the examples folder)
     // We'll clone into a temp directory, then move the examples folder
     let temp_dir = current_dir.join(".nest_examples_temp");
-    
+
     // Clean up temp directory if it exists
     if temp_dir.exists() {
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -2197,7 +2395,7 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
                         .args(&["checkout"])
                         .current_dir(&temp_dir)
                         .output();
-                    
+
                     if let Err(_) = checkout_output {
                         let _ = std::fs::remove_dir_all(&temp_dir);
                         OutputFormatter::error("Failed to checkout files after sparse checkout");
@@ -2211,7 +2409,7 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
                         .args(&["checkout"])
                         .current_dir(&temp_dir)
                         .output();
-                    
+
                     if let Err(_) = checkout_output {
                         let _ = std::fs::remove_dir_all(&temp_dir);
                         OutputFormatter::error("Failed to checkout files");
@@ -2222,13 +2420,13 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
 
             // Move examples folder from temp/cli/examples to current_dir/examples
             let source_examples = temp_dir.join("cli").join("examples");
-            
+
             if source_examples.exists() {
                 match std::fs::rename(&source_examples, &examples_dir) {
                     Ok(_) => {
                         // Clean up temp directory
                         let _ = std::fs::remove_dir_all(&temp_dir);
-                        
+
                         use super::output::colors;
                         OutputFormatter::success("Examples folder downloaded successfully!");
                         println!(
@@ -2237,9 +2435,13 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
                             colors::RESET,
                             OutputFormatter::path(&examples_dir.display().to_string())
                         );
-                        
+
                         // Change directory to examples
-                        println!("\n{}Changing to examples directory...{}", colors::BRIGHT_CYAN, colors::RESET);
+                        println!(
+                            "\n{}Changing to examples directory...{}",
+                            colors::BRIGHT_CYAN,
+                            colors::RESET
+                        );
                         println!("Run: cd examples");
                     }
                     Err(e) => {
@@ -2263,7 +2465,7 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
             // Git not available, try alternative method: download archive
             let _ = std::fs::remove_dir_all(&temp_dir);
             OutputFormatter::info("Git not available, trying alternative download method...");
-            
+
             // Try downloading as archive using curl/wget
             download_examples_archive(&current_dir, &examples_dir);
         }
@@ -2272,9 +2474,9 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
 
 /// Downloads examples folder as archive (fallback method when git is not available).
 fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::path::Path) {
+    use super::output::OutputFormatter;
     use std::fs;
     use std::process::Command;
-    use super::output::OutputFormatter;
 
     let archive_url = "https://github.com/quonaro/nest/archive/refs/heads/main.zip";
     let temp_zip = current_dir.join(".nest_examples_temp.zip");
@@ -2282,11 +2484,27 @@ fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::
 
     // Download archive
     OutputFormatter::info("Downloading archive...");
-    let _download_output = match Command::new("curl").args(&["-fsSL", "-o", temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"), archive_url]).output() {
+    let _download_output = match Command::new("curl")
+        .args(&[
+            "-fsSL",
+            "-o",
+            temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"),
+            archive_url,
+        ])
+        .output()
+    {
         Ok(output) if output.status.success() => output,
         Ok(_) => {
             // Try wget
-            match Command::new("wget").args(&["-q", "-O", temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"), archive_url]).output() {
+            match Command::new("wget")
+                .args(&[
+                    "-q",
+                    "-O",
+                    temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"),
+                    archive_url,
+                ])
+                .output()
+            {
                 Ok(output) if output.status.success() => output,
                 Ok(_) => {
                     OutputFormatter::error("Both curl and wget failed to download archive");
@@ -2301,7 +2519,15 @@ fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::
         }
         Err(_) => {
             // curl not found, try wget
-            match Command::new("wget").args(&["-q", "-O", temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"), archive_url]).output() {
+            match Command::new("wget")
+                .args(&[
+                    "-q",
+                    "-O",
+                    temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"),
+                    archive_url,
+                ])
+                .output()
+            {
                 Ok(output) if output.status.success() => output,
                 Ok(_) => {
                     OutputFormatter::error("wget failed to download archive");
@@ -2319,21 +2545,28 @@ fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::
     // Extract archive (requires unzip or tar)
     OutputFormatter::info("Extracting archive...");
     let extract_output = Command::new("unzip")
-        .args(&["-q", temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"), "-d", temp_extract.to_str().unwrap_or(".nest_examples_temp_extract")])
+        .args(&[
+            "-q",
+            temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"),
+            "-d",
+            temp_extract
+                .to_str()
+                .unwrap_or(".nest_examples_temp_extract"),
+        ])
         .output();
 
     match extract_output {
         Ok(output) if output.status.success() => {
             // Move examples folder
             let source_examples = temp_extract.join("nest-main").join("cli").join("examples");
-            
+
             if source_examples.exists() {
                 match std::fs::rename(&source_examples, examples_dir) {
                     Ok(_) => {
                         // Clean up
                         let _ = fs::remove_file(&temp_zip);
                         let _ = fs::remove_dir_all(&temp_extract);
-                        
+
                         use super::output::colors;
                         OutputFormatter::success("Examples folder downloaded successfully!");
                         println!(
@@ -2342,7 +2575,11 @@ fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::
                             colors::RESET,
                             OutputFormatter::path(&examples_dir.display().to_string())
                         );
-                        println!("\n{}Changing to examples directory...{}", colors::BRIGHT_CYAN, colors::RESET);
+                        println!(
+                            "\n{}Changing to examples directory...{}",
+                            colors::BRIGHT_CYAN,
+                            colors::RESET
+                        );
                         println!("Run: cd examples");
                     }
                     Err(e) => {
@@ -2582,12 +2819,7 @@ pub fn handle_update() {
     };
 
     let extract_output = Command::new("tar")
-        .args(&[
-            "-xzf",
-            temp_file_str,
-            "-C",
-            extract_dir_str,
-        ])
+        .args(&["-xzf", temp_file_str, "-C", extract_dir_str])
         .output();
 
     match extract_output {

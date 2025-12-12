@@ -4,11 +4,13 @@
 //! Supports parameter placeholders ({{param}}), variables ({{VAR}}), constants ({{CONST}}),
 //! and special variables ({{now}}, {{user}}).
 
-use crate::constants::{DEFAULT_USER, ENV_VAR_USER, TEMPLATE_VAR_NOW, TEMPLATE_VAR_USER};
-use super::ast::{Variable, Constant};
+use super::ast::{Constant, Variable};
+use crate::constants::{
+    DEFAULT_USER, ENV_VAR_USER, TEMPLATE_VAR_ERROR, TEMPLATE_VAR_NOW, TEMPLATE_VAR_USER,
+};
+use chrono::Utc;
 use std::collections::HashMap;
 use std::env;
-use chrono::Utc;
 
 /// Processes templates by replacing placeholders with actual values.
 ///
@@ -24,6 +26,7 @@ impl TemplateProcessor {
     /// - `{{CONST}}` - Replaced with constant value (cannot be redefined)
     /// - `{{now}}` - Replaced with current UTC time in RFC3339 format
     /// - `{{user}}` - Replaced with the USER environment variable (or "unknown" if not set)
+    /// - `{{SYSTEM_ERROR_MESSAGE}}` - Replaced with error message (available in fallback scripts)
     ///
     /// Priority order:
     /// 1. Parameters (from args) - highest priority
@@ -68,22 +71,22 @@ impl TemplateProcessor {
 
         // Build variable map with priority: local > global
         let mut var_map: HashMap<String, String> = HashMap::new();
-        
+
         // 1. Add global constants first (lowest priority for constants)
         for constant in global_constants {
             var_map.insert(constant.name.clone(), constant.value.clone());
         }
-        
+
         // 2. Add global variables (can override global constants)
         for variable in global_variables {
             var_map.insert(variable.name.clone(), variable.value.clone());
         }
-        
+
         // 3. Add local constants (override global constants/variables)
         for constant in local_constants {
             var_map.insert(constant.name.clone(), constant.value.clone());
         }
-        
+
         // 4. Add local variables (highest priority for variables, override everything)
         for variable in local_variables {
             var_map.insert(variable.name.clone(), variable.value.clone());
@@ -93,6 +96,28 @@ impl TemplateProcessor {
         for (key, value) in args {
             let placeholder = format!("{{{{{}}}}}", key);
             processed = processed.replace(&placeholder, value);
+        }
+
+        // Replace shell-style $* with wildcard arguments (for compatibility)
+        // This allows using $* in scripts instead of {{*}}
+        if let Some(wildcard_value) = args.get("*") {
+            // Replace $* (not part of a larger variable name)
+            // Use regex-like replacement: $* at word boundaries or end of string
+            let mut result = String::with_capacity(processed.len() + wildcard_value.len());
+            let mut chars = processed.chars().peekable();
+
+            while let Some(ch) = chars.next() {
+                if ch == '$' {
+                    if let Some(&'*') = chars.peek() {
+                        // Found $*, replace it
+                        chars.next(); // consume '*'
+                        result.push_str(wildcard_value);
+                        continue;
+                    }
+                }
+                result.push(ch);
+            }
+            processed = result;
         }
 
         // Replace variable and constant placeholders {{VAR}} or {{CONST}}
@@ -108,7 +133,14 @@ impl TemplateProcessor {
             &env::var(ENV_VAR_USER).unwrap_or_else(|_| DEFAULT_USER.to_string()),
         );
 
+        // Replace system error message (from args if available, otherwise empty)
+        // This variable is available in fallback scripts
+        if let Some(error_msg) = args.get("SYSTEM_ERROR_MESSAGE") {
+            processed = processed.replace(TEMPLATE_VAR_ERROR, error_msg);
+        } else {
+            processed = processed.replace(TEMPLATE_VAR_ERROR, "");
+        }
+
         processed
     }
 }
-
