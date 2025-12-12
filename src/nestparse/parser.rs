@@ -645,6 +645,25 @@ impl Parser {
                         }
                     }
                 }
+                "finaly" => {
+                    // Check if it's multiline (ends with |)
+                    if directive_value == "|" {
+                        // Parse multiline block
+                        let script_content = self.parse_multiline_block(indent)?;
+                        if hide_output {
+                            Ok((Directive::FinalyHide(script_content), true))
+                        } else {
+                            Ok((Directive::Finaly(script_content), true))
+                        }
+                    } else {
+                        // Single line script
+                        if hide_output {
+                            Ok((Directive::FinalyHide(directive_value.to_string()), false))
+                        } else {
+                            Ok((Directive::Finaly(directive_value.to_string()), false))
+                        }
+                    }
+                }
                 "validate" => {
                     // Validation directive (single line only)
                     Ok((Directive::Validate(directive_value.to_string()), false))

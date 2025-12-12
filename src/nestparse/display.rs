@@ -88,6 +88,21 @@ pub fn print_command(command: &Command, indent: usize) {
                     println!("{}    > {}: {}", indent_str, directive_name, s);
                 }
             }
+            Directive::Finaly(s) | Directive::FinalyHide(s) => {
+                let directive_name = if matches!(directive, Directive::FinalyHide(_)) {
+                    "finaly[hide]"
+                } else {
+                    "finaly"
+                };
+                if s.contains('\n') {
+                    println!("{}    > {}: |", indent_str, directive_name);
+                    for line in s.lines() {
+                        println!("{}        {}", indent_str, line);
+                    }
+                } else {
+                    println!("{}    > {}: {}", indent_str, directive_name, s);
+                }
+            }
             Directive::Validate(s) => {
                 println!("{}    > validate: {}", indent_str, s);
             }

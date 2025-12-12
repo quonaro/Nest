@@ -288,6 +288,7 @@ fn validate_command_recursive(
             Directive::Before(_) | Directive::BeforeHide(_) => {}
             Directive::After(_) | Directive::AfterHide(_) => {}
             Directive::Fallback(_) | Directive::FallbackHide(_) => {}
+            Directive::Finaly(_) | Directive::FinalyHide(_) => {}
             Directive::Validate(_) => {}
             Directive::Privileged(_) => {}
             Directive::RequireConfirm(_) => {}

@@ -82,6 +82,10 @@ pub enum Directive {
     /// Script to execute if the main script fails with hidden output (can be single line or multiline)
     /// Replaces error output with this script's output
     FallbackHide(String),
+    /// Script to execute always, regardless of success or failure (can be single line or multiline)
+    Finaly(String),
+    /// Script to execute always with hidden output, regardless of success or failure (can be single line or multiline)
+    FinalyHide(String),
     /// Whether this command requires privileged access (sudo/administrator)
     Privileged(bool),
     /// Dependencies - commands that must be executed before this command

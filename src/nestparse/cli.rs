@@ -467,6 +467,8 @@ impl CliGenerator {
             (Directive::AfterHide(s), "after") => Some(s.clone()),
             (Directive::Fallback(s), "fallback") => Some(s.clone()),
             (Directive::FallbackHide(s), "fallback") => Some(s.clone()),
+            (Directive::Finaly(s), "finaly") => Some(s.clone()),
+            (Directive::FinalyHide(s), "finaly") => Some(s.clone()),
             (Directive::Validate(s), "validate") => Some(s.clone()),
             _ => None,
         })
@@ -487,6 +489,8 @@ impl CliGenerator {
             (Directive::AfterHide(s), "after") => Some((s.clone(), true)),
             (Directive::Fallback(s), "fallback") => Some((s.clone(), false)),
             (Directive::FallbackHide(s), "fallback") => Some((s.clone(), true)),
+            (Directive::Finaly(s), "finaly") => Some((s.clone(), false)),
+            (Directive::FinalyHide(s), "finaly") => Some((s.clone(), true)),
             _ => None,
         })
     }
@@ -1588,6 +1592,11 @@ impl CliGenerator {
                 {
                     parent_directives.insert("fallback".to_string(), (fallback, hide_fallback));
                 }
+                if let Some((finaly, hide_finaly)) =
+                    Self::get_directive_value_with_hide(&cmd.directives, "finaly")
+                {
+                    parent_directives.insert("finaly".to_string(), (finaly, hide_finaly));
+                }
                 current = &cmd.children;
             } else {
                 break;
@@ -2297,6 +2306,56 @@ impl CliGenerator {
                     }
                 }
             }
+        }
+
+        // Execute finaly script (always executes, regardless of success or failure)
+        let finaly_info = Self::get_directive_value_with_hide(&command.directives, "finaly")
+            .or_else(|| parent_directives.get("finaly").cloned());
+        if let Some((finaly_script, hide_finaly)) = finaly_info {
+            // Store original result before executing finaly
+            let original_result = match &result {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e.clone()),
+            };
+            
+            let processed_finaly = TemplateProcessor::process(
+                &finaly_script,
+                args,
+                &self.variables,
+                &self.constants,
+                &command.local_variables,
+                &command.local_constants,
+                &parent_variables,
+                &parent_constants,
+                &merged_parent_args,
+            );
+
+            if verbose {
+                use super::output::OutputFormatter;
+                OutputFormatter::info("Executing finaly script...");
+            }
+
+            // Execute finaly - errors are logged but don't change the result
+            if let Err(e) = self.execute_script(
+                &processed_finaly,
+                &env_vars,
+                cwd.as_deref(),
+                Some(command_path_unwrapped),
+                args,
+                dry_run,
+                verbose,
+                &merged_parent_args,
+                hide_finaly,
+            ) {
+                // Log finaly error but don't fail the command
+                if verbose {
+                    use super::output::OutputFormatter;
+                    OutputFormatter::warning(&format!("Finaly script failed: {}", e));
+                }
+            }
+            
+            // Return original result (finaly doesn't change the command result)
+            return original_result;
         }
 
         // Remove command from visited after execution (allows reuse in different contexts)

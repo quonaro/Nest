@@ -70,6 +70,9 @@ pub enum JsonDirective {
     /// Fallback script directive
     #[serde(rename = "fallback")]
     Fallback(String),
+    /// Finaly script directive
+    #[serde(rename = "finaly")]
+    Finaly(String),
     /// Validation directive
     #[serde(rename = "validate")]
     Validate(String),
@@ -153,6 +156,8 @@ impl From<&Directive> for JsonDirective {
             Directive::AfterHide(s) => JsonDirective::After(s.clone()),
             Directive::Fallback(s) => JsonDirective::Fallback(s.clone()),
             Directive::FallbackHide(s) => JsonDirective::Fallback(s.clone()),
+            Directive::Finaly(s) => JsonDirective::Finaly(s.clone()),
+            Directive::FinalyHide(s) => JsonDirective::Finaly(s.clone()),
             Directive::Validate(s) => JsonDirective::Validate(s.clone()),
             Directive::Script(s) => JsonDirective::Script(s.clone()),
             Directive::ScriptHide(s) => JsonDirective::Script(s.clone()),
