@@ -35,16 +35,29 @@ else
     INFO="${BLUE}[i]${RESET}"
 fi
 
-# Get project root directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
 # Configuration
+REPO="${REPO:-quonaro/nest}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-ubuntu:20.04}"
 RUST_VERSION="${RUST_VERSION:-stable}"
 INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="nest"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+
+# Detect if running remotely (no Cargo.toml in current directory)
+# or locally (Cargo.toml exists)
+if [ -f "Cargo.toml" ]; then
+    # Running locally - use current directory
+    SCRIPT_DIR="$(pwd)"
+    REMOTE_MODE=false
+    CLEANUP_TEMP=false
+else
+    # Running remotely - clone repository to temp directory
+    REMOTE_MODE=true
+    CLEANUP_TEMP=true
+    SCRIPT_DIR=$(mktemp -d)
+    trap "rm -rf '$SCRIPT_DIR'" EXIT INT TERM
+fi
+
 OUTPUT_DIR="${SCRIPT_DIR}/target/old-system-release"
 
 # Default options
@@ -152,6 +165,27 @@ if ! command -v docker > /dev/null 2>&1; then
     echo "Please install Docker to use this script"
     exit 1
 fi
+
+# If running remotely, clone repository
+if [ "$REMOTE_MODE" = true ]; then
+    echo "${INFO} ${BOLD}Cloning repository...${RESET}"
+    if ! command -v git > /dev/null 2>&1; then
+        echo "${RED}Error: git is not installed${RESET}" >&2
+        echo "Please install git to use this script remotely"
+        exit 1
+    fi
+    
+    echo "   ${ARROW} Cloning https://github.com/${REPO}.git"
+    if git clone --depth 1 "https://github.com/${REPO}.git" "$SCRIPT_DIR" > /dev/null 2>&1; then
+        echo "   ${CHECK} Repository cloned"
+    else
+        echo "   ${RED}✗ Failed to clone repository${RESET}" >&2
+        exit 1
+    fi
+fi
+
+# Change to project directory
+cd "$SCRIPT_DIR"
 
 # Function to read version from Cargo.toml
 read_version() {
@@ -280,6 +314,14 @@ if [ "$SKIP_INSTALL" = false ]; then
     mkdir -p "$INSTALL_DIR"
     cp "$OUTPUT_DIR/nest" "$BINARY_PATH"
     echo "   ${CHECK} Binary installed to ${BOLD}${BINARY_PATH}${RESET}"
+    
+    # Check if install directory is in PATH
+    if ! echo "${PATH}" | grep -q "${INSTALL_DIR}"; then
+        echo ""
+        echo "   ${YELLOW}⚠ ${INSTALL_DIR} is not in your PATH${RESET}"
+        echo "   ${ARROW} Add this line to your shell config (~/.bashrc, ~/.zshrc, etc.):"
+        echo "      ${BOLD}export PATH=\"\${HOME}/.local/bin:\${PATH}\"${RESET}"
+    fi
 fi
 
 # Cleanup Dockerfile (optional, can be kept for debugging)
@@ -297,12 +339,18 @@ else
 fi
 echo ""
 echo "   Version: ${BOLD}${CURRENT_VERSION}${RESET}"
-echo "   Binary location: ${BOLD}${OUTPUT_DIR}/nest${RESET}"
 if [ "$SKIP_INSTALL" = false ]; then
     echo "   Installed to: ${BOLD}${BINARY_PATH}${RESET}"
+    echo "   ${INFO} Run ${BOLD}nest --version${RESET} to verify installation"
+else
+    echo "   Binary location: ${BOLD}${OUTPUT_DIR}/nest${RESET}"
 fi
 echo ""
-echo "   ${INFO} This binary should work on systems with older GLIBC versions"
-echo "   ${INFO} Test on target system: ${BOLD}${OUTPUT_DIR}/nest --version${RESET}"
+echo "   ${CHECK} This binary should work on systems with older GLIBC versions"
+if [ "$SKIP_INSTALL" = false ]; then
+    echo "   ${INFO} Test: ${BOLD}nest --version${RESET}"
+else
+    echo "   ${INFO} Test: ${BOLD}${OUTPUT_DIR}/nest --version${RESET}"
+fi
 echo ""
 
