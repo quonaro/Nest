@@ -47,7 +47,7 @@ impl ArgumentExtractor {
                     Self::extract_bool_flag(matches, param, generator)
                 } else {
                     // Positional bool arguments
-                    Self::extract_bool_positional(matches, param)
+                    Self::extract_bool_positional(matches, param, generator)
                 };
                 args.insert(param.name.clone(), value.to_string());
             } else {
@@ -104,7 +104,7 @@ impl ArgumentExtractor {
                 let value = if param.is_named {
                     Self::extract_bool_flag_for_default(matches, param, generator)
                 } else {
-                    Self::extract_bool_positional(matches, param)
+                    Self::extract_bool_positional(matches, param, generator)
                 };
                 args.insert(param.name.clone(), value.to_string());
             } else {
@@ -134,7 +134,7 @@ impl ArgumentExtractor {
     fn extract_bool_flag(
         matches: &ArgMatches,
         param: &Parameter,
-        _generator: &CliGenerator,
+        generator: &CliGenerator,
     ) -> bool {
         // Use parameter name directly as ID (same as used in parameter_to_arg_with_id)
         let param_id = &param.name;
@@ -149,15 +149,23 @@ impl ArgumentExtractor {
                 true
             }
         } else {
-            // If not found, use default value
-            false
+            // If not found, check default value
+            if let Some(default) = &param.default {
+                if let Some(default_str) = generator.value_to_string(default) {
+                    default_str == BOOL_TRUE
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
         }
     }
 
     fn extract_bool_flag_for_default(
         matches: &ArgMatches,
         param: &Parameter,
-        _generator: &CliGenerator,
+        generator: &CliGenerator,
     ) -> bool {
         // Use parameter name directly as ID (same as used in parameter_to_arg_with_id)
         let param_id = &param.name;
@@ -172,8 +180,16 @@ impl ArgumentExtractor {
                 true
             }
         } else {
-            // If not found, use default value
-            false
+            // If not found, check default value
+            if let Some(default) = &param.default {
+                if let Some(default_str) = generator.value_to_string(default) {
+                    default_str == BOOL_TRUE
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
         }
     }
 
@@ -198,14 +214,22 @@ impl ArgumentExtractor {
     fn extract_bool_positional(
         matches: &ArgMatches,
         param: &Parameter,
+        generator: &CliGenerator,
     ) -> bool {
         // For positional bool arguments, check if value exists
         if let Some(value_str) = matches.get_one::<String>(&param.name) {
             value_str == BOOL_TRUE
         } else {
-            // If not provided and has default, use default
-            // Otherwise false
-            false
+            // If not provided, check default value
+            if let Some(default) = &param.default {
+                if let Some(default_str) = generator.value_to_string(default) {
+                    default_str == BOOL_TRUE
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
         }
     }
 
