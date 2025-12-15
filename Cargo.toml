@@ -1,10 +1,6 @@
 [package]
 name = "nest"
-<<<<<<< HEAD
-version = "2.1.29"
-=======
-version = "2.1.28"
->>>>>>> 87b87c3 (Update version to 2.1.28 and enhance boolean argument handling)
+version = "2.1.30"
 edition = "2021"
 license = "MIT"
 
