@@ -1,6 +1,6 @@
 #!/bin/bash
-# Install script for old systems with older GLIBC versions
-# Uses Docker to build on an older system image for compatibility
+# Install script for old systems with static linking (musl)
+# Creates a statically linked binary that works on any Linux system
 # Can be used remotely: curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.old.sh | bash
 
 set -e
@@ -29,16 +29,16 @@ if [ "$HAS_COLORS" = "1" ] && [ -n "$LANG" ] && echo "$LANG" | grep -q "UTF-8\|u
     CHECK="${GREEN}✓${RESET}"
     ARROW="${BLUE}→${RESET}"
     INFO="${BLUE}ℹ${RESET}"
+    WARN="${YELLOW}⚠${RESET}"
 else
     CHECK="${GREEN}[OK]${RESET}"
     ARROW="${BLUE}=>${RESET}"
     INFO="${BLUE}[i]${RESET}"
+    WARN="${YELLOW}[!]${RESET}"
 fi
 
 # Configuration
 REPO="${REPO:-quonaro/nest}"
-DOCKER_IMAGE="${DOCKER_IMAGE:-ubuntu:20.04}"
-RUST_VERSION="${RUST_VERSION:-stable}"
 INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="nest"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
@@ -58,56 +58,36 @@ else
     trap "rm -rf '$SCRIPT_DIR'" EXIT INT TERM
 fi
 
-OUTPUT_DIR="${SCRIPT_DIR}/target/old-system-release"
+OUTPUT_DIR="${SCRIPT_DIR}/target/x86_64-unknown-linux-musl/release"
 
 # Default options
 SKIP_INSTALL=false
 CUSTOM_VERSION=""
 CUSTOM_INSTALL_DIR=""
-CUSTOM_OUTPUT_DIR=""
 
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --docker-image IMAGE     Docker image to use (default: ubuntu:20.04)"
-    echo "  --rust-version VERSION   Rust version to use (default: stable)"
     echo "  --version VERSION        Use specific version instead of reading from Cargo.toml"
-    echo "  --install-dir PATH      Install binary to custom directory (default: ~/.local/bin)"
-    echo "  --output-dir PATH        Output directory for binary (default: target/old-system-release)"
+    echo "  --install-dir PATH       Install binary to custom directory (default: ~/.local/bin)"
     echo "  --skip-install           Don't install binary after build"
     echo "  --help                   Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Build with default settings"
-    echo "  $0 --docker-image debian:bullseye    # Use Debian Bullseye"
     echo "  $0 --skip-install                     # Build without installing"
     echo ""
-    echo "Environment variables:"
-    echo "  DOCKER_IMAGE             Docker image to use"
-    echo "  RUST_VERSION             Rust version to use"
+    echo "Prerequisites:"
+    echo "  - Rust toolchain installed"
+    echo "  - musl target: rustup target add x86_64-unknown-linux-musl"
+    echo "  - musl-gcc or musl-tools (depending on your distro)"
 }
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --docker-image)
-            if [ -z "$2" ]; then
-                echo "${RED}Error: --docker-image requires an image name${RESET}" >&2
-                exit 1
-            fi
-            DOCKER_IMAGE="$2"
-            shift 2
-            ;;
-        --rust-version)
-            if [ -z "$2" ]; then
-                echo "${RED}Error: --rust-version requires a version${RESET}" >&2
-                exit 1
-            fi
-            RUST_VERSION="$2"
-            shift 2
-            ;;
         --version)
             if [ -z "$2" ]; then
                 echo "${RED}Error: --version requires a version number${RESET}" >&2
@@ -122,14 +102,6 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             CUSTOM_INSTALL_DIR="$2"
-            shift 2
-            ;;
-        --output-dir)
-            if [ -z "$2" ]; then
-                echo "${RED}Error: --output-dir requires a path${RESET}" >&2
-                exit 1
-            fi
-            CUSTOM_OUTPUT_DIR="$2"
             shift 2
             ;;
         --skip-install)
@@ -149,21 +121,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Apply custom directories if provided
+# Apply custom install directory if provided
 if [ -n "$CUSTOM_INSTALL_DIR" ]; then
     INSTALL_DIR="$CUSTOM_INSTALL_DIR"
     BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
-fi
-
-if [ -n "$CUSTOM_OUTPUT_DIR" ]; then
-    OUTPUT_DIR="$CUSTOM_OUTPUT_DIR"
-fi
-
-# Check if Docker is available
-if ! command -v docker > /dev/null 2>&1; then
-    echo "${RED}Error: Docker is not installed or not in PATH${RESET}" >&2
-    echo "Please install Docker to use this script"
-    exit 1
 fi
 
 # If running remotely, clone repository
@@ -196,17 +157,85 @@ read_version() {
     grep -E '^version\s*=' "Cargo.toml" | sed -E 's/^version\s*=\s*"([^"]+)".*/\1/' | tr -d '[:space:]'
 }
 
+# Check prerequisites
+check_prerequisites() {
+    echo "${INFO} ${BOLD}Checking prerequisites...${RESET}"
+    
+    # Check Rust
+    if ! command -v rustc > /dev/null 2>&1; then
+        echo "   ${RED}✗ Rust is not installed${RESET}" >&2
+        echo "   ${ARROW} Installing Rust..."
+        if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1; then
+            # Source cargo env
+            if [ -f "${HOME}/.cargo/env" ]; then
+                source "${HOME}/.cargo/env"
+                echo "   ${CHECK} Rust installed"
+            else
+                echo "   ${RED}✗ Failed to install Rust${RESET}" >&2
+                exit 1
+            fi
+        else
+            echo "   ${RED}✗ Failed to install Rust${RESET}" >&2
+            echo "   ${ARROW} Please install manually: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+            exit 1
+        fi
+    else
+        echo "   ${CHECK} Rust found: $(rustc --version)"
+    fi
+    
+    # Source cargo env if available (for cases where Rust was just installed)
+    if [ -f "${HOME}/.cargo/env" ]; then
+        source "${HOME}/.cargo/env" 2>/dev/null || true
+    fi
+    
+    # Check musl target
+    if ! rustup target list --installed 2>/dev/null | grep -q "x86_64-unknown-linux-musl"; then
+        echo "   ${WARN} musl target not installed${RESET}"
+        echo "   ${ARROW} Installing musl target..."
+        if rustup target add x86_64-unknown-linux-musl > /dev/null 2>&1; then
+            echo "   ${CHECK} musl target installed"
+        else
+            echo "   ${RED}✗ Failed to install musl target${RESET}" >&2
+            exit 1
+        fi
+    else
+        echo "   ${CHECK} musl target installed"
+    fi
+    
+    # Check for musl-gcc or musl-tools
+    MUSL_AVAILABLE=false
+    if command -v musl-gcc > /dev/null 2>&1 || command -v musl-clang > /dev/null 2>&1; then
+        MUSL_AVAILABLE=true
+        echo "   ${CHECK} musl compiler found"
+    elif [ -f "/usr/include/x86_64-linux-musl" ] || [ -d "/usr/x86_64-linux-musl" ] || [ -d "/usr/lib/x86_64-linux-musl" ]; then
+        MUSL_AVAILABLE=true
+        echo "   ${CHECK} musl headers found"
+    else
+        echo "   ${WARN} musl development tools may not be installed${RESET}"
+        echo "   ${ARROW} On Debian/Ubuntu: sudo apt-get install musl-tools"
+        echo "   ${ARROW} On Fedora: sudo dnf install musl-gcc"
+        echo "   ${ARROW} On Arch: sudo pacman -S musl"
+        echo ""
+        echo "   ${INFO} Continuing anyway, but build may fail if musl is not properly configured..."
+        MUSL_AVAILABLE=false
+    fi
+    echo ""
+}
+
 # Print header
 echo ""
 if [ "$HAS_COLORS" = "1" ]; then
     echo "${BOLD}${BLUE}╔════════════════════════════════════════╗${RESET}"
-    echo "${BOLD}${BLUE}║${RESET}  ${BOLD}Nest Build for Old Systems${RESET}          ${BOLD}${BLUE}║${RESET}"
+    echo "${BOLD}${BLUE}║${RESET}  ${BOLD}Nest Static Build (musl)${RESET}            ${BOLD}${BLUE}║${RESET}"
     echo "${BOLD}${BLUE}╚════════════════════════════════════════╝${RESET}"
 else
-    echo "${BOLD}Nest Build for Old Systems${RESET}"
+    echo "${BOLD}Nest Static Build (musl)${RESET}"
     echo "========================================"
 fi
 echo ""
+
+# Check prerequisites
+check_prerequisites
 
 # Read current version
 echo "${INFO} ${BOLD}Reading version...${RESET}"
@@ -218,93 +247,44 @@ else
     echo "   ${ARROW} Current version: ${BOLD}${CURRENT_VERSION}${RESET}"
 fi
 
-# Show build configuration
-echo ""
-echo "${INFO} ${BOLD}Build configuration:${RESET}"
-echo "   ${ARROW} Docker image: ${BOLD}${DOCKER_IMAGE}${RESET}"
-echo "   ${ARROW} Rust version: ${BOLD}${RUST_VERSION}${RESET}"
-echo "   ${ARROW} Output directory: ${BOLD}${OUTPUT_DIR}${RESET}"
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Create Dockerfile for build
-echo ""
-echo "${INFO} ${BOLD}Preparing Docker build environment...${RESET}"
-
-DOCKERFILE=$(cat <<EOF
-FROM ${DOCKER_IMAGE}
-
-# Install dependencies
-RUN apt-get update && apt-get install -y \\
-    curl \\
-    build-essential \\
-    pkg-config \\
-    libssl-dev \\
-    ca-certificates \\
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}
-ENV PATH="/root/.cargo/bin:\$PATH"
-
-# Set working directory
-WORKDIR /build
-
-# Copy project files
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-
 # Build project
-RUN cargo build --release
-
-# The binary will be at /build/target/release/nest
-EOF
-)
-
-echo "$DOCKERFILE" > "$OUTPUT_DIR/Dockerfile"
-echo "   ${CHECK} Dockerfile created"
-
-# Build Docker image
 echo ""
-echo "${INFO} ${BOLD}Building Docker image...${RESET}"
-DOCKER_IMAGE_NAME="nest-build-$(echo "$DOCKER_IMAGE" | tr '/:' '-')"
-if docker build -t "$DOCKER_IMAGE_NAME" -f "$OUTPUT_DIR/Dockerfile" . > /dev/null 2>&1; then
-    echo "   ${CHECK} Docker image built successfully"
+echo "${INFO} ${BOLD}Building project with musl (static linking)...${RESET}"
+echo "   ${ARROW} Target: x86_64-unknown-linux-musl"
+
+# Set environment variables for musl build
+export RUSTFLAGS="-C target-feature=+crt-static"
+
+if cargo build --release --target x86_64-unknown-linux-musl; then
+    echo "   ${CHECK} Build successful"
 else
-    echo "   ${RED}✗ Docker build failed${RESET}" >&2
+    echo "   ${RED}✗ Build failed${RESET}" >&2
     echo ""
-    echo "Running build with output for debugging..."
-    docker build -t "$DOCKER_IMAGE_NAME" -f "$OUTPUT_DIR/Dockerfile" .
+    echo "   ${INFO} Troubleshooting:"
+    echo "   ${ARROW} Make sure musl-tools is installed"
+    echo "   ${ARROW} Try: sudo apt-get install musl-tools (Debian/Ubuntu)"
+    echo "   ${ARROW} Or: sudo dnf install musl-gcc (Fedora)"
     exit 1
 fi
 
-# Extract binary from container
-echo ""
-echo "${INFO} ${BOLD}Extracting binary from container...${RESET}"
-CONTAINER_ID=$(docker create "$DOCKER_IMAGE_NAME")
-docker cp "$CONTAINER_ID:/build/target/release/nest" "$OUTPUT_DIR/nest"
-docker rm "$CONTAINER_ID" > /dev/null 2>&1
-
-if [ -f "$OUTPUT_DIR/nest" ]; then
-    chmod +x "$OUTPUT_DIR/nest"
-    echo "   ${CHECK} Binary extracted to ${BOLD}${OUTPUT_DIR}/nest${RESET}"
-    
-    # Show binary info
-    echo ""
-    echo "${INFO} ${BOLD}Binary information:${RESET}"
-    if command -v file > /dev/null 2>&1; then
-        echo "   ${ARROW} Type: $(file "$OUTPUT_DIR/nest" | cut -d: -f2-)"
-    fi
-    if command -v ldd > /dev/null 2>&1 && ldd "$OUTPUT_DIR/nest" > /dev/null 2>&1; then
-        echo "   ${ARROW} GLIBC version:"
-        ldd --version 2>&1 | head -1 | sed 's/^/      /'
-        echo "   ${ARROW} Dependencies:"
-        ldd "$OUTPUT_DIR/nest" 2>&1 | grep -E 'libc\.so|GLIBC' | sed 's/^/      /' || echo "      (static or no GLIBC dependencies)"
-    fi
-else
-    echo "   ${RED}✗ Failed to extract binary${RESET}" >&2
+# Verify binary
+if [ ! -f "$OUTPUT_DIR/nest" ]; then
+    echo "   ${RED}✗ Binary not found at ${OUTPUT_DIR}/nest${RESET}" >&2
     exit 1
+fi
+
+echo ""
+echo "${INFO} ${BOLD}Binary information:${RESET}"
+if command -v file > /dev/null 2>&1; then
+    echo "   ${ARROW} Type: $(file "$OUTPUT_DIR/nest" | cut -d: -f2-)"
+fi
+if command -v ldd > /dev/null 2>&1; then
+    if ldd "$OUTPUT_DIR/nest" > /dev/null 2>&1; then
+        echo "   ${ARROW} Dependencies:"
+        ldd "$OUTPUT_DIR/nest" 2>&1 | sed 's/^/      /'
+    else
+        echo "   ${CHECK} Statically linked (no dynamic dependencies)"
+    fi
 fi
 
 # Install binary (if not skipped)
@@ -313,19 +293,17 @@ if [ "$SKIP_INSTALL" = false ]; then
     echo "${INFO} ${BOLD}Installing binary...${RESET}"
     mkdir -p "$INSTALL_DIR"
     cp "$OUTPUT_DIR/nest" "$BINARY_PATH"
+    chmod +x "$BINARY_PATH"
     echo "   ${CHECK} Binary installed to ${BOLD}${BINARY_PATH}${RESET}"
     
     # Check if install directory is in PATH
     if ! echo "${PATH}" | grep -q "${INSTALL_DIR}"; then
         echo ""
-        echo "   ${YELLOW}⚠ ${INSTALL_DIR} is not in your PATH${RESET}"
+        echo "   ${WARN} ${INSTALL_DIR} is not in your PATH${RESET}"
         echo "   ${ARROW} Add this line to your shell config (~/.bashrc, ~/.zshrc, etc.):"
         echo "      ${BOLD}export PATH=\"\${HOME}/.local/bin:\${PATH}\"${RESET}"
     fi
 fi
-
-# Cleanup Dockerfile (optional, can be kept for debugging)
-# rm -f "$OUTPUT_DIR/Dockerfile"
 
 # Success message
 echo ""
@@ -346,11 +324,11 @@ else
     echo "   Binary location: ${BOLD}${OUTPUT_DIR}/nest${RESET}"
 fi
 echo ""
-echo "   ${CHECK} This binary should work on systems with older GLIBC versions"
+echo "   ${CHECK} This binary is statically linked and should work on any Linux system"
+echo "   ${INFO} No GLIBC dependencies - works on very old systems"
 if [ "$SKIP_INSTALL" = false ]; then
     echo "   ${INFO} Test: ${BOLD}nest --version${RESET}"
 else
     echo "   ${INFO} Test: ${BOLD}${OUTPUT_DIR}/nest --version${RESET}"
 fi
 echo ""
-
