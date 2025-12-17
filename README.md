@@ -1,6 +1,6 @@
 # 🪺 Nest - Task Runner for CLI Commands
 
-**⚠️ MVP Version** - This is a Minimum Viable Product. I actively use this tool in my daily work and will continue to maintain and improve it. This project also serves as my learning journey in Rust programming.
+I actively use this tool in my daily work and will continue to maintain and improve it. This project also serves as my learning journey in Rust programming.
 
 ## 📋 About
 
@@ -19,25 +19,38 @@ The install scripts will:
 - Install it to `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
 - Provide instructions if the install directory is not in your PATH
 
-**Linux/macOS:**
+**Linux/macOS (glibc):**
 
 ```bash
+# Latest release
 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash
+
+# Specific version (e.g. 0.1.0)
+curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash -s -- 0.1.0
+# or via environment variable
+NEST_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash
 ```
 
 **Linux x86_64 (static musl binary):**
 
 ```bash
-# Static installer (musl, recommended for older/minimal systems)
-curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install-static.sh | bash
-# or legacy-style name
+# Latest static release (musl, recommended for older/minimal systems)
 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash
+
+# Specific static version (e.g. 0.1.0)
+curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash -s -- 0.1.0
+# or via environment variable
+NEST_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
+# Latest release
 irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex
+
+# Specific version (e.g. 0.1.0)
+irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex; install.ps1 -Version 0.1.0
 ```
 
 **Manual Installation:**
@@ -1100,7 +1113,7 @@ Future features that may be added based on user needs and feedback.
 
 ## 🛠️ Development Status
 
-This is an **MVP (Minimum Viable Product)** version. I actively use this tool in my projects and will continue to maintain and improve it. This project also serves as my learning journey in Rust programming.
+I actively use this tool in my projects and will continue to maintain and improve it. This project also serves as my learning journey in Rust programming.
 
 **Current Focus:**
 

@@ -1,3 +1,10 @@
+param(
+    # Version to install:
+    # - default: "latest" (GitHub's latest release)
+    # - override via -Version 0.1.0
+    [string]$Version = "latest"
+)
+
 # Install script for Nest CLI tool (Windows PowerShell)
 
 $ErrorActionPreference = "Stop"
@@ -35,7 +42,6 @@ $BINARY_NAME = "nest.exe"
 # GitHub repository
 # TODO: Update this to your actual GitHub repository (e.g., "username/nest")
 $REPO = "quonaro/nest"
-$VERSION = "latest"
 
 # Installation directory
 $INSTALL_DIR = "$env:USERPROFILE\.local\bin"
@@ -69,10 +75,10 @@ if (-not (Test-Path $INSTALL_DIR)) {
 $TEMP_DIR = New-TemporaryFile | ForEach-Object { Remove-Item $_; New-Item -ItemType Directory -Path $_ }
 $TEMP_FILE = Join-Path $TEMP_DIR "nest-${PLATFORM}-${ARCHITECTURE}.zip"
 
-if ($VERSION -eq "latest") {
+if ($Version -eq "latest") {
     $URL = "https://github.com/${REPO}/releases/latest/download/nest-${PLATFORM}-${ARCHITECTURE}.zip"
 } else {
-    $URL = "https://github.com/${REPO}/releases/download/v${VERSION}/nest-${PLATFORM}-${ARCHITECTURE}.zip"
+    $URL = "https://github.com/${REPO}/releases/download/v${Version}/nest-${PLATFORM}-${ARCHITECTURE}.zip"
 }
 
 Write-Host ""

@@ -66,7 +66,15 @@ fi
 # GitHub repository
 # TODO: Update this to your actual GitHub repository (e.g., "username/nest")
 REPO="quonaro/nest"
-VERSION="latest"
+
+# Version to install:
+# - default: "latest" (GitHub's latest release)
+# - override via NEST_VERSION env var
+# - or via first CLI argument: ./install.sh 0.1.0
+VERSION="${NEST_VERSION:-latest}"
+if [ -n "$1" ]; then
+    VERSION="$1"
+fi
 
 # Installation directory
 INSTALL_DIR="${HOME}/.local/bin"
