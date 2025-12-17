@@ -32,7 +32,21 @@ REPO="quonaro/nest"
 PLATFORM_NAME="linux-musl"
 ARCH_NAME="x86_64"
 
-INSTALL_DIR="${HOME}/.local/bin"
+INSTALL_SCOPE="${NEST_INSTALL_SCOPE:-user}"
+case "${INSTALL_SCOPE}" in
+    global|system)
+        INSTALL_DIR="/usr/local/bin"
+        ;;
+    user|"")
+        INSTALL_DIR="${HOME}/.local/bin"
+        ;;
+    *)
+        echo "${YELLOW}Warning: Unknown NEST_INSTALL_SCOPE='${INSTALL_SCOPE}', falling back to user scope${RESET}" >&2
+        INSTALL_DIR="${HOME}/.local/bin"
+        INSTALL_SCOPE="user"
+        ;;
+esac
+
 BINARY_NAME="nest"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
@@ -40,6 +54,7 @@ echo ""
 echo "${BOLD}${BLUE}Nest CLI Static Installer (musl, Linux x86_64)${RESET}"
 echo ""
 echo "${INFO} ${BOLD}Target:${RESET} ${PLATFORM_NAME}-${ARCH_NAME}"
+echo "${INFO} ${BOLD}Install scope:${RESET} ${INSTALL_SCOPE}"
 echo "${INFO} ${BOLD}Install dir:${RESET} ${INSTALL_DIR}"
 echo ""
 

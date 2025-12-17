@@ -118,7 +118,6 @@ jobs:
           set -e
           BINARY_PATH="target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
           ARCHIVE_NAME="nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz"
-          CHECKSUM_NAME="${ARCHIVE_NAME}.sha256"
           WORKING_DIR=$(pwd)
 
           echo "=== Creating archive ==="
@@ -156,25 +155,8 @@ jobs:
 
           echo "Archive created successfully, size: $(ls -lh "${ARCHIVE_NAME}" | awk '{print $5}')"
 
-          # Create checksum
-          if command -v sha256sum > /dev/null 2>&1; then
-            sha256sum ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
-          elif command -v shasum > /dev/null 2>&1; then
-            shasum -a 256 ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
-          else
-            echo "Error: Neither sha256sum nor shasum found"
-            exit 1
-          fi
-
-          if [ ! -f "${CHECKSUM_NAME}" ]; then
-            echo "Error: Checksum ${CHECKSUM_NAME} was not created"
-            exit 1
-          fi
-
-          echo "=== Archive and checksum created successfully ==="
-          ls -lh ${ARCHIVE_NAME} ${CHECKSUM_NAME}
-          echo "Checksum content:"
-          cat ${CHECKSUM_NAME}
+          echo "=== Archive created successfully ==="
+          ls -lh ${ARCHIVE_NAME}
 
       - name: Create archive (Windows)
         if: matrix.os == 'windows-latest'
@@ -183,7 +165,6 @@ jobs:
 
           $BINARY_PATH = "target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
           $ARCHIVE_NAME = "nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip"
-          $CHECKSUM_NAME = "${ARCHIVE_NAME}.sha256"
           $WORKING_DIR = Get-Location
 
           Write-Host "Working directory: $WORKING_DIR"
@@ -229,35 +210,19 @@ jobs:
 
           Write-Host "Archive created successfully"
 
-          # Create checksum
-          try {
-            $HASH = Get-FileHash -Algorithm SHA256 $ARCHIVE_FULL_PATH
-            "$($HASH.Hash)  $($ARCHIVE_NAME)" | Out-File -Encoding utf8 $CHECKSUM_NAME
-            if (-not $?) {
-              Write-Error "Error: Failed to create checksum ${CHECKSUM_NAME}"
-              exit 1
-            }
-          } catch {
-            Write-Error "Error creating checksum: $_"
-            exit 1
-          }
-
           Write-Host "Created archive: ${ARCHIVE_NAME}"
-          Write-Host "Created checksum: ${CHECKSUM_NAME}"
-          Get-ChildItem ${ARCHIVE_NAME}, ${CHECKSUM_NAME} | Format-Table Name, Length
+          Get-ChildItem ${ARCHIVE_NAME} | Format-Table Name, Length
 
       - name: Verify files before upload (Unix)
         if: matrix.os != 'windows-latest'
         run: |
           set -e
           ARCHIVE="nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz"
-          CHECKSUM="${ARCHIVE}.sha256"
 
           echo "=== Verifying files before upload ==="
           echo "Current directory: $(pwd)"
           echo "Looking for:"
           echo "  Archive: ${ARCHIVE}"
-          echo "  Checksum: ${CHECKSUM}"
 
           echo "=== Files in current directory ==="
           ls -la | head -20
@@ -269,28 +234,19 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f "${CHECKSUM}" ]; then
-            echo "Error: Checksum ${CHECKSUM} not found in $(pwd)"
-            echo "Searching for checksum files:"
-            find . -name "*.sha256" -type f 2>/dev/null || echo "No .sha256 files found"
-            exit 1
-          fi
-
           echo "=== Files verified successfully ==="
-          ls -lh ${ARCHIVE} ${CHECKSUM}
+          ls -lh ${ARCHIVE}
 
       - name: Verify files before upload (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           $ErrorActionPreference = "Stop"
           $ARCHIVE = "nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip"
-          $CHECKSUM = "${ARCHIVE}.sha256"
 
           Write-Host "=== Verifying files before upload ==="
           Write-Host "Current directory: $(Get-Location)"
           Write-Host "Looking for:"
           Write-Host "  Archive: $ARCHIVE"
-          Write-Host "  Checksum: $CHECKSUM"
 
           Write-Host "=== Files in current directory ==="
           Get-ChildItem | Select-Object Name, Length | Format-Table
@@ -302,15 +258,8 @@ jobs:
             exit 1
           }
 
-          if (-not (Test-Path $CHECKSUM)) {
-            Write-Error "Error: Checksum $CHECKSUM not found in $(Get-Location)"
-            Write-Host "Searching for checksum files:"
-            Get-ChildItem -Recurse -Filter "*.sha256" -ErrorAction SilentlyContinue | Select-Object FullName
-            exit 1
-          }
-
           Write-Host "=== Files verified successfully ==="
-          Get-ChildItem $ARCHIVE, $CHECKSUM | Format-Table Name, Length
+          Get-ChildItem $ARCHIVE | Format-Table Name, Length
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -340,7 +289,6 @@ jobs:
       - name: Create examples archive
         run: |
           ARCHIVE_NAME="examples.tar.gz"
-          CHECKSUM_NAME="${ARCHIVE_NAME}.sha256"
 
           echo "=== Creating examples archive ==="
 
@@ -353,18 +301,8 @@ jobs:
 
           echo "Archive created successfully, size: $(ls -lh "${ARCHIVE_NAME}" | awk '{print $5}')"
 
-          # Create checksum
-          sha256sum ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
-
-          if [ ! -f "${CHECKSUM_NAME}" ]; then
-            echo "Error: Checksum not created"
-            exit 1
-          fi
-
-          echo "=== Archive and checksum created successfully ==="
-          ls -lh ${ARCHIVE_NAME} ${CHECKSUM_NAME}
-          echo "Checksum content:"
-          cat ${CHECKSUM_NAME}
+          echo "=== Archive created successfully ==="
+          ls -lh ${ARCHIVE_NAME}
 
       - name: Upload examples artifact
         uses: actions/upload-artifact@v4
@@ -372,7 +310,6 @@ jobs:
           name: examples
           path: |
             examples.tar.gz
-            examples.tar.gz.sha256
           retention-days: 30
           if-no-files-found: error
 
@@ -453,12 +390,12 @@ jobs:
         run: |
           mkdir -p release-files
 
-          # Copy all binaries archives and checksums to release-files directory
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec cp {} release-files/ \;
+          # Copy all binary archives (no checksums) to release-files directory
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release-files/ \;
 
-          # Copy examples archive and checksum
+          # Copy examples archive
           if [ -d "examples-artifact" ]; then
-            find examples-artifact -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec cp {} release-files/ \;
+            find examples-artifact -type f -name "*.tar.gz" -exec cp {} release-files/ \;
             echo "Examples archive added to release files"
           else
             echo "Warning: examples-artifact directory not found"
@@ -475,9 +412,7 @@ jobs:
 
           # Count files
           ARCHIVE_COUNT=$(find release-files -name "*.tar.gz" -o -name "*.zip" | wc -l)
-          CHECKSUM_COUNT=$(find release-files -name "*.sha256" | wc -l)
           echo "Archives: $ARCHIVE_COUNT"
-          echo "Checksums: $CHECKSUM_COUNT"
 
           if [ "$ARCHIVE_COUNT" -eq 0 ]; then
             echo "Error: No archives found for release."
@@ -511,9 +446,6 @@ jobs:
             **Examples:**
             Download `examples.tar.gz` to get the complete examples folder with all configuration examples.
 
-            ### Checksums
-
-            All files include SHA256 checksums for verification.
           files: release-files/*
           generate_release_notes: false
           draft: false

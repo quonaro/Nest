@@ -3095,6 +3095,28 @@ pub fn handle_update() {
         }
     };
 
+    // libc / flavor selection for Linux x86_64:
+    // - default: glibc (asset: nest-linux-x86_64.tar.gz)
+    // - NEST_LIBC=musl -> static musl (asset: nest-linux-musl-x86_64.tar.gz)
+    let libc_flavor = env::var("NEST_LIBC").unwrap_or_else(|_| "glibc".to_string());
+
+    // Archive platform name (differs for linux glibc vs musl)
+    let platform_archive = if platform == "linux" && architecture == "x86_64" {
+        match libc_flavor.to_lowercase().as_str() {
+            "musl" => "linux-musl".to_string(),
+            "glibc" | "" => "linux".to_string(),
+            other => {
+                OutputFormatter::info(&format!(
+                    "Unknown NEST_LIBC='{}', falling back to glibc (linux archive)",
+                    other
+                ));
+                "linux".to_string()
+            }
+        }
+    } else {
+        platform.clone()
+    };
+
     // Determine binary name
     let binary_name = "nest";
     let install_dir = match env::var("HOME") {
@@ -3113,6 +3135,13 @@ pub fn handle_update() {
     // Print header
     OutputFormatter::info("Updating Nest CLI...");
     println!("  Platform: {}-{}", platform, architecture);
+    if platform == "linux" && architecture == "x86_64" {
+        if platform_archive == "linux-musl" {
+            println!("  Libc: musl (static)");
+        } else {
+            println!("  Libc: glibc");
+        }
+    }
     println!("  Install directory: {}", install_dir.display());
 
     // Create install directory if it doesn't exist
@@ -3125,12 +3154,12 @@ pub fn handle_update() {
     let url = if version == "latest" {
         format!(
             "https://github.com/{}/releases/latest/download/nest-{}-{}.tar.gz",
-            repo, platform, architecture
+            repo, platform_archive, architecture
         )
     } else {
         format!(
             "https://github.com/{}/releases/download/v{}/nest-{}-{}.tar.gz",
-            repo, version, platform, architecture
+            repo, version, platform_archive, architecture
         )
     };
 
@@ -3142,7 +3171,7 @@ pub fn handle_update() {
         OutputFormatter::error(&format!("Failed to create temporary directory: {}", e));
         std::process::exit(1);
     }
-    let temp_file = temp_dir.join(format!("nest-{}-{}.tar.gz", platform, architecture));
+    let temp_file = temp_dir.join(format!("nest-{}-{}.tar.gz", platform_archive, architecture));
 
     // Download binary
     OutputFormatter::info("Downloading Nest CLI...");

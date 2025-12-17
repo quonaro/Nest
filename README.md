@@ -19,16 +19,19 @@ The install scripts will:
 - Install it to `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
 - Provide instructions if the install directory is not in your PATH
 
-**Linux/macOS (glibc):**
+**Linux/macOS (glibc, user install by default):**
 
 ```bash
-# Latest release
+# Latest release, installed for current user (~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash
 
 # Specific version (e.g. 0.1.0)
 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash -s -- 0.1.0
 # or via environment variable
 NEST_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash
+
+# Install globally to /usr/local/bin (requires root)
+NEST_INSTALL_SCOPE=global sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash'
 ```
 
 **Linux x86_64 (static musl binary):**
@@ -41,6 +44,9 @@ curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh
 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash -s -- 0.1.0
 # or via environment variable
 NEST_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash
+
+# Static binary installed globally to /usr/local/bin (requires root)
+NEST_INSTALL_SCOPE=global sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash'
 ```
 
 **Windows (PowerShell):**
@@ -258,6 +264,18 @@ This command:
 - Replaces the binary in `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
 - Works without requiring an existing Nestfile
 - Requires `curl` or `wget` to be available on your system
+
+**Libc selection on Linux x86_64 (glibc vs musl):**
+
+- By default, `nest update` on Linux x86_64 installs the **glibc** build:
+  - `nest-linux-x86_64.tar.gz`
+- To install the **static musl** build instead:
+
+```bash
+NEST_LIBC=musl nest update
+```
+
+This matches the behavior of the install scripts (`install.sh` / `install.static.sh`), which also respect `NEST_LIBC` for choosing the appropriate archive.
 
 **Note:** If you get a "Text file busy" error, it means the binary is currently in use. Close the terminal session and run the update command again, or manually replace the binary using the instructions provided in the error message.
 

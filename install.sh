@@ -76,8 +76,46 @@ if [ -n "$1" ]; then
     VERSION="$1"
 fi
 
-# Installation directory
-INSTALL_DIR="${HOME}/.local/bin"
+# libc / flavor selection for Linux x86_64:
+# - default: glibc (asset: nest-linux-x86_64.tar.gz)
+# - NEST_LIBC=musl -> static musl (asset: nest-linux-musl-x86_64.tar.gz)
+LIBC_FLAVOR="${NEST_LIBC:-glibc}"
+
+# Archive platform name (differs for linux glibc vs musl)
+PLATFORM_ARCHIVE="${PLATFORM}"
+if [ "${PLATFORM}" = "linux" ] && [ "${ARCHITECTURE}" = "x86_64" ]; then
+    case "${LIBC_FLAVOR}" in
+        musl|Musl|MUSL)
+            PLATFORM_ARCHIVE="linux-musl"
+            ;;
+        glibc|Glibc|GLIBC|"")
+            PLATFORM_ARCHIVE="linux"
+            ;;
+        *)
+            echo "${WARN} Unknown NEST_LIBC value '${LIBC_FLAVOR}', falling back to glibc (linux archive)${RESET}" >&2
+            PLATFORM_ARCHIVE="linux"
+            ;;
+    esac
+fi
+
+# Installation scope:
+# - default: "user"  (installs to ~/.local/bin)
+# - NEST_INSTALL_SCOPE=global -> installs to /usr/local/bin (requires root)
+INSTALL_SCOPE="${NEST_INSTALL_SCOPE:-user}"
+case "${INSTALL_SCOPE}" in
+    global|system)
+        INSTALL_DIR="/usr/local/bin"
+        ;;
+    user|"")
+        INSTALL_DIR="${HOME}/.local/bin"
+        ;;
+    *)
+        echo "${WARN} Unknown NEST_INSTALL_SCOPE='${INSTALL_SCOPE}', falling back to user scope${RESET}" >&2
+        INSTALL_DIR="${HOME}/.local/bin"
+        INSTALL_SCOPE="user"
+        ;;
+esac
+
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
 # Print header
@@ -95,6 +133,14 @@ echo ""
 # Print system information
 echo "${INFO} ${BOLD}Detected system:${RESET}"
 echo "   ${ARROW} Platform: ${BOLD}${PLATFORM}-${ARCHITECTURE}${RESET}"
+if [ "${PLATFORM}" = "linux" ] && [ "${ARCHITECTURE}" = "x86_64" ]; then
+    if [ "${PLATFORM_ARCHIVE}" = "linux-musl" ]; then
+        echo "   ${ARROW} Libc: ${BOLD}musl (static)${RESET}"
+    else
+        echo "   ${ARROW} Libc: ${BOLD}glibc${RESET}"
+    fi
+fi
+echo "   ${ARROW} Install scope: ${BOLD}${INSTALL_SCOPE}${RESET}"
 echo "   ${ARROW} Install directory: ${BOLD}${INSTALL_DIR}${RESET}"
 echo ""
 
@@ -105,14 +151,14 @@ echo "   ${CHECK} Created install directory"
 
 # Download binary
 if [ "$VERSION" = "latest" ]; then
-    URL="https://github.com/${REPO}/releases/latest/download/nest-${PLATFORM}-${ARCHITECTURE}.tar.gz"
+    URL="https://github.com/${REPO}/releases/latest/download/nest-${PLATFORM_ARCHIVE}-${ARCHITECTURE}.tar.gz"
 else
-    URL="https://github.com/${REPO}/releases/download/v${VERSION}/nest-${PLATFORM}-${ARCHITECTURE}.tar.gz"
+    URL="https://github.com/${REPO}/releases/download/v${VERSION}/nest-${PLATFORM_ARCHIVE}-${ARCHITECTURE}.tar.gz"
 fi
 
 # Download with curl or wget
 TEMP_DIR=$(mktemp -d)
-TEMP_FILE="${TEMP_DIR}/nest-${PLATFORM}-${ARCHITECTURE}.tar.gz"
+TEMP_FILE="${TEMP_DIR}/nest-${PLATFORM_ARCHIVE}-${ARCHITECTURE}.tar.gz"
 
 echo ""
 echo "${INFO} ${BOLD}Downloading Nest CLI...${RESET}"
