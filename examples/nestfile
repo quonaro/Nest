@@ -49,6 +49,18 @@
     setup_env(env_name="{{target}}")
     echo "Build complete for {{target}}"
 
+# New function that returns a value using @return (no arguments for simpler testing)
+@function get_build_info():
+    @var MESSAGE = "Build info - app {{APP_NAME}} v{{VERSION}}"
+    @return "{{MESSAGE}}"
+
+# Function that composes other functions and also returns a value
+@function get_full_info():
+    echo "Preparing full info"
+    # here we call another function; its side effects will be printed
+    get_build_info()
+    @return "Full info"
+
 # ============================================================================
 # BASIC COMMANDS
 # ============================================================================
@@ -68,6 +80,8 @@ build(!target|t: str = "x86_64", !release|r: bool = false):
     > script: |
         echo "Building {{APP_NAME}} v{{VERSION}} for {{target}}"
         echo "Company: {{COMPANY_NAME}}"
+        # Use function return value inside template
+        echo "Build info (from function): {{ get_build_info() }}"
         if [ "{{release}}" = "true" ]; then
             echo "Release mode enabled"
         else

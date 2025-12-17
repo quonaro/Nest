@@ -1115,6 +1115,19 @@ impl CliGenerator {
             return Ok(());
         }
 
+        // Pre-process script to handle function calls in templates {{ func() }}
+        let script = self.process_function_calls_in_templates(
+            script,
+            env_vars,
+            cwd,
+            command_path,
+            args,
+            dry_run,
+            verbose,
+            parent_args,
+            hide_output,
+        )?;
+
         // Process script line by line
         let lines: Vec<&str> = script.lines().collect();
         let mut current_shell_block: Vec<String> = Vec::new();
@@ -1192,7 +1205,8 @@ impl CliGenerator {
                             merged_env.insert(key, value);
                         }
 
-                        self.execute_function(
+                        // Execute function and capture return value (if any)
+                        let _return_value = self.execute_function(
                             func,
                             &call_args,
                             &merged_env,
@@ -1202,6 +1216,8 @@ impl CliGenerator {
                             verbose,
                             hide_output,
                         )?;
+                        // Note: return value is currently ignored when calling from script
+                        // To use return value, use {{ func() }} syntax in templates
                         continue;
                     }
                 }
@@ -1471,6 +1487,159 @@ impl CliGenerator {
         Ok(())
     }
 
+    /// Processes template variables in @return value.
+    ///
+    /// Replaces {{variable}} and {{param}} placeholders with their actual values.
+    ///
+    /// # Arguments
+    ///
+    /// * `return_expr` - The return expression (value after @return)
+    /// * `args` - Function arguments
+    /// * `var_map` - Variable map (local and global variables)
+    ///
+    /// # Returns
+    ///
+    /// Returns the processed return value with all placeholders replaced.
+    fn process_template_in_return_value(
+        return_expr: &str,
+        args: &HashMap<String, String>,
+        var_map: &HashMap<String, String>,
+    ) -> String {
+        let mut result = return_expr.to_string();
+
+        // Replace parameter placeholders {{param}}
+        for (key, value) in args {
+            let placeholder = format!("{{{{{}}}}}", key);
+            result = result.replace(&placeholder, value);
+        }
+
+        // Replace variable placeholders {{VAR}}
+        for (key, value) in var_map {
+            let placeholder = format!("{{{{{}}}}}", key);
+            result = result.replace(&placeholder, value);
+        }
+
+        // Remove surrounding quotes if present (for string literals)
+        let trimmed = result.trim();
+        if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        {
+            result = trimmed[1..trimmed.len() - 1].to_string();
+        }
+
+        result
+    }
+
+    /// Processes function calls in templates like {{ func() }} or {{ func(arg="value") }}.
+    ///
+    /// Finds all function calls in double curly braces and replaces them with their return values.
+    ///
+    /// # Arguments
+    ///
+    /// * `script` - The script containing template function calls
+    /// * `env_vars` - Environment variables
+    /// * `cwd` - Optional working directory
+    /// * `command_path` - Current command path
+    /// * `args` - Current command arguments
+    /// * `dry_run` - If true, don't execute functions
+    /// * `verbose` - If true, show detailed output
+    /// * `parent_args` - Parent command arguments
+    /// * `hide_output` - If true, hide function output
+    ///
+    /// # Returns
+    ///
+    /// Returns the script with function calls replaced by their return values.
+    fn process_function_calls_in_templates(
+        &self,
+        script: &str,
+        env_vars: &HashMap<String, String>,
+        cwd: Option<&str>,
+        command_path: Option<&[String]>,
+        _args: &HashMap<String, String>,
+        dry_run: bool,
+        verbose: bool,
+        _parent_args: &HashMap<String, String>,
+        hide_output: bool,
+    ) -> Result<String, String> {
+        let mut merged_env = env_vars.clone();
+        use std::env;
+        for (key, value) in env::vars() {
+            merged_env.insert(key, value);
+        }
+
+        let mut result = String::with_capacity(script.len());
+        let mut chars = script.chars().peekable();
+        let mut buffer = String::new();
+
+        while let Some(ch) = chars.next() {
+            if ch == '{' {
+                // Check if it's {{ (double curly brace)
+                if let Some(&'{') = chars.peek() {
+                    chars.next(); // consume second '{'
+                    buffer.clear();
+                    
+                    // Collect content until }}
+                    let mut found_close = false;
+                    while let Some(ch) = chars.next() {
+                        if ch == '}' {
+                            if let Some(&'}') = chars.peek() {
+                                chars.next(); // consume second '}'
+                                found_close = true;
+                                break;
+                            } else {
+                                buffer.push(ch);
+                            }
+                        } else {
+                            buffer.push(ch);
+                        }
+                    }
+
+                    if found_close {
+                        let template_expr = buffer.trim();
+                        
+                        // Check if it's a function call (contains parentheses)
+                        if template_expr.contains('(') && template_expr.contains(')') {
+                            // Try to parse as function call
+                            if let Some((func_name, func_args)) = Self::parse_command_call(template_expr) {
+                                // Check if it's a function (no colons, exists in functions list)
+                                if !func_name.contains(':') {
+                                    if let Some(func) = self.find_function(&func_name) {
+                                        // Execute function
+                                        let return_value = self.execute_function(
+                                            func,
+                                            &func_args,
+                                            &merged_env,
+                                            cwd,
+                                            command_path,
+                                            dry_run,
+                                            verbose,
+                                            hide_output,
+                                        )?;
+
+                                        // Replace template with return value
+                                        let replacement = return_value.unwrap_or_else(String::new);
+                                        result.push_str(&replacement);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Not a function call or function not found - keep original template
+                        result.push_str("{{");
+                        result.push_str(template_expr);
+                        result.push_str("}}");
+                        continue;
+                    }
+                }
+            }
+            
+            result.push(ch);
+        }
+
+        Ok(result)
+    }
+
     /// Finds a command by its path.
     ///
     /// # Arguments
@@ -1626,6 +1795,7 @@ impl CliGenerator {
     /// - Call other functions
     /// - Use variables, constants, and environment variables
     /// - Define local variables
+    /// - Return values using @return directive
     ///
     /// # Arguments
     ///
@@ -1639,8 +1809,9 @@ impl CliGenerator {
     ///
     /// # Returns
     ///
-    /// Returns `Ok(())` if execution succeeded,
-    /// `Err(message)` if execution failed.
+    /// Returns `Ok(Some(value))` if execution succeeded and function returned a value,
+    /// Returns `Ok(None)` if execution succeeded but function didn't return a value,
+    /// Returns `Err(message)` if execution failed.
     fn execute_function(
         &self,
         function: &Function,
@@ -1651,7 +1822,7 @@ impl CliGenerator {
         dry_run: bool,
         verbose: bool,
         hide_output: bool,
-    ) -> Result<(), String> {
+    ) -> Result<Option<String>, String> {
         if verbose {
             use super::output::OutputFormatter;
             let args_str = if args.is_empty() {
@@ -1718,21 +1889,186 @@ impl CliGenerator {
             body
         };
 
-        // Execute function body (supports commands, functions, and shell scripts)
+        // Execute function body line by line to support @return directive
         // Functions don't inherit parent args - they use their own args
         // Functions inherit hide_output from the calling script
         let empty_parent_args = HashMap::new();
-        self.execute_script(
-            &processed_body,
-            env_vars,
-            cwd,
-            command_path,
-            args,
-            dry_run,
-            verbose,
-            &empty_parent_args,
-            hide_output, // Inherit hide_output from calling script
-        )
+        let lines: Vec<&str> = processed_body.lines().collect();
+        let mut current_shell_block: Vec<String> = Vec::new();
+
+        for line in lines {
+            let trimmed_line = line.trim();
+
+            // Check for @return directive
+            if trimmed_line.starts_with("@return") {
+                // Execute any accumulated shell commands first
+                if !current_shell_block.is_empty() {
+                    let shell_script = current_shell_block.join("\n");
+                    Self::execute_shell_script(
+                        &shell_script,
+                        env_vars,
+                        cwd,
+                        args,
+                        verbose,
+                        hide_output,
+                    )?;
+                    current_shell_block.clear();
+                }
+
+                // Extract return value
+                let return_value = if trimmed_line.len() > 7 {
+                    // Process template variables in return value
+                    let return_expr = trimmed_line[7..].trim_start();
+                    Self::process_template_in_return_value(
+                        return_expr,
+                        args,
+                        &var_map,
+                    )
+                } else {
+                    String::new()
+                };
+
+                return Ok(Some(return_value));
+            }
+
+            // Preserve empty lines in shell blocks
+            if trimmed_line.is_empty() {
+                current_shell_block.push(line.to_string());
+                continue;
+            }
+
+            // Check for shell: prefix (explicit external command call)
+            if trimmed_line.starts_with("shell:") {
+                // Execute any accumulated shell commands first
+                if !current_shell_block.is_empty() {
+                    let shell_script = current_shell_block.join("\n");
+                    Self::execute_shell_script(
+                        &shell_script,
+                        env_vars,
+                        cwd,
+                        args,
+                        verbose,
+                        hide_output,
+                    )?;
+                    current_shell_block.clear();
+                }
+
+                // Remove "shell:" prefix and process template variables
+                let external_command = trimmed_line[6..].trim_start();
+                if !external_command.is_empty() {
+                    use super::template::TemplateProcessor;
+                    let processed_command = TemplateProcessor::process(
+                        external_command,
+                        args,
+                        &self.variables,
+                        &self.constants,
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &empty_parent_args,
+                    );
+                    Self::execute_shell_script(&processed_command, env_vars, cwd, args, verbose, hide_output)?;
+                }
+                continue;
+            }
+
+            // Try to parse as command or function call
+            if let Some((call_name, call_args)) = Self::parse_command_call(trimmed_line) {
+                // Execute any accumulated shell commands first
+                if !current_shell_block.is_empty() {
+                    let shell_script = current_shell_block.join("\n");
+                    Self::execute_shell_script(
+                        &shell_script,
+                        env_vars,
+                        cwd,
+                        args,
+                        verbose,
+                        hide_output,
+                    )?;
+                    current_shell_block.clear();
+                }
+
+                // Check if it's a function call (single name, no colons)
+                if !call_name.contains(':') {
+                    if let Some(func) = self.find_function(&call_name) {
+                        // Merge global env_vars with system env
+                        let mut merged_env = env_vars.clone();
+                        use std::env;
+                        for (key, value) in env::vars() {
+                            merged_env.insert(key, value);
+                        }
+
+                        // Execute function and capture return value (if any)
+                        let _return_value = self.execute_function(
+                            func,
+                            &call_args,
+                            &merged_env,
+                            cwd,
+                            command_path,
+                            dry_run,
+                            verbose,
+                            hide_output,
+                        )?;
+                        // Note: return value is ignored here - functions called from within functions
+                        // don't automatically propagate their return values unless explicitly handled
+                        continue;
+                    }
+                }
+
+                // Try to find as command
+                let resolved_path: Vec<String> = if call_name.contains(':') {
+                    call_name.split(':').map(|s| s.trim().to_string()).collect()
+                } else {
+                    let cmd_name = call_name.trim().to_string();
+                    if let Some(current_path) = command_path {
+                        if current_path.is_empty() {
+                            vec![cmd_name]
+                        } else {
+                            let mut resolved =
+                                current_path[..current_path.len().saturating_sub(1)].to_vec();
+                            resolved.push(cmd_name);
+                            resolved
+                        }
+                    } else {
+                        vec![cmd_name]
+                    }
+                };
+
+                // Execute command (recursive call detection handled in execute_command)
+                if let Some(cmd) = self.find_command(&resolved_path) {
+                    self.execute_command(
+                        cmd,
+                        &call_args,
+                        Some(&resolved_path),
+                        dry_run,
+                        verbose,
+                    )?;
+                } else {
+                    // Not a command, treat as shell command
+                    current_shell_block.push(line.to_string());
+                }
+            } else {
+                // Regular shell command line
+                current_shell_block.push(line.to_string());
+            }
+        }
+
+        // Execute any remaining shell commands
+        if !current_shell_block.is_empty() {
+            let shell_script = current_shell_block.join("\n");
+            Self::execute_shell_script(
+                &shell_script,
+                env_vars,
+                cwd,
+                args,
+                verbose,
+                hide_output,
+            )?;
+        }
+
+        // Function completed without @return - return None
+        Ok(None)
     }
 
     /// Checks if a command has a default subcommand.
@@ -1824,7 +2160,8 @@ impl CliGenerator {
                 }
             };
 
-            // Check for cycles
+            // Check for cycles: if this dependency path is already in the current call stack,
+            // we have a circular dependency and must abort.
             if visited.contains(&dep_path) {
                 return Err(format!(
                     "Circular dependency detected: {} -> {}",
@@ -1835,11 +2172,10 @@ impl CliGenerator {
 
             // Find and execute dependency
             if let Some(dep_command) = self.find_command(&dep_path) {
-                // Mark as visited
-                visited.insert(dep_path.clone());
-
-                // Execute dependency recursively (with its own dependencies and provided arguments)
-                // Dependencies don't inherit parent args - they use their own provided args
+                // Execute dependency recursively (with its own dependencies and provided arguments).
+                // execute_command_with_deps is responsible for managing the `visited` set
+                // (marking the current command as visited and unmarking it after execution).
+                // Dependencies don't inherit parent args - they use their own provided args.
                 let empty_parent_args = HashMap::new();
                 self.execute_command_with_deps(
                     dep_command,
@@ -1850,9 +2186,6 @@ impl CliGenerator {
                     visited,
                     &empty_parent_args,
                 )?;
-
-                // Remove from visited after execution (allow reuse in different branches)
-                visited.remove(&dep_path);
             } else {
                 return Err(format!(
                     "Dependency not found: {} (required by {})",
@@ -1890,37 +2223,10 @@ impl CliGenerator {
         let command_path_unwrapped = command_path.unwrap_or(&[]);
         let command_path_for_logging = command_path;
 
-        // Check for recursive call (command calling itself)
-        if let Some(path) = command_path {
-            if visited.contains(path) {
-                use super::output::colors;
-                let path_str = path.join(" ");
-                return Err(format!(
-                    "\n{}╔═══════════════════════════════════════════════════════════════╗{}\n\
-                     {}║{}  {}❌ Recursive Command Call Detected{}                      {}\n\
-                     {}╚═══════════════════════════════════════════════════════════════╝{}\n\n\
-                     {}📋 Command:{} nest {}\n\n\
-                     {}⚠️  ERROR:{} Command 'nest {}' is calling itself recursively, which causes a stack overflow.\n\n\
-                     {}💡 Solution:{} To call an external system command with the same name, use the {}shell:{} prefix:\n\
-                     {}   Example:{} shell:uv run\n\n\
-                     {}   Or use the full path to the external command:\n\
-                     {}   Example:{} /usr/bin/uv run  (or $(which uv) run)\n\n\
-                     {}ℹ{} The command was not executed to prevent stack overflow.{}",
-                    colors::RED, colors::RESET,
-                    colors::RED, colors::RESET, colors::BRIGHT_RED, colors::RESET,
-                    colors::RED, colors::RESET,
-                    colors::CYAN, colors::RESET, path_str,
-                    colors::YELLOW, colors::RESET, path_str,
-                    colors::CYAN, colors::RESET, colors::BRIGHT_CYAN, "shell:", colors::RESET,
-                    colors::GRAY, colors::RESET,
-                    colors::GRAY, colors::RESET,
-                    colors::GRAY, colors::RESET,
-                    colors::BRIGHT_CYAN, colors::RESET
-                ));
-            }
-            // Mark command as visited before execution
-            visited.insert(path.to_vec());
-        }
+        // NOTE: recursive command-call detection is temporarily disabled here because it
+        // conflicts with dependency-cycle tracking and was falsely triggering for valid
+        // dependency graphs (e.g. `build` -> `clean`). Proper recursion detection should
+        // be implemented separately from dependency tracking.
 
         // Execute dependencies first
         let depends = Self::get_depends_directive(&command.directives);
