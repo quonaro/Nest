@@ -39,14 +39,18 @@ impl HelpFormatter {
         println!("{}", OutputFormatter::help_label("Available commands:"));
         for child in &command.children {
             let child_desc = Self::extract_description(&child.directives);
+            let command_with_params = child.to_string();
             if let Some(desc) = child_desc {
                 println!(
                     "  {}  {}",
-                    OutputFormatter::help_command(&child.name),
+                    OutputFormatter::help_command(&command_with_params),
                     OutputFormatter::help_description(desc)
                 );
             } else {
-                println!("  {}", OutputFormatter::help_command(&child.name));
+                println!(
+                    "  {}",
+                    OutputFormatter::help_command(&command_with_params)
+                );
             }
         }
     }

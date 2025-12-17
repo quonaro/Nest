@@ -101,7 +101,8 @@ impl OutputFormatter {
 
     /// Formats a help description
     pub fn help_description(desc: &str) -> String {
-        format!("{}{}{}", colors::GRAY, desc, colors::RESET)
+        // Use white for better readability in most terminal themes
+        format!("{}{}{}", colors::WHITE, desc, colors::RESET)
     }
 
     /// Formats a help label (like "Usage:", "Available commands:")

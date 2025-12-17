@@ -51,17 +51,17 @@ clean():
 # NESTED COMMANDS (GROUPS)
 # ============================================================================
 
-# dev:
-#     > desc: Development commands
-#     
-#     dev start():
-#         > desc: Start development server
-#         > script: |
-#             echo "Starting development server..."
-#     
-#     dev test():
-#         > desc: Run development tests
-#         > script: |
-#             echo "Running development tests..."
+dev:
+    > desc: Development commands
+    
+    start():
+        > desc: Start development server
+        > script: |
+            echo "Starting development server..."
+    
+    test(testy: str):
+        > desc: Run development tests
+        > script: |
+            echo "Running development tests..."
 
 # For more examples, see: nest --example
