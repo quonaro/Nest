@@ -21,7 +21,8 @@ impl EnvironmentManager {
     /// This function processes `Directive::Env` directives and:
     /// - Loads variables from .env files (if the value starts with '.' and the file exists)
     /// - Parses direct assignments (if the value contains '=')
-    /// - Resolves system environment variables with fallback (${VAR:-default})
+    /// - Resolves environment variables with fallback (${VAR:-default} or $VAR)
+    ///   Variables are resolved first from already loaded env_vars, then from system environment
     ///
     /// # Arguments
     ///
@@ -36,7 +37,8 @@ impl EnvironmentManager {
     /// Directives like:
     /// - `> env: .env.local` - Loads from file
     /// - `> env: NODE_ENV=production` - Direct assignment
-    /// - `> env: NODE_ENV=${NODE_ENV:-development}` - System variable with fallback
+    /// - `> env: NODE_ENV=${NODE_ENV:-development}` - Variable with fallback (checks env_vars first, then system)
+    /// - `> env: PGPASSWORD=$DB_PASSWORD` - Use variable from already loaded .env file
     pub fn extract_env_vars(directives: &[Directive]) -> HashMap<String, String> {
         let mut env_vars = HashMap::new();
 
@@ -89,8 +91,9 @@ impl EnvironmentManager {
 
     fn parse_direct_assignment(env_value: &str, env_vars: &mut HashMap<String, String>) {
         if let Some((key, value)) = Self::parse_env_line(env_value) {
-            // Resolve system environment variables with fallback syntax: ${VAR:-default}
-            let resolved_value = Self::resolve_env_value(&value);
+            // Resolve environment variables with fallback syntax: ${VAR:-default} or $VAR
+            // First check already loaded env_vars, then system environment
+            let resolved_value = Self::resolve_env_value(&value, env_vars);
             env_vars.insert(key, resolved_value);
         }
     }
@@ -98,12 +101,14 @@ impl EnvironmentManager {
     /// Resolves environment variable references in a value string.
     ///
     /// Supports syntax:
-    /// - `${VAR:-default}` - Use system variable VAR if exists, otherwise use default
-    /// - `${VAR}` - Use system variable VAR if exists, otherwise empty string
+    /// - `${VAR:-default}` - Use variable VAR from env_vars or system, otherwise use default
+    /// - `${VAR}` - Use variable VAR from env_vars or system, otherwise empty string
+    /// - `$VAR` - Use variable VAR from env_vars or system, otherwise empty string
     ///
     /// # Arguments
     ///
     /// * `value` - The value string that may contain environment variable references
+    /// * `env_vars` - Already loaded environment variables (from .env files, etc.)
     ///
     /// # Returns
     ///
@@ -112,63 +117,93 @@ impl EnvironmentManager {
     /// # Example
     ///
     /// ```
-    /// // If NODE_ENV is set to "production" in system:
-    /// resolve_env_value("${NODE_ENV:-development}") -> "production"
+    /// // If NODE_ENV is set to "production" in env_vars or system:
+    /// resolve_env_value("${NODE_ENV:-development}", env_vars) -> "production"
     ///
     /// // If NODE_ENV is not set:
-    /// resolve_env_value("${NODE_ENV:-development}") -> "development"
+    /// resolve_env_value("${NODE_ENV:-development}", env_vars) -> "development"
     ///
     /// // Simple variable without fallback:
-    /// resolve_env_value("${HOME}") -> "/home/user" (if set) or "" (if not set)
+    /// resolve_env_value("${HOME}", env_vars) -> "/home/user" (if set) or "" (if not set)
+    /// resolve_env_value("$HOME", env_vars) -> "/home/user" (if set) or "" (if not set)
     /// ```
-    fn resolve_env_value(value: &str) -> String {
+    fn resolve_env_value(value: &str, env_vars: &HashMap<String, String>) -> String {
         let mut result = String::new();
         let mut chars = value.chars().peekable();
         
         while let Some(ch) = chars.next() {
-            if ch == '$' && chars.peek() == Some(&'{') {
-                // Found ${ - start of environment variable reference
-                chars.next(); // Skip '{'
-                
-                let mut var_name = String::new();
-                let mut fallback = None;
-                let mut in_fallback = false;
-                
-                while let Some(ch) = chars.next() {
-                    match ch {
-                        '}' if !in_fallback => {
-                            // End of variable reference
-                            break;
-                        }
-                        ':' if !in_fallback && chars.peek() == Some(&'-') => {
-                            // Found :- start of fallback
-                            chars.next(); // Skip '-'
-                            in_fallback = true;
-                        }
-                        '}' if in_fallback => {
-                            // End of fallback
-                            break;
-                        }
-                        _ if in_fallback => {
-                            fallback.get_or_insert_with(String::new).push(ch);
-                        }
-                        _ => {
-                            var_name.push(ch);
+            if ch == '$' {
+                if chars.peek() == Some(&'{') {
+                    // Found ${ - start of environment variable reference with braces
+                    chars.next(); // Skip '{'
+                    
+                    let mut var_name = String::new();
+                    let mut fallback = None;
+                    let mut in_fallback = false;
+                    
+                    while let Some(ch) = chars.next() {
+                        match ch {
+                            '}' if !in_fallback => {
+                                // End of variable reference
+                                break;
+                            }
+                            ':' if !in_fallback && chars.peek() == Some(&'-') => {
+                                // Found :- start of fallback
+                                chars.next(); // Skip '-'
+                                in_fallback = true;
+                            }
+                            '}' if in_fallback => {
+                                // End of fallback
+                                break;
+                            }
+                            _ if in_fallback => {
+                                fallback.get_or_insert_with(String::new).push(ch);
+                            }
+                            _ => {
+                                var_name.push(ch);
+                            }
                         }
                     }
-                }
-                
-                // Resolve the variable
-                let resolved = if !var_name.is_empty() {
-                    env::var(&var_name).unwrap_or_else(|_| {
-                        fallback.unwrap_or_default()
-                    })
+                    
+                    // Resolve the variable: first check env_vars, then system environment
+                    let resolved = if !var_name.is_empty() {
+                        env_vars
+                            .get(&var_name)
+                            .cloned()
+                            .or_else(|| env::var(&var_name).ok())
+                            .unwrap_or_else(|| fallback.unwrap_or_default())
+                    } else {
+                        // Invalid syntax, return as-is
+                        format!("${{{}}}", var_name)
+                    };
+                    
+                    result.push_str(&resolved);
                 } else {
-                    // Invalid syntax, return as-is
-                    format!("${{{}}}", var_name)
-                };
-                
-                result.push_str(&resolved);
+                    // Found $ - start of environment variable reference without braces
+                    // Extract variable name (alphanumeric and underscore only)
+                    let mut var_name = String::new();
+                    while let Some(&ch) = chars.peek() {
+                        if ch.is_alphanumeric() || ch == '_' {
+                            var_name.push(ch);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    // Resolve the variable: first check env_vars, then system environment
+                    if !var_name.is_empty() {
+                        let resolved = env_vars
+                            .get(&var_name)
+                            .cloned()
+                            .or_else(|| env::var(&var_name).ok())
+                            .unwrap_or_default();
+                        result.push_str(&resolved);
+                    } else {
+                        // Just a $ without variable name, keep it as-is
+                        result.push(ch);
+                    }
+                }
             } else {
                 result.push(ch);
             }
