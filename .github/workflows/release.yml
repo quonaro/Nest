@@ -18,11 +18,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux x86_64 glibc
           - os: ubuntu-latest
             arch: x86_64
             target: x86_64-unknown-linux-gnu
             binary_name: nest
             platform_name: linux
+          # Linux x86_64 musl (static)
+          - os: ubuntu-latest
+            arch: x86_64
+            target: x86_64-unknown-linux-musl
+            binary_name: nest
+            platform_name: linux-musl
+          # Linux aarch64 glibc
           - os: ubuntu-latest
             arch: aarch64
             target: aarch64-unknown-linux-gnu
@@ -52,6 +60,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install musl tools (Linux x86_64 static)
+        if: matrix.platform_name == 'linux' && matrix.arch == 'x86_64' && contains(matrix.target, 'musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
       - name: Install cross-compilation tools (Linux aarch64)
         if: matrix.platform_name == 'linux' && matrix.arch == 'aarch64'
@@ -106,22 +120,22 @@ jobs:
           ARCHIVE_NAME="nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz"
           CHECKSUM_NAME="${ARCHIVE_NAME}.sha256"
           WORKING_DIR=$(pwd)
-          
+
           echo "=== Creating archive ==="
           echo "Working directory: ${WORKING_DIR}"
           echo "Binary path: ${BINARY_PATH}"
           echo "Archive name: ${ARCHIVE_NAME}"
           echo "Checksum name: ${CHECKSUM_NAME}"
-          
+
           if [ ! -f "$BINARY_PATH" ]; then
             echo "Error: Binary not found at $BINARY_PATH"
             echo "Checking target directory:"
             ls -la "target/${{ matrix.target }}/release/" || echo "Directory does not exist"
             exit 1
           fi
-          
+
           echo "Binary found, size: $(ls -lh "$BINARY_PATH" | awk '{print $5}')"
-          
+
           # Create archive from binary directory
           cd target/${{ matrix.target }}/release
           ARCHIVE_FULL_PATH="${WORKING_DIR}/${ARCHIVE_NAME}"
@@ -132,16 +146,16 @@ jobs:
             exit 1
           fi
           cd "${WORKING_DIR}"
-          
+
           if [ ! -f "${ARCHIVE_NAME}" ]; then
             echo "Error: Archive ${ARCHIVE_NAME} was not created in ${WORKING_DIR}"
             echo "Current directory contents:"
             ls -la | head -20
             exit 1
           fi
-          
+
           echo "Archive created successfully, size: $(ls -lh "${ARCHIVE_NAME}" | awk '{print $5}')"
-          
+
           # Create checksum
           if command -v sha256sum > /dev/null 2>&1; then
             sha256sum ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
@@ -151,12 +165,12 @@ jobs:
             echo "Error: Neither sha256sum nor shasum found"
             exit 1
           fi
-          
+
           if [ ! -f "${CHECKSUM_NAME}" ]; then
             echo "Error: Checksum ${CHECKSUM_NAME} was not created"
             exit 1
           fi
-          
+
           echo "=== Archive and checksum created successfully ==="
           ls -lh ${ARCHIVE_NAME} ${CHECKSUM_NAME}
           echo "Checksum content:"
@@ -166,33 +180,33 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           $ErrorActionPreference = "Stop"
-          
+
           $BINARY_PATH = "target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
           $ARCHIVE_NAME = "nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip"
           $CHECKSUM_NAME = "${ARCHIVE_NAME}.sha256"
           $WORKING_DIR = Get-Location
-          
+
           Write-Host "Working directory: $WORKING_DIR"
           Write-Host "Binary path: $BINARY_PATH"
           Write-Host "Archive name: $ARCHIVE_NAME"
-          
+
           if (-not (Test-Path $BINARY_PATH)) {
             Write-Error "Error: Binary not found at $BINARY_PATH"
             Write-Host "Current directory contents:"
             Get-ChildItem -Recurse -Filter "nest.exe" | Select-Object FullName
             exit 1
           }
-          
+
           # Get absolute path for archive
           $ARCHIVE_FULL_PATH = Join-Path $WORKING_DIR $ARCHIVE_NAME
           Write-Host "Archive full path: $ARCHIVE_FULL_PATH"
-          
+
           # Change to binary directory
           $BINARY_DIR = Split-Path -Parent (Resolve-Path $BINARY_PATH)
           $BINARY_FILE = Split-Path -Leaf $BINARY_PATH
           Write-Host "Binary directory: $BINARY_DIR"
           Write-Host "Binary file: $BINARY_FILE"
-          
+
           Push-Location $BINARY_DIR
           try {
             # Create archive from binary directory
@@ -207,14 +221,14 @@ jobs:
           } finally {
             Pop-Location
           }
-          
+
           if (-not (Test-Path $ARCHIVE_FULL_PATH)) {
             Write-Error "Error: Archive ${ARCHIVE_NAME} was not created at $ARCHIVE_FULL_PATH"
             exit 1
           }
-          
+
           Write-Host "Archive created successfully"
-          
+
           # Create checksum
           try {
             $HASH = Get-FileHash -Algorithm SHA256 $ARCHIVE_FULL_PATH
@@ -227,7 +241,7 @@ jobs:
             Write-Error "Error creating checksum: $_"
             exit 1
           }
-          
+
           Write-Host "Created archive: ${ARCHIVE_NAME}"
           Write-Host "Created checksum: ${CHECKSUM_NAME}"
           Get-ChildItem ${ARCHIVE_NAME}, ${CHECKSUM_NAME} | Format-Table Name, Length
@@ -238,30 +252,30 @@ jobs:
           set -e
           ARCHIVE="nest-${{ matrix.platform_name }}-${{ matrix.arch }}.tar.gz"
           CHECKSUM="${ARCHIVE}.sha256"
-          
+
           echo "=== Verifying files before upload ==="
           echo "Current directory: $(pwd)"
           echo "Looking for:"
           echo "  Archive: ${ARCHIVE}"
           echo "  Checksum: ${CHECKSUM}"
-          
+
           echo "=== Files in current directory ==="
           ls -la | head -20
-          
+
           if [ ! -f "${ARCHIVE}" ]; then
             echo "Error: Archive ${ARCHIVE} not found in $(pwd)"
             echo "Searching for archive files:"
             find . -name "*.tar.gz" -type f 2>/dev/null || echo "No .tar.gz files found"
             exit 1
           fi
-          
+
           if [ ! -f "${CHECKSUM}" ]; then
             echo "Error: Checksum ${CHECKSUM} not found in $(pwd)"
             echo "Searching for checksum files:"
             find . -name "*.sha256" -type f 2>/dev/null || echo "No .sha256 files found"
             exit 1
           fi
-          
+
           echo "=== Files verified successfully ==="
           ls -lh ${ARCHIVE} ${CHECKSUM}
 
@@ -271,30 +285,30 @@ jobs:
           $ErrorActionPreference = "Stop"
           $ARCHIVE = "nest-${{ matrix.platform_name }}-${{ matrix.arch }}.zip"
           $CHECKSUM = "${ARCHIVE}.sha256"
-          
+
           Write-Host "=== Verifying files before upload ==="
           Write-Host "Current directory: $(Get-Location)"
           Write-Host "Looking for:"
           Write-Host "  Archive: $ARCHIVE"
           Write-Host "  Checksum: $CHECKSUM"
-          
+
           Write-Host "=== Files in current directory ==="
           Get-ChildItem | Select-Object Name, Length | Format-Table
-          
+
           if (-not (Test-Path $ARCHIVE)) {
             Write-Error "Error: Archive $ARCHIVE not found in $(Get-Location)"
             Write-Host "Searching for archive files:"
             Get-ChildItem -Recurse -Filter "*.zip" -ErrorAction SilentlyContinue | Select-Object FullName
             exit 1
           }
-          
+
           if (-not (Test-Path $CHECKSUM)) {
             Write-Error "Error: Checksum $CHECKSUM not found in $(Get-Location)"
             Write-Host "Searching for checksum files:"
             Get-ChildItem -Recurse -Filter "*.sha256" -ErrorAction SilentlyContinue | Select-Object FullName
             exit 1
           }
-          
+
           Write-Host "=== Files verified successfully ==="
           Get-ChildItem $ARCHIVE, $CHECKSUM | Format-Table Name, Length
 
@@ -327,26 +341,26 @@ jobs:
         run: |
           ARCHIVE_NAME="examples.tar.gz"
           CHECKSUM_NAME="${ARCHIVE_NAME}.sha256"
-          
+
           echo "=== Creating examples archive ==="
-          
+
           # Create archive
           tar czf "${ARCHIVE_NAME}" examples/
           if [ $? -ne 0 ]; then
             echo "Error: Failed to create archive"
             exit 1
           fi
-          
+
           echo "Archive created successfully, size: $(ls -lh "${ARCHIVE_NAME}" | awk '{print $5}')"
-          
+
           # Create checksum
           sha256sum ${ARCHIVE_NAME} > ${CHECKSUM_NAME}
-          
+
           if [ ! -f "${CHECKSUM_NAME}" ]; then
             echo "Error: Checksum not created"
             exit 1
           fi
-          
+
           echo "=== Archive and checksum created successfully ==="
           ls -lh ${ARCHIVE_NAME} ${CHECKSUM_NAME}
           echo "Checksum content:"
@@ -381,13 +395,13 @@ jobs:
           VERSION=$(grep '^version' Cargo.toml | cut -d '"' -f 2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version from Cargo.toml: $VERSION"
-          
+
           # Verify version is not empty
           if [ -z "$VERSION" ]; then
             echo "Error: Could not extract version from Cargo.toml"
             exit 1
           fi
-          
+
           # Check if tag already exists
           TAG_NAME="v${VERSION}"
           if git rev-parse "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
@@ -417,10 +431,10 @@ jobs:
             echo "This usually means all build jobs failed. Cannot create release."
             exit 1
           fi
-          
+
           echo "=== Artifacts directory contents ==="
           find artifacts -type f -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" | sort || echo "No artifacts found"
-          
+
           echo "=== Artifacts by platform ==="
           for dir in artifacts/*/; do
             if [ -d "$dir" ]; then
@@ -428,7 +442,7 @@ jobs:
               ls -lh "$dir" || echo "  No files in this directory"
             fi
           done
-          
+
           # Check if we have any files at all
           if [ -z "$(find artifacts -type f)" ]; then
             echo "Error: artifacts directory is empty. Cannot create release."
@@ -438,10 +452,10 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release-files
-          
+
           # Copy all binaries archives and checksums to release-files directory
           find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec cp {} release-files/ \;
-          
+
           # Copy examples archive and checksum
           if [ -d "examples-artifact" ]; then
             find examples-artifact -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec cp {} release-files/ \;
@@ -449,22 +463,22 @@ jobs:
           else
             echo "Warning: examples-artifact directory not found"
           fi
-          
+
           echo "=== Release files prepared ==="
           ls -lh release-files/
-          
+
           # Verify we have files
           if [ -z "$(ls -A release-files)" ]; then
             echo "Error: No files prepared for release."
             exit 1
           fi
-          
+
           # Count files
           ARCHIVE_COUNT=$(find release-files -name "*.tar.gz" -o -name "*.zip" | wc -l)
           CHECKSUM_COUNT=$(find release-files -name "*.sha256" | wc -l)
           echo "Archives: $ARCHIVE_COUNT"
           echo "Checksums: $CHECKSUM_COUNT"
-          
+
           if [ "$ARCHIVE_COUNT" -eq 0 ]; then
             echo "Error: No archives found for release."
             exit 1
@@ -504,7 +518,6 @@ jobs:
           generate_release_notes: false
           draft: false
           prerelease: false
-          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -512,4 +525,3 @@ jobs:
         if: always()
         run: |
           rm -rf artifacts/ examples-artifact/ release-files/
-

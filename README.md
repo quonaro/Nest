@@ -13,17 +13,29 @@ Nest is a declarative task runner that replaces brittle `Makefile`s and scattere
 > **Note:** The install scripts are configured for the `quonaro/nest` repository. If you're using a fork, update the `REPO` variable in `install.sh` and `install.ps1`.
 
 The install scripts will:
+
 - Detect your OS and architecture automatically
 - Download the latest release binary
 - Install it to `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
 - Provide instructions if the install directory is not in your PATH
 
 **Linux/macOS:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash
 ```
 
+**Linux x86_64 (static musl binary):**
+
+```bash
+# Static installer (musl, recommended for older/minimal systems)
+curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install-static.sh | bash
+# or legacy-style name
+curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash
+```
+
 **Windows (PowerShell):**
+
 ```powershell
 irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex
 ```
@@ -31,10 +43,24 @@ irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex
 **Manual Installation:**
 
 1. Download the latest release for your platform from [Releases](https://github.com/quonaro/nest/releases)
-2. Extract the binary
+2. Extract the binary:
+   - `nest-linux-x86_64.tar.gz` – Linux x86_64 glibc
+   - `nest-linux-musl-x86_64.tar.gz` – Linux x86_64 static musl (no GLIBC dependency)
 3. Add it to your PATH
 
+**Binary size notes (approximate, may vary by release):**
+
+- Linux x86_64 glibc:
+  - Compressed archive: usually around **2–3 MB**
+  - Unpacked binary: typically **3–5 MB**
+- Linux x86_64 static musl:
+  - Compressed archive: usually around **3–5 MB**
+  - Unpacked binary: typically **6–9 MB**
+
+Static musl builds are larger but are more portable (no GLIBC version dependency, work better on older/minimal distributions).
+
 **From Source:**
+
 ```bash
 git clone https://github.com/quonaro/nest.git
 cd nest
@@ -47,11 +73,13 @@ sudo cp target/release/nest /usr/local/bin/
 Nest CLI automatically generates and installs shell completion for all supported shells (bash, zsh, fish, PowerShell, elvish). Completion is automatically set up when you run any `nest` command.
 
 **Automatic Installation:**
+
 - Completion scripts are generated automatically when your nestfile changes
 - Installation happens automatically in your shell's configuration file
 - Works for bash, zsh, fish, PowerShell, and elvish
 
 **Manual Installation:**
+
 ```bash
 # Generate and install completion for current shell
 nest --complete zsh
@@ -65,11 +93,13 @@ nest --complete fish
 ```
 
 **Completion Script Locations:**
+
 - All completion scripts: `~/.cache/nest/completions/`
 - Hash file (for change detection): `~/.cache/nest/completions/nestfile.hash`
 - Shell configs: Automatically added to `.zshrc`, `.bashrc`, etc.
 
 **Supported Shells:**
+
 - **Bash**: Added to `~/.bashrc` or `~/.bash_profile`
 - **Zsh**: Added to `~/.zshrc`
 - **Fish**: Copied to `~/.config/fish/completions/nest.fish`
@@ -77,6 +107,7 @@ nest --complete fish
 - **Elvish**: Added to `~/.elvish/rc.elv`
 
 After installation, reload your shell configuration:
+
 ```bash
 source ~/.zshrc  # for zsh
 source ~/.bashrc  # for bash
@@ -85,27 +116,31 @@ source ~/.bashrc  # for bash
 
 **Note for older Linux distributions (e.g., Debian 12, Ubuntu 20.04):**
 
-If you encounter a GLIBC version error (e.g., `GLIBC_2.39 not found`), the pre-built binaries may be incompatible with your system. In this case, compile from source:
+Linux x86_64 релизные бинарники теперь собираются как **статически слинкованные (musl)**, поэтому ошибка вроде `GLIBC_2.39 not found` при установке через `install.sh` или из GitHub Releases не должна возникать.
+Если вы хотите собрать такой же статический бинарник локально:
 
 1. Install Rust (if not already installed):
+
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    source $HOME/.cargo/env
    ```
 
 2. Install build dependencies:
+
    ```bash
    # Debian/Ubuntu
    sudo apt-get update
-   sudo apt-get install -y build-essential pkg-config libssl-dev
+   sudo apt-get install -y build-essential pkg-config libssl-dev musl-tools
    ```
 
-3. Clone and build:
+3. Add musl target and build static binary:
    ```bash
    git clone https://github.com/quonaro/nest.git
    cd nest
-   cargo build --release
-   cp target/release/nest ~/.local/bin/
+   rustup target add x86_64-unknown-linux-musl
+   cargo build --release --target x86_64-unknown-linux-musl
+   cp target/x86_64-unknown-linux-musl/release/nest ~/.local/bin/
    ```
 
 ### Usage
@@ -113,6 +148,7 @@ If you encounter a GLIBC version error (e.g., `GLIBC_2.39 not found`), the pre-b
 1. Create a `Nestfile` in your project root (see `examples/` folder for comprehensive examples)
 
 2. Run commands:
+
 ```bash
 nest <command>
 ```
@@ -122,7 +158,9 @@ nest <command>
 Nest has several hidden commands that don't appear in `nest --help` but are available for advanced usage:
 
 #### `--version` / `-V`
+
 Print version information:
+
 ```bash
 nest --version
 # or
@@ -130,14 +168,18 @@ nest -V
 ```
 
 #### `--show <format>`
+
 Display commands in different formats. Requires a Nestfile to be present:
+
 ```bash
 nest --show json    # Output commands as JSON
 nest --show ast     # Output commands as Abstract Syntax Tree
 ```
 
 #### `--complete <shell>`
+
 Generate and install shell completion. Supports: `bash`, `zsh`, `fish`, `powershell`, `elvish`:
+
 ```bash
 nest --complete zsh        # Generate and install for zsh
 nest --complete zsh -V      # Show completion script content (verbose)
@@ -145,6 +187,7 @@ nest --complete bash        # Generate and install for bash
 ```
 
 This command:
+
 - Automatically detects your current shell
 - Generates completion scripts for all supported shells
 - Installs completion in your shell's configuration file
@@ -154,12 +197,15 @@ This command:
 Use `-V` or `--verbose` flag to view the generated completion script content instead of installing it.
 
 #### `--example`
+
 Download the examples folder from GitHub:
+
 ```bash
 nest --example
 ```
 
 This command:
+
 - Prompts for confirmation before downloading
 - Downloads the entire `examples/` folder from the official repository
 - Includes comprehensive examples with `@include` directives, `.env` file, and documentation
@@ -167,13 +213,16 @@ This command:
 - Requires `git`, `curl`, or `wget` to be available on your system
 
 #### `--config` / `-c <path>`
+
 Specify a custom path to the configuration file:
+
 ```bash
 nest --config /path/to/nestfile build
 nest -c ./custom/nestfile deploy v1.0.0
 ```
 
 This flag:
+
 - Allows you to use a Nestfile from any location
 - Works with any command
 - Useful when working with multiple projects or custom file locations
@@ -182,12 +231,15 @@ This flag:
 **Note:** When Nest cannot find a configuration file automatically, it will suggest using `--config` to specify the path manually.
 
 #### `update`
+
 Update Nest CLI to the latest version:
+
 ```bash
 nest update
 ```
 
 This command:
+
 - Automatically detects your OS and architecture
 - Downloads the latest release from GitHub
 - Replaces the binary in `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
@@ -199,14 +251,18 @@ This command:
 ### Global Flags
 
 #### `--dry-run` / `-n`
+
 Show what would be executed without actually running the commands:
+
 ```bash
 nest build --dry-run
 nest deploy v1.0.0 -n
 ```
 
 #### `--verbose` / `-v`
+
 Show detailed output including environment variables and working directory:
+
 ```bash
 nest build --verbose
 nest deploy v1.0.0 -v
@@ -241,12 +297,14 @@ build(target: str = "x86_64", release: bool = false):
 ```
 
 **Parameter Types:**
+
 - `str` - String value
 - `bool` - Boolean flag (true/false)
 - `num` - Numeric value
 - `arr` - Array of strings
 
 **Parameter Features:**
+
 - **Positional arguments**: `name: str` - passed without `--` prefix
 - **Named arguments**: `!name|n: str` - use `!` prefix to make it named (uses `--name` or `-n`)
 - Required parameters: `name: str` (no default value)
@@ -256,17 +314,20 @@ build(target: str = "x86_64", release: bool = false):
 **Usage Examples:**
 
 **Positional Arguments:**
+
 ```nest
 greet(name: str, message: str):
     > desc: Greet someone with a message
     > script: echo "Hello {{name}}, {{message}}"
 ```
+
 ```bash
 nest greet "Alice" "welcome!"
 # Output: Hello Alice, welcome!
 ```
 
 **Named Arguments (with `!` prefix):**
+
 ```nest
 deploy(version: str, !env|e: str = "production", !force|f: bool = false):
     > desc: Deploy application
@@ -279,6 +340,7 @@ deploy(version: str, !env|e: str = "production", !force|f: bool = false):
             ./deploy.sh --env {{env}} {{version}}
         fi
 ```
+
 ```bash
 nest deploy "v1.2.3" --env staging
 nest deploy "v1.2.3" -e staging --force true
@@ -286,6 +348,7 @@ nest deploy "v1.2.3"  # env defaults to "production"
 ```
 
 **Mixed: Positional + Named:**
+
 ```nest
 copy(source: str, !destination|d: str, !overwrite|o: bool = false):
     > desc: Copy file with optional overwrite
@@ -297,12 +360,14 @@ copy(source: str, !destination|d: str, !overwrite|o: bool = false):
             cp "{{source}}" "{{destination}}"
         fi
 ```
+
 ```bash
 nest copy "file.txt" --destination "backup.txt"
 nest copy "file.txt" -d "backup.txt" -o true
 ```
 
 **Boolean Flags:**
+
 ```bash
 nest build --target aarch64-apple-darwin --release true
 nest build --target x86_64  # release defaults to false
@@ -356,6 +421,7 @@ dev:
 ```
 
 **Usage:**
+
 ```bash
 nest dev                    # Runs default subcommand
 nest dev --hot true         # Pass named argument to default
@@ -394,10 +460,12 @@ build():
 ```
 
 **Syntax:**
+
 - `${VAR:-default}` - Use system variable `VAR` if exists, otherwise use `default`
 - `${VAR}` - Use system variable `VAR` if exists, otherwise empty string
 
 **Priority:**
+
 1. System environment variables (if set)
 2. Variables from `.env` files
 3. Direct assignments in `> env:` directives
@@ -432,6 +500,7 @@ build():
 ```
 
 **Usage in scripts:**
+
 ```nest
 build():
     > script: |
@@ -441,6 +510,7 @@ build():
 ```
 
 **Priority order:**
+
 1. Parameters (from command arguments) - highest priority
 2. Local variables (from command) - override global variables
 3. Local constants (from command) - override global constants
@@ -449,6 +519,7 @@ build():
 6. Special variables ({{now}}, {{user}}) - lowest priority
 
 **Scope:**
+
 - Global variables/constants: Available in all commands
 - Local variables/constants: Only available in the command where they're defined
 - Local variables/constants override global ones for that specific command
@@ -487,6 +558,7 @@ show_global_again():
 ```
 
 **Key Points:**
+
 - Local variables/constants defined inside a command override global ones **only for that command**
 - Other commands without local definitions still use global variables/constants
 - Local variables can be redefined multiple times (last definition wins)
@@ -504,6 +576,7 @@ Use `{{variable}}` syntax in scripts:
   - `{{user}}` - Current user (from `$USER` environment variable)
 
 **Example:**
+
 ```nest
 deploy(version: str):
     > desc: Deploy application
@@ -568,6 +641,7 @@ deploy():
 ```
 
 **Dependency Resolution:**
+
 - Dependencies are executed **before** the main command
 - Multiple dependencies can be specified (comma-separated)
 - Dependencies are executed in the order specified
@@ -575,10 +649,12 @@ deploy():
 - Circular dependencies are detected and will cause an error
 
 **Dependency Paths:**
+
 - **Relative**: `clean` - relative to current command's parent
 - **Absolute**: `dev:build` - absolute path from root (use `:` separator)
 
 **Example:**
+
 ```bash
 nest deploy
 # Executes: clean -> build -> test -> deploy
@@ -586,6 +662,7 @@ nest deploy
 
 **Dependencies with Arguments:**
 You can pass arguments to dependency commands:
+
 ```nest
 build_custom(!target|t: str = "x86_64", !release|r: bool = false):
     > desc: Build with target and release options
@@ -599,6 +676,7 @@ deploy_with_args():
 ```
 
 **Circular Dependency Detection:**
+
 ```nest
 a():
     > depends: b
@@ -621,6 +699,7 @@ Functions allow you to create reusable scripts that can be called from commands 
 - Define local variables
 
 **Syntax:**
+
 ```nest
 @function function_name(param1: str, param2: bool):
     @var LOCAL_VAR = "value"
@@ -629,6 +708,7 @@ Functions allow you to create reusable scripts that can be called from commands 
 ```
 
 **Example:**
+
 ```nest
 # Global variables
 @var APP_NAME = "myapp"
@@ -654,6 +734,7 @@ build():
 ```
 
 **Key Points:**
+
 - Functions are defined at the global level (cannot be defined inside commands)
 - Functions can have parameters (same syntax as command parameters)
 - Functions can define local variables using `@var` inside the function body
@@ -662,6 +743,7 @@ build():
 - Functions are called using the same syntax as commands: `function_name(arg="value")`
 
 **Function Parameters:**
+
 ```nest
 @function deploy(version: str, force: bool):
     echo "Deploying version {{version}}"
@@ -671,6 +753,7 @@ build():
 ```
 
 **Calling Functions:**
+
 ```nest
 deploy():
     > script: |
@@ -680,6 +763,7 @@ deploy():
 ```
 
 **Functions vs Commands:**
+
 - Functions are reusable scripts that can be called from anywhere
 - Commands are CLI entry points that can be executed directly via `nest <command>`
 - Functions cannot be executed directly - they must be called from commands or other functions
@@ -709,12 +793,14 @@ deploy():
 ```
 
 **Execution Order:**
+
 1. `> before:` - Executed first (always)
 2. `> script:` - Main script execution
 3. If successful: `> after:` - Executed after success
 4. If failed: `> fallback:` - Executed instead of error output
 
 **Key Points:**
+
 - All script directives (`before`, `after`, `fallback`, `script`) support multiline syntax with `|`
 - `before` always executes, even if main script fails
 - `after` only executes if main script succeeds
@@ -722,6 +808,7 @@ deploy():
 - All scripts share the same environment variables and working directory
 
 **Example with Error Handling:**
+
 ```nest
 build():
     > before: echo "Starting build..."
@@ -753,11 +840,13 @@ Include directives allow you to split your configuration into multiple files for
 ```
 
 **Types of includes:**
+
 1. **Specific file**: `@include docker.nest` - Includes commands from a specific file
 2. **Pattern with wildcard**: `@include modules/*.nest` - Includes all files matching the pattern
 3. **Directory**: `@include commands/` - Includes all configuration files (nestfile, Nestfile, nest, Nest) from the directory
 
 **Key Points:**
+
 - Include directives are processed before parsing
 - Included commands are merged into the main configuration
 - Circular includes are detected and will cause an error
@@ -765,6 +854,7 @@ Include directives allow you to split your configuration into multiple files for
 - Relative paths are resolved relative to the file containing the `@include` directive
 
 **Example:**
+
 ```nest
 # Main nestfile
 @var APP_NAME = "myapp"
@@ -799,16 +889,19 @@ deploy(env: str):
 ```
 
 **Supported Operators:**
+
 - Comparison: `==`, `!=`, `<=`, `>=`, `<`, `>`
 - Logical: `&&` (AND), `||` (OR), `!` (NOT)
 
 **Condition Types:**
+
 - String comparisons: `param == "value"`
 - Numeric comparisons: `count >= 10`
 - Boolean checks: `debug == "true"`
 - Complex conditions: `env == "prod" && force == "true"`
 
 **Example with Logical Operators:**
+
 ```nest
 build(!target|t: str = "x86_64", !release|r: bool = false):
     > desc: Build with conditional logic
@@ -827,6 +920,7 @@ build(!target|t: str = "x86_64", !release|r: bool = false):
 ```
 
 **Key Points:**
+
 - First matching condition executes
 - `if` can be used multiple times (acts as separate conditions)
 - `elif` and `else` are evaluated only if previous conditions didn't match
@@ -852,6 +946,7 @@ register(email: str, username: str):
 ```
 
 **Validation Features:**
+
 - Multiple `> validate:` directives can be used for different parameters
 - Case-insensitive regex: use `/pattern/i` flag
 - Validation runs before command execution
@@ -876,10 +971,12 @@ build():
 ```
 
 **Log Formats:**
+
 - **JSON**: `> logs:json <path>` - Structured JSON format with timestamp, command, args, success status, and errors
 - **Text**: `> logs:txt <path>` - Human-readable text format
 
 **Log Entry Contents:**
+
 - Timestamp (RFC3339 format)
 - Command name and path
 - Arguments passed to the command
@@ -888,6 +985,7 @@ build():
 
 **Template Variables in Paths:**
 You can use template variables in log file paths:
+
 ```nest
 deploy_logged(env: str):
     > desc: Deploy with logging using template variables
@@ -897,6 +995,7 @@ deploy_logged(env: str):
 ```
 
 **Key Points:**
+
 - Log directories are created automatically if they don't exist
 - Logs are appended to existing files
 - Template variables are processed in log paths
@@ -905,6 +1004,7 @@ deploy_logged(env: str):
 ### Complete Example
 
 See `examples/` folder for comprehensive working examples including:
+
 - Multiple command types
 - Nested command groups
 - Parameter types (str, bool, num, arr)
@@ -924,6 +1024,7 @@ See `examples/` folder for comprehensive working examples including:
 
 ✅ **Functions** - Reusable scripts with parameters and local variables
 ✅ **Command Structure**
+
 - Top-level commands
 - Nested subcommands
 - Default subcommands for groups
@@ -934,6 +1035,7 @@ See `examples/` folder for comprehensive working examples including:
 - Default parameter values
 
 ✅ **Directives**
+
 - `> desc:` - Command descriptions
 - `> cwd:` - Working directory
 - `> env:` - Environment variables (direct assignment and .env files)
@@ -948,11 +1050,13 @@ See `examples/` folder for comprehensive working examples including:
 - `> privileged` - Require privileged access
 
 ✅ **Include Directives**
+
 - `@include <file>` - Include specific file
 - `@include <pattern>` - Include files matching wildcard pattern
 - `@include <directory>/` - Include all config files from directory
 
 ✅ **Variables and Constants**
+
 - Global variables (`@var`) - Can be redefined (last definition wins)
 - Global constants (`@const`) - Cannot be redefined
 - Local variables (`@var` inside commands) - Override global for that command
@@ -960,6 +1064,7 @@ See `examples/` folder for comprehensive working examples including:
 - Usage in templates: `{{VAR}}` or `{{CONST}}`
 
 ✅ **Template Processing**
+
 - Parameter substitution: `{{param}}`
 - Variable substitution: `{{VAR}}`
 - Constant substitution: `{{CONST}}`
@@ -967,6 +1072,7 @@ See `examples/` folder for comprehensive working examples including:
 - Template processing in scripts
 
 ✅ **CLI Features**
+
 - Dynamic CLI generation from Nestfile
 - Help system
 - JSON output (`--show json`)
@@ -977,6 +1083,7 @@ See `examples/` folder for comprehensive working examples including:
 - Verbose output (`--verbose` / `-v`)
 
 ✅ **Execution**
+
 - Script execution with environment variables
 - Working directory support
 - Environment variable loading from .env files
@@ -996,6 +1103,7 @@ Future features that may be added based on user needs and feedback.
 This is an **MVP (Minimum Viable Product)** version. I actively use this tool in my projects and will continue to maintain and improve it. This project also serves as my learning journey in Rust programming.
 
 **Current Focus:**
+
 - Stability and bug fixes
 - Learning Rust best practices
 - Adding features as needed for my use cases
@@ -1007,6 +1115,7 @@ This is an **MVP (Minimum Viable Product)** version. I actively use this tool in
 This project uses GitHub Actions for automated releases. To enable automatic builds and releases:
 
 1. **Create a Personal Access Token (PAT):**
+
    - Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
    - Click "Generate new token (classic)"
    - Give it a descriptive name (e.g., "Nest Release Token")
@@ -1015,6 +1124,7 @@ This project uses GitHub Actions for automated releases. To enable automatic bui
    - **Copy the token immediately** (you won't be able to see it again)
 
 2. **Add Token to Repository Secrets:**
+
    - Go to your repository → Settings → Secrets and variables → Actions
    - Click "New repository secret"
    - Name: `NEST_TOKEN`
@@ -1034,6 +1144,7 @@ This project uses GitHub Actions for automated releases. To enable automatic bui
 This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)**.
 
 This means:
+
 - ✅ You can use, modify, and distribute this software
 - ✅ You must give appropriate credit
 - ❌ **You cannot use this software for commercial purposes** (selling, commercial products, etc.)

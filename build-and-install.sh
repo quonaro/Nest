@@ -48,6 +48,9 @@ BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 SKIP_INCREMENT=false
 CUSTOM_VERSION=""
 CUSTOM_INSTALL_DIR=""
+STATIC_BUILD=false
+
+OS_NAME="$(uname -s)"
 
 # Function to show usage
 show_usage() {
@@ -87,6 +90,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-increment)
             SKIP_INCREMENT=true
+            shift
+            ;;
+        --static)
+            STATIC_BUILD=true
             shift
             ;;
         --help|-h)
@@ -172,10 +179,34 @@ else
     echo "   ${ARROW} Current version: ${BOLD}${CURRENT_VERSION}${RESET}"
 fi
 
+# Configure build type (static or default)
+BUILD_TARGET_DIR="target/release"
+BUILD_CMD="cargo build --release"
+
+if [ "$STATIC_BUILD" = true ]; then
+    if [ "$OS_NAME" != "Linux" ]; then
+        echo "${RED}Error: --static is only supported on Linux hosts${RESET}" >&2
+        exit 1
+    fi
+    TARGET_TRIPLE="x86_64-unknown-linux-musl"
+    BUILD_TARGET_DIR="target/${TARGET_TRIPLE}/release"
+    echo ""
+    echo "${INFO} ${BOLD}Enabling static Linux build (musl)...${RESET}"
+    echo "   ${ARROW} Target: ${BOLD}${TARGET_TRIPLE}${RESET}"
+    if command -v rustup > /dev/null 2>&1; then
+        echo "   ${ARROW} Ensuring Rust target ${BOLD}${TARGET_TRIPLE}${RESET} is installed..."
+        rustup target add "${TARGET_TRIPLE}" >/dev/null 2>&1 || true
+    else
+        echo "   ${YELLOW}Warning: rustup not found, assuming musl target is already installed${RESET}"
+    fi
+    BUILD_CMD="cargo build --release --target ${TARGET_TRIPLE}"
+fi
+
 # Build project
 echo ""
 echo "${INFO} ${BOLD}Building project...${RESET}"
-if cargo build --release; then
+echo "   ${ARROW} Command: ${BOLD}${BUILD_CMD}${RESET}"
+if eval "${BUILD_CMD}"; then
     echo "   ${CHECK} Build successful"
 else
     echo "   ${RED}✗ Build failed${RESET}" >&2
@@ -191,7 +222,7 @@ echo "   ${CHECK} Install directory ready: ${BOLD}${INSTALL_DIR}${RESET}"
 # Install binary
 echo ""
 echo "${INFO} ${BOLD}Installing binary...${RESET}"
-RELEASE_BINARY="target/release/${BINARY_NAME}"
+RELEASE_BINARY="${BUILD_TARGET_DIR}/${BINARY_NAME}"
 if [ ! -f "$RELEASE_BINARY" ]; then
     echo "   ${RED}✗ Binary not found at ${RELEASE_BINARY}${RESET}" >&2
     exit 1
