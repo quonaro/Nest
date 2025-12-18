@@ -3,7 +3,7 @@
 //! This module validates that command-line arguments match their declared types
 //! before execution, providing clear error messages when types don't match.
 
-use super::ast::Parameter;
+use super::ast::{ParamKind, Parameter};
 use std::collections::HashMap;
 
 /// Validates that a string value matches the expected parameter type.
@@ -48,10 +48,18 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
         
         "arr" => {
             // Arrays are passed as comma-separated strings
-            // Empty arrays are valid if they match the default
+            // Empty arrays are:
+            // - always valid for wildcard parameters (e.g., `*` in signatures),
+            //   because an empty wildcard simply means "no extra arguments"
+            // - valid for normal parameters only when their default is an empty array (`[]`)
             let trimmed = value.trim();
             if trimmed.is_empty() {
-                // Check if empty array is allowed (has default = [])
+                // Allow empty value for wildcard parameters (used as splats like `*` or `*name`)
+                if matches!(param.kind, ParamKind::Wildcard { .. }) {
+                    return Ok(String::new());
+                }
+
+                // For non-wildcard params, empty is only allowed if default is explicitly []
                 if let Some(default) = &param.default {
                     if let super::ast::Value::Array(arr) = default {
                         if arr.is_empty() {
@@ -60,13 +68,14 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
                         }
                     }
                 }
+
                 // Empty array without default is invalid
                 return Err(format!(
                     "Empty array value for parameter '{}'. Provide comma-separated values (e.g., 'a,b,c').",
                     param.name
                 ));
             }
-            
+
             // Check if it looks like a valid array (comma-separated or single value)
             // We'll accept any non-empty string as it will be split later
             Ok(value.to_string())
