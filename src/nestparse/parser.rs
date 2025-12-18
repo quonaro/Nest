@@ -177,7 +177,7 @@ impl Parser {
         }
 
         // Parse function signature: name(params): (may be multiline)
-        let (name, parameters, has_wildcard) = self.parse_function_signature_multiline(indent)?;
+        let (name, parameters) = self.parse_function_signature_multiline(indent)?;
 
         // current_index already incremented in parse_function_signature_multiline
 
@@ -257,6 +257,8 @@ impl Parser {
             }
         }
 
+        let has_wildcard = parameters.iter().any(|p| matches!(p.kind, super::ast::ParamKind::Wildcard { .. }));
+
         Ok(super::ast::Command {
             name,
             parameters,
@@ -272,7 +274,7 @@ impl Parser {
     fn parse_function_signature_multiline(
         &mut self,
         base_indent: u8,
-    ) -> Result<(String, Vec<Parameter>, bool), ParseError> {
+    ) -> Result<(String, Vec<Parameter>), ParseError> {
         if self.current_index >= self.lines.len() {
             return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
         }
@@ -290,19 +292,13 @@ impl Parser {
                 let params_str = &trimmed[open_paren + 1..close_paren];
                 let trimmed_params = params_str.trim();
 
-                // Check for wildcard parameter
-                if trimmed_params == "*" {
-                    self.current_index += 1;
-                    return Ok((name, Vec::new(), true));
-                }
-
                 let parameters = if trimmed_params.is_empty() {
                     Vec::new()
                 } else {
                     self.parse_parameters(params_str, self.current_line_number())?
                 };
                 self.current_index += 1;
-                Ok((name, parameters, false))
+                Ok((name, parameters))
             } else {
                 // Multiline signature - collect lines until we find closing parenthesis
                 let mut params_lines = Vec::new();
@@ -356,18 +352,13 @@ impl Parser {
                 let params_str = params_lines.join(" ");
                 let trimmed_params = params_str.trim();
 
-                // Check for wildcard parameter
-                if trimmed_params == "*" {
-                    return Ok((name, Vec::new(), true));
-                }
-
                 let parameters = if trimmed_params.is_empty() {
                     Vec::new()
                 } else {
                     self.parse_parameters(&params_str, self.current_line_number())?
                 };
 
-                Ok((name, parameters, false))
+                Ok((name, parameters))
             }
         } else {
             // No parameters - check if it ends with ':'
@@ -377,7 +368,7 @@ impl Parser {
                 trimmed.to_string()
             };
             self.current_index += 1;
-            Ok((name, Vec::new(), false))
+            Ok((name, Vec::new()))
         }
     }
 
@@ -386,6 +377,8 @@ impl Parser {
         params_str: &str,
         line_number: usize,
     ) -> Result<Vec<Parameter>, ParseError> {
+        use super::ast::ParamKind;
+
         let mut parameters = Vec::new();
         let mut current_param = String::new();
         let mut paren_depth = 0;
@@ -418,27 +411,34 @@ impl Parser {
             param_strings.push(current_param.trim().to_string());
         }
 
-        // Check if * is present and validate it's the only parameter
-        let has_wildcard = param_strings.iter().any(|p| p.trim() == "*");
-        if has_wildcard {
-            if param_strings.len() > 1 {
+        // Parse all parameters, including wildcard specifications
+        for param_str in param_strings {
+            let trimmed = param_str.trim();
+
+            // Wildcard parameter syntaxes:
+            // - "*"
+            // - "*name"
+            // - "*[N]"
+            // - "*name[N]"
+            if trimmed.starts_with('*') {
+                let wildcard_param = self.parse_wildcard_parameter(trimmed, line_number)?;
+                parameters.push(wildcard_param);
+            } else {
+                parameters.push(self.parse_parameter(trimmed, line_number)?);
+            }
+        }
+
+        // Validate that there are no two wildcard parameters adjacent to each other
+        for window in parameters.windows(2) {
+            if matches!(window[0].kind, ParamKind::Wildcard { .. })
+                && matches!(window[1].kind, ParamKind::Wildcard { .. })
+            {
                 return Err(ParseError::InvalidSyntax(
-                    "Wildcard parameter (*) cannot be used together with other parameters"
+                    "Wildcard parameters cannot be adjacent (e.g., \"*, *\" or \"*a, *b\")"
                         .to_string(),
                     line_number,
                 ));
             }
-            // If * is the only parameter, it should have been handled earlier in parse_command_signature
-            // If we reach here with only *, something went wrong, but we'll return a clear error
-            return Err(ParseError::InvalidSyntax(
-                "Invalid parameter: *".to_string(),
-                line_number,
-            ));
-        }
-
-        // Parse all parameters normally
-        for param_str in param_strings {
-            parameters.push(self.parse_parameter(&param_str, line_number)?);
         }
 
         Ok(parameters)
@@ -455,7 +455,10 @@ impl Parser {
 
         if parts.len() < 2 {
             return Err(ParseError::InvalidSyntax(
-                format!("Invalid parameter: {}", param_str),
+                format!(
+                    "Invalid parameter syntax '{}'. Missing type annotation. Expected format: [!]name|alias: type [= default]",
+                    param_str
+                ),
                 line_number,
             ));
         }
@@ -497,6 +500,113 @@ impl Parser {
             param_type,
             default,
             is_named,
+            kind: super::ast::ParamKind::Normal,
+        })
+    }
+
+    fn parse_wildcard_parameter(
+        &self,
+        param_str: &str,
+        line_number: usize,
+    ) -> Result<Parameter, ParseError> {
+        use super::ast::{ParamKind, Parameter};
+
+        let s = param_str.trim();
+
+        // Wildcard parameters cannot specify type or default value
+        if s.contains(':') || s.contains('=') {
+            return Err(ParseError::InvalidSyntax(
+                format!(
+                    "Wildcard parameter '{}' cannot have a type annotation or default value",
+                    param_str
+                ),
+                line_number,
+            ));
+        }
+
+        // Expect leading '*'
+        if !s.starts_with('*') {
+            return Err(ParseError::InvalidSyntax(
+                format!("Invalid wildcard parameter syntax: {}", param_str),
+                line_number,
+            ));
+        }
+
+        let rest = &s[1..];
+        let (name_part, count_part) = if let Some(bracket_pos) = rest.find('[') {
+            // Expect closing ']'
+            if !rest.ends_with(']') {
+                return Err(ParseError::InvalidSyntax(
+                    format!(
+                        "Wildcard parameter '{}' has an opening '[' without matching ']'",
+                        param_str
+                    ),
+                    line_number,
+                ));
+            }
+            let name_part = &rest[..bracket_pos];
+            let count_str = &rest[bracket_pos + 1..rest.len() - 1];
+            (name_part.trim(), Some(count_str.trim()))
+        } else {
+            (rest.trim(), None)
+        };
+
+        let name_opt = if name_part.is_empty() {
+            None
+        } else {
+            Some(name_part.to_string())
+        };
+
+        let count_opt = if let Some(count_str) = count_part {
+            if count_str.is_empty() {
+                return Err(ParseError::InvalidSyntax(
+                    format!(
+                        "Wildcard parameter '{}' has empty size specification []",
+                        param_str
+                    ),
+                    line_number,
+                ));
+            }
+            let n: usize = count_str.parse().map_err(|_| {
+                ParseError::InvalidSyntax(
+                    format!(
+                        "Wildcard parameter '{}' has invalid size specification '[{}]'",
+                        param_str, count_str
+                    ),
+                    line_number,
+                )
+            })?;
+            if n == 0 {
+                return Err(ParseError::InvalidSyntax(
+                    "Wildcard parameter size must be at least 1".to_string(),
+                    line_number,
+                ));
+            }
+            Some(n)
+        } else {
+            None
+        };
+
+        // For wildcard parameters, we treat them as positional array-like parameters.
+        // Use "arr" as an internal param_type to keep compatibility with type validation.
+        // Public name (used in templates and argument map):
+        // - anonymous `*`   -> "*"
+        // - named `*name`   -> "*name"
+        let public_name = match &name_opt {
+            Some(n) => format!("*{}", n),
+            None => "*".to_string(),
+        };
+
+        Ok(Parameter {
+            name: public_name,
+            alias: None,
+            param_type: "arr".to_string(),
+            default: None,
+            is_named: false,
+            kind: ParamKind::Wildcard {
+                name: name_opt,
+                count: count_opt,
+            },
         })
     }
 

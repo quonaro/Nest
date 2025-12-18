@@ -20,6 +20,33 @@ pub enum Value {
     Array(Vec<String>),
 }
 
+/// Represents the kind of a parameter in a command or function signature.
+///
+/// Parameters can be:
+/// - Normal: regular named or positional parameters with a concrete type
+/// - Wildcard: segments of positional arguments that can capture multiple values
+///   and optionally have a fixed size constraint.
+#[derive(Debug, Clone)]
+pub enum ParamKind {
+    /// A regular parameter (current default behaviour).
+    Normal,
+    /// A wildcard parameter that captures one or more positional arguments.
+    ///
+    /// Examples in signature syntax:
+    /// - `*`           -> name: None,  count: None
+    /// - `*name`       -> name: Some("name"), count: None
+    /// - `*[2]`        -> name: None,  count: Some(2)
+    /// - `*name[1]`    -> name: Some("name"), count: Some(1)
+    Wildcard {
+        /// Optional explicit name of the wildcard segment.
+        /// When `None`, this is an anonymous wildcard (`*`).
+        name: Option<String>,
+        /// Optional fixed size of this wildcard segment.
+        /// When `Some(n)`, the wildcard must capture exactly `n` arguments.
+        count: Option<usize>,
+    },
+}
+
 /// Represents a command parameter with its type, default value, and optional alias.
 ///
 /// Parameters can be required or optional (if a default value is provided).
@@ -37,6 +64,8 @@ pub struct Parameter {
     pub default: Option<Value>,
     /// Whether this parameter is named (uses --name) or positional
     pub is_named: bool,
+    /// The kind of this parameter (normal or wildcard).
+    pub kind: ParamKind,
 }
 
 /// Represents a dependency with optional arguments.
@@ -156,7 +185,7 @@ pub struct Function {
 /// - Parameters (arguments and flags)
 /// - Directives (description, working directory, environment variables, script)
 /// - Child commands (nested subcommands)
-/// - Wildcard parameter (*) that accepts all remaining arguments
+/// - Wildcard parameters (`*`, `*name`, `*name[N]`, `*[N]`) that accept one or more arguments
 /// - Local variables and constants (scoped to this command)
 ///
 /// Commands form a tree structure where parent commands can have child commands.
@@ -170,7 +199,7 @@ pub struct Command {
     pub directives: Vec<Directive>,
     /// Child commands (subcommands)
     pub children: Vec<Command>,
-    /// Whether this command accepts all remaining arguments via wildcard (*)
+    /// Whether this command contains at least one wildcard parameter (*)
     pub has_wildcard: bool,
     /// Local variables for this command (can override global variables)
     pub local_variables: Vec<Variable>,
@@ -183,20 +212,32 @@ pub struct Command {
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)?;
-        if self.has_wildcard {
-            write!(f, "(*)")?;
-        } else if !self.parameters.is_empty() {
+        if !self.parameters.is_empty() {
             let params: Vec<String> = self.parameters.iter().map(|p| {
-                let mut s = if p.is_named { "!".to_string() } else { String::new() };
-                s.push_str(&p.name);
-                if let Some(alias) = &p.alias {
-                    s.push_str(&format!("|{}", alias));
+                match &p.kind {
+                    ParamKind::Normal => {
+                        let mut s = if p.is_named { "!".to_string() } else { String::new() };
+                        s.push_str(&p.name);
+                        if let Some(alias) = &p.alias {
+                            s.push_str(&format!("|{}", alias));
+                        }
+                        s.push_str(&format!(": {}", p.param_type));
+                        if let Some(default) = &p.default {
+                            s.push_str(&format!(" = {:?}", default));
+                        }
+                        s
+                    }
+                    ParamKind::Wildcard { name, count } => {
+                        let mut s = String::from("*");
+                        if let Some(name) = name {
+                            s.push_str(name);
+                        }
+                        if let Some(count) = count {
+                            s.push_str(&format!("[{}]", count));
+                        }
+                        s
+                    }
                 }
-                s.push_str(&format!(": {}", p.param_type));
-                if let Some(default) = &p.default {
-                    s.push_str(&format!(" = {:?}", default));
-                }
-                s
             }).collect();
             write!(f, "({})", params.join(", "))?;
         }

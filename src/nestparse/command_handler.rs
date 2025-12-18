@@ -137,24 +137,19 @@ impl CommandHandler {
         command_path: &[String],
         root_matches: &ArgMatches,
     ) -> Result<(), String> {
-        let args = if command.has_wildcard {
-            // For wildcard commands, extract all remaining arguments
-            ArgumentExtractor::extract_wildcard_args(matches)
-        } else {
-            match ArgumentExtractor::extract_from_matches(
-                matches,
-                &command.parameters,
-                generator,
-                command_path,
-            ) {
-                Ok(args) => args,
-                Err(validation_errors) => {
-                    use super::output::OutputFormatter;
-                    for error in &validation_errors {
-                        OutputFormatter::error(error);
-                    }
-                    return Err("Type validation failed".to_string());
+        let args = match ArgumentExtractor::extract_from_matches(
+            matches,
+            &command.parameters,
+            generator,
+            command_path,
+        ) {
+            Ok(args) => args,
+            Err(validation_errors) => {
+                use super::output::OutputFormatter;
+                for error in &validation_errors {
+                    OutputFormatter::error(error);
                 }
+                return Err("Type validation failed".to_string());
             }
         };
 
@@ -219,18 +214,14 @@ impl CommandHandler {
                 }
 
                 // Extract arguments from parent command
-                let parent_cmd_args = if parent_cmd.has_wildcard {
-                    ArgumentExtractor::extract_wildcard_args(current_matches)
-                } else {
-                    match ArgumentExtractor::extract_from_matches(
-                        current_matches,
-                        &parent_cmd.parameters,
-                        generator,
-                        &current_path,
-                    ) {
-                        Ok(args) => args,
-                        Err(_) => std::collections::HashMap::new(), // Skip if extraction fails
-                    }
+                let parent_cmd_args = match ArgumentExtractor::extract_from_matches(
+                    current_matches,
+                    &parent_cmd.parameters,
+                    generator,
+                    &current_path,
+                ) {
+                    Ok(args) => args,
+                    Err(_) => std::collections::HashMap::new(), // Skip if extraction fails
                 };
 
                 // Merge parent args (later parents override earlier ones)

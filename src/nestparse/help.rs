@@ -47,10 +47,7 @@ impl HelpFormatter {
                     OutputFormatter::help_description(desc)
                 );
             } else {
-                println!(
-                    "  {}",
-                    OutputFormatter::help_command(&command_with_params)
-                );
+                println!("  {}", OutputFormatter::help_command(&command_with_params));
             }
         }
     }

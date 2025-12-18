@@ -225,14 +225,8 @@ impl CliGenerator {
         let mut subcmd = ClapCommand::new(cmd_name).arg_required_else_help(false);
 
         subcmd = Self::add_description(subcmd, &command.directives);
-
-        // If command has wildcard, add trailing var arg and skip regular parameters
-        if command.has_wildcard {
-            subcmd = Self::add_wildcard_arg(subcmd);
-        } else {
-            subcmd = Self::add_parameters(subcmd, &command.parameters, self);
-            subcmd = Self::add_default_args_if_needed(subcmd, command, self);
-        }
+        subcmd = Self::add_parameters(subcmd, &command.parameters, self);
+        subcmd = Self::add_default_args_if_needed(subcmd, command, self);
 
         for child in &command.children {
             subcmd = self.add_command_to_clap(subcmd, child);
@@ -240,19 +234,6 @@ impl CliGenerator {
 
         app = app.subcommand(subcmd);
         app
-    }
-
-    fn add_wildcard_arg(mut subcmd: ClapCommand) -> ClapCommand {
-        // Add a trailing var arg that accepts all remaining arguments
-        // allow_hyphen_values(true) allows arguments starting with -- or -
-        let wildcard_id: &'static str = Box::leak("*".to_string().into_boxed_str());
-        let arg = Arg::new(wildcard_id)
-            .num_args(1..)
-            .trailing_var_arg(true)
-            .allow_hyphen_values(true)
-            .help("All remaining arguments");
-        subcmd = subcmd.arg(arg).allow_missing_positional(true);
-        subcmd
     }
 
     fn add_description(mut subcmd: ClapCommand, directives: &[Directive]) -> ClapCommand {
@@ -267,6 +248,8 @@ impl CliGenerator {
         parameters: &[Parameter],
         generator: &CliGenerator,
     ) -> ClapCommand {
+        use super::ast::ParamKind;
+
         // First, add all named arguments (they don't use indices)
         for param in parameters {
             if param.is_named {
@@ -277,13 +260,64 @@ impl CliGenerator {
             }
         }
 
-        // Then, add all positional arguments with sequential indices
+        // Then, add all positional arguments with sequential indices.
+        // Wildcard parameters are represented as positional arguments that can
+        // accept multiple values.
         let mut positional_index = 1; // Start from 1 (0 is command name)
-        for param in parameters {
-            if !param.is_named {
-                let arg = generator.parameter_to_arg_positional(param, positional_index);
-                subcmd = subcmd.arg(arg);
-                positional_index += 1;
+        let positional_params: Vec<&Parameter> = parameters
+            .iter()
+            .filter(|p| !p.is_named)
+            .collect();
+
+        for (idx, param) in positional_params.iter().enumerate() {
+            match &param.kind {
+                ParamKind::Normal => {
+                    let arg = generator.parameter_to_arg_positional(param, positional_index);
+                    subcmd = subcmd.arg(arg);
+                    positional_index += 1;
+                }
+                ParamKind::Wildcard { name: _, count } => {
+                    let param_name: &'static str =
+                        Box::leak(param.name.clone().into_boxed_str());
+                    let mut arg = Arg::new(param_name).index(positional_index);
+
+                    // Wildcard parameters always accept hyphen-prefixed values.
+                    arg = arg.allow_hyphen_values(true);
+
+                    if let Some(n) = count {
+                        // Fixed-size wildcard: must capture exactly n arguments.
+                        arg = arg
+                            .num_args(*n)
+                            .help(format!(
+                                "Wildcard positional segment '{}' capturing exactly {} argument(s)",
+                                param.name, n
+                            ));
+                    } else {
+                        // Unbounded wildcard: only safe when it's the last positional parameter.
+                        let is_last = idx == positional_params.len() - 1;
+                        if is_last {
+                            arg = arg
+                                .num_args(1..)
+                                .trailing_var_arg(true)
+                                .help(format!(
+                                    "Wildcard positional segment '{}' capturing remaining arguments",
+                                    param.name
+                                ));
+                        } else {
+                            // Fallback: require at least one argument but let clap handle
+                            // distribution. This is intentionally strict to avoid ambiguity.
+                            arg = arg
+                                .num_args(1..)
+                                .help(format!(
+                                    "Wildcard positional segment '{}' capturing one or more arguments",
+                                    param.name
+                                ));
+                        }
+                    }
+
+                    subcmd = subcmd.arg(arg);
+                    positional_index += 1;
+                }
             }
         }
 

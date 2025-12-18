@@ -3,10 +3,10 @@
 //! This module handles extracting command arguments from clap's ArgMatches
 //! and converting them into a format suitable for script execution.
 
-use crate::constants::BOOL_TRUE;
-use super::ast::Parameter;
+use super::ast::{ParamKind, Parameter};
 use super::cli::CliGenerator;
 use super::type_validator;
+use crate::constants::BOOL_TRUE;
 use clap::ArgMatches;
 use std::collections::HashMap;
 
@@ -40,38 +40,80 @@ impl ArgumentExtractor {
         command_path: &[String],
     ) -> Result<HashMap<String, String>, Vec<String>> {
         let mut args = HashMap::new();
+        let mut custom_errors: Vec<String> = Vec::new();
 
         for param in parameters {
-            if param.param_type == "bool" {
-                let value = if param.is_named {
-                    Self::extract_bool_flag(matches, param, generator)
-                } else {
-                    // Positional bool arguments
-                    Self::extract_bool_positional(matches, param, generator)
-                };
-                args.insert(param.name.clone(), value.to_string());
-            } else {
-                let value = if param.is_named {
-                    // For named arguments, use param_id from generator
-                    let param_id = generator.get_param_id(&param.name);
-                    Self::extract_value_arg_named(matches, param, param_id)
-                } else {
-                    // Positional arguments are accessible by name
-                    Self::extract_value_arg_positional(matches, param)
-                };
-                
-                if let Some(value) = value {
-                    args.insert(param.name.clone(), value);
-                } else if let Some(default) = &param.default {
-                    if let Some(default_str) = generator.value_to_string(default) {
-                        args.insert(param.name.clone(), default_str);
+            match &param.kind {
+                ParamKind::Normal => {
+                    if param.param_type == "bool" {
+                        let value = if param.is_named {
+                            Self::extract_bool_flag(matches, param, generator)
+                        } else {
+                            // Positional bool arguments
+                            Self::extract_bool_positional(matches, param, generator)
+                        };
+                        args.insert(param.name.clone(), value.to_string());
+                    } else {
+                        let value = if param.is_named {
+                            // For named arguments, use param_id from generator
+                            let param_id = generator.get_param_id(&param.name);
+                            Self::extract_value_arg_named(matches, param, param_id)
+                        } else {
+                            // Positional arguments are accessible by name
+                            Self::extract_value_arg_positional(matches, param)
+                        };
+
+                        if let Some(value) = value {
+                            args.insert(param.name.clone(), value);
+                        } else if let Some(default) = &param.default {
+                            if let Some(default_str) = generator.value_to_string(default) {
+                                args.insert(param.name.clone(), default_str);
+                            }
+                        }
                     }
+                }
+                ParamKind::Wildcard { name: _, count } => {
+                    // Wildcard parameters collect multiple positional values.
+                    let id = &param.name;
+                    let collected: Vec<String> = matches
+                        .get_many::<String>(id)
+                        .map(|vals| vals.cloned().collect())
+                        .unwrap_or_else(Vec::new);
+
+                    if let Some(expected) = count {
+                        if collected.len() != *expected {
+                            let command_str = command_path.join(" ");
+                            custom_errors.push(format!(
+                                "❌ Wildcard parameter '{}' in command 'nest {}' expects exactly {} argument(s), but got {}.",
+                                param.name,
+                                command_str,
+                                expected,
+                                collected.len()
+                            ));
+                            continue;
+                        }
+                    }
+
+                    let joined = collected.join(" ");
+                    args.insert(param.name.clone(), joined);
                 }
             }
         }
 
         // Validate all arguments against their types
-        type_validator::validate_all_arguments(&args, parameters, command_path)
+        match type_validator::validate_all_arguments(&args, parameters, command_path) {
+            Ok(validated) => {
+                if custom_errors.is_empty() {
+                    Ok(validated)
+                } else {
+                    Err(custom_errors)
+                }
+            }
+            Err(mut type_errors) => {
+                type_errors.extend(custom_errors);
+                Err(type_errors)
+            }
+        }
     }
 
     /// Extracts arguments from clap matches for a default subcommand.
@@ -98,37 +140,78 @@ impl ArgumentExtractor {
         command_path: &[String],
     ) -> Result<HashMap<String, String>, Vec<String>> {
         let mut args = HashMap::new();
+        let mut custom_errors: Vec<String> = Vec::new();
 
         for param in parameters {
-            if param.param_type == "bool" {
-                let value = if param.is_named {
-                    Self::extract_bool_flag_for_default(matches, param, generator)
-                } else {
-                    Self::extract_bool_positional(matches, param, generator)
-                };
-                args.insert(param.name.clone(), value.to_string());
-            } else {
-                let value = if param.is_named {
-                    // For named arguments, use param_id from generator
-                    let param_id = generator.get_param_id(&param.name);
-                    Self::extract_value_arg_for_default_named(matches, param_id)
-                } else {
-                    // Positional arguments are accessible by name
-                    Self::extract_value_arg_for_default_positional(matches, param)
-                };
-                
-                if let Some(value) = value {
-                    args.insert(param.name.clone(), value);
-                } else if let Some(default) = &param.default {
-                    if let Some(default_str) = generator.value_to_string(default) {
-                        args.insert(param.name.clone(), default_str);
+            match &param.kind {
+                ParamKind::Normal => {
+                    if param.param_type == "bool" {
+                        let value = if param.is_named {
+                            Self::extract_bool_flag_for_default(matches, param, generator)
+                        } else {
+                            Self::extract_bool_positional(matches, param, generator)
+                        };
+                        args.insert(param.name.clone(), value.to_string());
+                    } else {
+                        let value = if param.is_named {
+                            // For named arguments, use param_id from generator
+                            let param_id = generator.get_param_id(&param.name);
+                            Self::extract_value_arg_for_default_named(matches, param_id)
+                        } else {
+                            // Positional arguments are accessible by name
+                            Self::extract_value_arg_for_default_positional(matches, param)
+                        };
+
+                        if let Some(value) = value {
+                            args.insert(param.name.clone(), value);
+                        } else if let Some(default) = &param.default {
+                            if let Some(default_str) = generator.value_to_string(default) {
+                                args.insert(param.name.clone(), default_str);
+                            }
+                        }
                     }
+                }
+                ParamKind::Wildcard { name: _, count } => {
+                    let id = &param.name;
+                    let collected: Vec<String> = matches
+                        .get_many::<String>(id)
+                        .map(|vals| vals.cloned().collect())
+                        .unwrap_or_else(Vec::new);
+
+                    if let Some(expected) = count {
+                        if collected.len() != *expected {
+                            let command_str = command_path.join(" ");
+                            custom_errors.push(format!(
+                                "❌ Wildcard parameter '{}' in command 'nest {}' expects exactly {} argument(s), but got {}.",
+                                param.name,
+                                command_str,
+                                expected,
+                                collected.len()
+                            ));
+                            continue;
+                        }
+                    }
+
+                    let joined = collected.join(" ");
+                    args.insert(param.name.clone(), joined);
                 }
             }
         }
 
         // Validate all arguments against their types
-        type_validator::validate_all_arguments(&args, parameters, command_path)
+        match type_validator::validate_all_arguments(&args, parameters, command_path) {
+            Ok(validated) => {
+                if custom_errors.is_empty() {
+                    Ok(validated)
+                } else {
+                    Err(custom_errors)
+                }
+            }
+            Err(mut type_errors) => {
+                type_errors.extend(custom_errors);
+                Err(type_errors)
+            }
+        }
     }
 
     fn extract_bool_flag(
@@ -138,7 +221,7 @@ impl ArgumentExtractor {
     ) -> bool {
         // Use parameter name directly as ID (same as used in parameter_to_arg_with_id)
         let param_id = &param.name;
-        
+
         // Check if flag is present by param_id (works for both --flag and -f)
         if matches.contains_id(param_id) {
             // If value is provided, parse it
@@ -169,7 +252,7 @@ impl ArgumentExtractor {
     ) -> bool {
         // Use parameter name directly as ID (same as used in parameter_to_arg_with_id)
         let param_id = &param.name;
-        
+
         // Check if flag is present by param_id (works for both --flag and -f)
         if matches.contains_id(param_id) {
             // If value is provided, parse it
@@ -203,10 +286,7 @@ impl ArgumentExtractor {
         matches.get_one::<String>(param_id).cloned()
     }
 
-    fn extract_value_arg_positional(
-        matches: &ArgMatches,
-        param: &Parameter,
-    ) -> Option<String> {
+    fn extract_value_arg_positional(matches: &ArgMatches, param: &Parameter) -> Option<String> {
         // Positional arguments are accessible by their name
         matches.get_one::<String>(&param.name).cloned()
     }
@@ -233,10 +313,7 @@ impl ArgumentExtractor {
         }
     }
 
-    fn extract_value_arg_for_default_named(
-        matches: &ArgMatches,
-        param_id: &str,
-    ) -> Option<String> {
+    fn extract_value_arg_for_default_named(matches: &ArgMatches, param_id: &str) -> Option<String> {
         // For named arguments, use the param_id directly
         matches.get_one::<String>(param_id).cloned()
     }
@@ -248,33 +325,4 @@ impl ArgumentExtractor {
         // Positional arguments are accessible by their name
         matches.get_one::<String>(&param.name).cloned()
     }
-
-    /// Extracts all remaining arguments for a wildcard command.
-    ///
-    /// For commands with `(*)` parameter, this collects all remaining
-    /// positional arguments and joins them into a single string.
-    ///
-    /// # Arguments
-    ///
-    /// * `matches` - The parsed CLI arguments from clap
-    ///
-    /// # Returns
-    ///
-    /// Returns a HashMap with a single key "*" containing all arguments
-    /// joined by spaces.
-    pub fn extract_wildcard_args(matches: &ArgMatches) -> HashMap<String, String> {
-        let mut args = HashMap::new();
-        
-        // Get all values from the wildcard argument (ID is "*")
-        if let Some(values) = matches.get_many::<String>("*") {
-            let all_args: Vec<String> = values.cloned().collect();
-            args.insert("*".to_string(), all_args.join(" "));
-        } else {
-            // If no arguments provided, use empty string
-            args.insert("*".to_string(), String::new());
-        }
-        
-        args
-    }
 }
-

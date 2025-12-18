@@ -43,6 +43,15 @@ pub struct JsonParameter {
     /// Optional default value
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<JsonValue>,
+    /// Whether this parameter is a wildcard segment.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub is_wildcard: bool,
+    /// Optional wildcard name (for `*name` / `*name[N]` forms).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wildcard_name: Option<String>,
+    /// Optional fixed size for wildcard (`*[N]` / `*name[N]`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wildcard_count: Option<usize>,
 }
 
 /// JSON representation of a Directive.
@@ -128,11 +137,21 @@ impl From<&Value> for JsonValue {
 
 impl From<&Parameter> for JsonParameter {
     fn from(param: &Parameter) -> Self {
+        use super::ast::ParamKind;
+
+        let (is_wildcard, wildcard_name, wildcard_count) = match &param.kind {
+            ParamKind::Normal => (false, None, None),
+            ParamKind::Wildcard { name, count } => (true, name.clone(), *count),
+        };
+
         JsonParameter {
             name: param.name.clone(),
             alias: param.alias.clone(),
             param_type: param.param_type.clone(),
             default: param.default.as_ref().map(|v| v.into()),
+            is_wildcard,
+            wildcard_name,
+            wildcard_count,
         }
     }
 }

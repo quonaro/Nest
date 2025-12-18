@@ -169,7 +169,7 @@ fn validate_command_recursive(
             });
         }
 
-        // Validate parameter type
+        // Validate parameter type (wildcards always use internal type "arr")
         if !matches!(param.param_type.as_str(), "str" | "bool" | "num" | "arr") {
             errors.push(ValidationError {
                 line: 1,
@@ -181,6 +181,27 @@ fn validate_command_recursive(
                 suggestion: Some("Valid types are: str, bool, num, arr".to_string()),
                 command_path: current_path.clone(),
             });
+        }
+
+        // Additional structural validation for wildcard parameters
+        if let super::ast::ParamKind::Wildcard { name: _, count } = &param.kind {
+            if let Some(c) = count {
+                if *c == 0 {
+                    errors.push(ValidationError {
+                        line: 1,
+                        column: None,
+                        message: format!(
+                            "Wildcard parameter '{}' must capture at least 1 argument (found [0])",
+                            param.name
+                        ),
+                        suggestion: Some(
+                            "Use a positive integer in the [N] specifier, e.g., *name[1] or *[2]"
+                                .to_string(),
+                        ),
+                        command_path: current_path.clone(),
+                    });
+                }
+            }
         }
 
         // Validate alias
@@ -325,11 +346,12 @@ fn validate_command_recursive(
     // Use source_file from command if available, otherwise fall back to file_path
     if let Some(cwd) = cwd_paths.first() {
         // Determine which file path to use for validation
-        let source_file_for_validation: Option<std::path::PathBuf> = 
-            command.source_file.clone()
-                .or_else(|| parent_source_file.map(|p| p.to_path_buf()))
-                .or_else(|| Some(file_path.to_path_buf()));
-        
+        let source_file_for_validation: Option<std::path::PathBuf> = command
+            .source_file
+            .clone()
+            .or_else(|| parent_source_file.map(|p| p.to_path_buf()))
+            .or_else(|| Some(file_path.to_path_buf()));
+
         if let Some(source_file) = source_file_for_validation {
             if let Some(parent) = source_file.parent() {
                 let full_cwd = parent.join(cwd);
@@ -412,11 +434,12 @@ fn validate_command_recursive(
     // Validate child commands
     for child in &command.children {
         // Use child's source_file if available, otherwise use parent's source_file or command's source_file
-        let child_source_file: Option<&std::path::Path> = 
-            child.source_file.as_deref()
-                .or_else(|| command.source_file.as_deref())
-                .or(parent_source_file);
-        
+        let child_source_file: Option<&std::path::Path> = child
+            .source_file
+            .as_deref()
+            .or_else(|| command.source_file.as_deref())
+            .or(parent_source_file);
+
         validate_command_recursive(
             child,
             &current_path,

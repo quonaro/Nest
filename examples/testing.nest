@@ -38,3 +38,15 @@ test:
         > script: |
             echo "All tests completed!"
 
+    wildcard-basic(app: str, *):
+        > desc: Example of mixed positional argument with anonymous wildcard
+        > script: |
+            echo "App: {{app}}"
+            echo "Rest args ({{*}})"
+
+    wildcard-named(*cmd[1], *args):
+        > desc: Example of named wildcard with fixed-size head and unbounded tail
+        > script: |
+            echo "Command: {{*cmd}}"
+            echo "Args: {{*args}}"
+
