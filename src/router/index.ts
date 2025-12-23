@@ -4,6 +4,7 @@ import GettingStarted from '../views/GettingStarted.vue'
 import Guides from '../views/Guides.vue'
 import Concepts from '../views/Concepts.vue'
 import Reference from '../views/Reference.vue'
+import VSCodeExtension from '../views/VSCodeExtension.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -32,6 +33,11 @@ const router = createRouter({
       path: '/reference',
       name: 'reference',
       component: Reference
+    },
+    {
+      path: '/vscode-extension',
+      name: 'vscode-extension',
+      component: VSCodeExtension
     }
   ],
   scrollBehavior(to, from, savedPosition) {

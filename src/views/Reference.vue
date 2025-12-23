@@ -69,9 +69,16 @@ $ nest &lt;command&gt; &lt;subcommand&gt; --help</code></pre>
           <li><code>> env: ${VAR:-default}</code> - {{ $t('reference.configuration.envSystemDirective') }}</li>
           <li><code>> script: &lt;command&gt;</code> - {{ $t('reference.configuration.scriptDirective') }}</li>
           <li><code>> script: |</code> - {{ $t('reference.configuration.scriptMultiDirective') }}</li>
+          <li><code>> script[hide]:</code> - {{ $t('reference.configuration.scriptHideDirective') }}</li>
           <li><code>> before:</code> - {{ $t('reference.configuration.beforeDirective') }}</li>
+          <li><code>> before[hide]:</code> - {{ $t('reference.configuration.beforeHideDirective') }}</li>
           <li><code>> after:</code> - {{ $t('reference.configuration.afterDirective') }}</li>
+          <li><code>> after[hide]:</code> - {{ $t('reference.configuration.afterHideDirective') }}</li>
           <li><code>> fallback:</code> - {{ $t('reference.configuration.fallbackDirective') }}</li>
+          <li><code>> fallback[hide]:</code> - {{ $t('reference.configuration.fallbackHideDirective') }}</li>
+          <li><code>> finaly:</code> - {{ $t('reference.configuration.finalyDirective') }}</li>
+          <li><code>> finaly[hide]:</code> - {{ $t('reference.configuration.finalyHideDirective') }}</li>
+          <li><code>> require_confirm: &lt;message&gt;</code> - {{ $t('reference.configuration.requireConfirmDirective') }}</li>
           <li><code>> depends:</code> - {{ $t('reference.configuration.dependsDirective') }}</li>
           <li><code>> validate:</code> - {{ $t('reference.configuration.validateDirective') }}</li>
           <li><code>> if: / > elif: / > else:</code> - {{ $t('reference.configuration.ifDirective') }}</li>

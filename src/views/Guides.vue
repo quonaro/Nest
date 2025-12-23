@@ -628,6 +628,7 @@ b():
           <li>{{ $t('guides.beforeAfterFallback.order2') }}</li>
           <li>{{ $t('guides.beforeAfterFallback.order3') }}</li>
           <li>{{ $t('guides.beforeAfterFallback.order4') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.order5') }}</li>
         </ol>
 
         <h3>{{ $t('guides.beforeAfterFallback.keyPoints') }}</h3>
@@ -637,6 +638,7 @@ b():
           <li>{{ $t('guides.beforeAfterFallback.point3') }}</li>
           <li>{{ $t('guides.beforeAfterFallback.point4') }}</li>
           <li>{{ $t('guides.beforeAfterFallback.point5') }}</li>
+          <li>{{ $t('guides.beforeAfterFallback.point6') }}</li>
         </ul>
 
         <h3>{{ $t('guides.beforeAfterFallback.example') }}</h3>
@@ -655,7 +657,126 @@ b():
     > fallback: |
         echo "Deployment failed, rolling back..."
         # Error handling (only if main script fails)
-        # This replaces the error output</code></pre>
+        # This replaces the error output
+    > finaly: |
+        echo "Cleaning up temporary files..."
+        # Always executes, regardless of success or failure</code></pre>
+      </section>
+
+      <section id="finaly">
+        <h2>{{ $t('guides.directives.finalyTitle') }}</h2>
+        <p>{{ $t('guides.directives.finalyDirective') }}</p>
+
+        <h3>{{ $t('guides.finaly.syntax') }}</h3>
+        <pre v-pre><code>deploy():
+    > desc: Deploy with cleanup
+    > script: |
+        echo "Deploying..."
+        ./deploy.sh
+    > finaly: |
+        echo "Cleaning up..."
+        rm -rf /tmp/deploy-*</code></pre>
+
+        <h3>{{ $t('guides.finaly.executionOrder') }}</h3>
+        <p>{{ $t('guides.finaly.executionOrderDesc') }}</p>
+        <ol>
+          <li>{{ $t('guides.finaly.step1') }}</li>
+          <li>{{ $t('guides.finaly.step2') }}</li>
+          <li>{{ $t('guides.finaly.step3') }}</li>
+          <li>{{ $t('guides.finaly.step4') }}</li>
+          <li>{{ $t('guides.finaly.step5') }}</li>
+        </ol>
+
+        <h3>{{ $t('guides.finaly.example') }}</h3>
+        <pre v-pre><code>build():
+    > desc: Build with cleanup
+    > before: echo "Starting build..."
+    > script: |
+        npm run build
+        if [ $? -ne 0 ]; then
+            exit 1
+        fi
+    > after: echo "Build completed!"
+    > fallback: echo "Build failed!"
+    > finaly: |
+        echo "Cleaning up build artifacts..."
+        rm -rf .cache/
+        echo "Cleanup complete"</code></pre>
+      </section>
+
+      <section id="require-confirm">
+        <h2>{{ $t('guides.directives.requireConfirmTitle') }}</h2>
+        <p>{{ $t('guides.directives.requireConfirmDirective') }}</p>
+
+        <h3>{{ $t('guides.requireConfirm.syntax') }}</h3>
+        <pre v-pre><code>dangerous():
+    > desc: Dangerous operation
+    > require_confirm: Are you sure you want to proceed?
+    > script: |
+        echo "Performing dangerous operation..."
+        rm -rf /tmp/important-data</code></pre>
+
+        <h3>{{ $t('guides.requireConfirm.defaultMessage') }}</h3>
+        <p>{{ $t('guides.requireConfirm.defaultMessageDesc') }}</p>
+        <pre v-pre><code>dangerous():
+    > desc: Dangerous operation
+    > require_confirm:
+    > script: |
+        echo "Performing dangerous operation..."</code></pre>
+
+        <h3>{{ $t('guides.requireConfirm.example') }}</h3>
+        <pre v-pre><code>delete-all():
+    > desc: Delete all data (irreversible)
+    > require_confirm: This will delete ALL data. Are you absolutely sure?
+    > script: |
+        echo "Deleting all data..."
+        rm -rf data/</code></pre>
+      </section>
+
+      <section id="hide-modifier">
+        <h2>{{ $t('guides.directives.hideModifierTitle') }}</h2>
+        <p>{{ $t('guides.directives.hideModifierDesc') }}</p>
+
+        <h3>{{ $t('guides.directives.hideModifierExamples') }}</h3>
+        <ul>
+          <li><code>{{ $t('guides.directives.hideModifierScript') }}</code></li>
+          <li><code>{{ $t('guides.directives.hideModifierBefore') }}</code></li>
+          <li><code>{{ $t('guides.directives.hideModifierAfter') }}</code></li>
+          <li><code>{{ $t('guides.directives.hideModifierFallback') }}</code></li>
+          <li><code>{{ $t('guides.directives.hideModifierFinaly') }}</code></li>
+        </ul>
+
+        <h3>{{ $t('guides.hideModifier.example') }}</h3>
+        <pre v-pre><code>build():
+    > desc: Build with hidden verbose output
+    > before[hide]: |
+        echo "Preparing build environment..."
+        # Verbose setup output hidden
+    > script[hide]: |
+        npm run build --verbose
+        # Build output hidden
+    > after[hide]: |
+        echo "Post-build tasks..."
+        # Post-build output hidden
+    > script: |
+        echo "Build completed successfully!"
+        # This output is visible</code></pre>
+
+        <h3>{{ $t('guides.hideModifier.useCase') }}</h3>
+        <p>{{ $t('guides.hideModifier.useCaseDesc') }}</p>
+        <pre v-pre><code>deploy():
+    > desc: Deploy with clean output
+    > before[hide]: |
+        # Verbose pre-deployment checks
+        ./check-dependencies.sh
+        ./validate-config.sh
+    > script: |
+        echo "Deploying..."
+        ./deploy.sh
+    > after[hide]: |
+        # Verbose post-deployment tasks
+        ./update-cache.sh
+        ./notify-services.sh</code></pre>
       </section>
 
       <section id="include">
