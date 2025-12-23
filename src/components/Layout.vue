@@ -89,10 +89,25 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '../composables/useTheme'
 
-const { locale } = useI18n()
+const { locale: i18nLocale } = useI18n()
 const { theme, toggleTheme } = useTheme()
 const route = useRoute()
 const router = useRouter()
+
+// Create a local ref for locale to avoid issues with i18n's computed ref
+// Ensure we always have a valid locale value
+const getValidLocale = (): string => {
+  const saved = localStorage.getItem('locale')
+  if (saved === 'en' || saved === 'ru') {
+    return saved
+  }
+  const current = i18nLocale.value
+  if (current === 'en' || current === 'ru') {
+    return current
+  }
+  return 'en'
+}
+const locale = ref<string>(getValidLocale())
 
 const logoPath = `${import.meta.env.BASE_URL}Nest.png`
 const currentHash = ref('')
@@ -165,6 +180,23 @@ const handleScroll = () => {
   getActiveSectionFromScroll()
 }
 
+// Sync locale with i18n
+watch(locale, (newLocale) => {
+  if (newLocale === 'en' || newLocale === 'ru') {
+    // Only update if different to avoid infinite loops
+    if (i18nLocale.value !== newLocale) {
+      i18nLocale.value = newLocale
+    }
+  }
+})
+
+watch(() => i18nLocale.value, (newLocale) => {
+  // Only sync if i18nLocale has a valid value and it's different
+  if ((newLocale === 'en' || newLocale === 'ru') && locale.value !== newLocale) {
+    locale.value = newLocale
+  }
+}, { immediate: true })
+
 // Watch route changes
 watch(() => route.path, () => {
   updateActiveState()
@@ -210,8 +242,10 @@ watch(() => route.hash, (newHash) => {
   // Initialize locale from localStorage on mount
 onMounted(() => {
   const savedLocale = localStorage.getItem('locale')
-  if (savedLocale && (savedLocale === 'en' || savedLocale === 'ru')) {
-    locale.value = savedLocale
+  const validLocale = (savedLocale === 'en' || savedLocale === 'ru') ? savedLocale : 'en'
+  locale.value = validLocale
+  if (i18nLocale.value !== validLocale) {
+    i18nLocale.value = validLocale
   }
   
   // Initial state update
@@ -368,7 +402,10 @@ const performScroll = (sectionId: string) => {
 
 const changeLocale = () => {
   const newLocale = locale.value as string
-  localStorage.setItem('locale', newLocale)
+  if (newLocale && (newLocale === 'en' || newLocale === 'ru')) {
+    localStorage.setItem('locale', newLocale)
+    // The watch will handle syncing with i18nLocale
+  }
 }
 </script>
 

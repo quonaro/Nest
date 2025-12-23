@@ -16,11 +16,7 @@ const i18n = createI18n({
   },
   missingWarn: false,
   fallbackWarn: false,
-  warnHtmlMessage: false,
-  pluralizationRules: {
-    en: () => 'other',
-    ru: () => 'other'
-  }
+  warnHtmlMessage: false
 })
 
 export default i18n
