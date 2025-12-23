@@ -24,7 +24,6 @@ export default {
       concepts: 'Концепции',
       projects: 'Проекты',
       commands: 'Команды',
-      templates: 'Шаблоны',
       reference: 'Справочник',
       cliReference: 'Справочник CLI',
       configuration: 'Конфигурация'

@@ -113,9 +113,9 @@
         <h3>{{ $t('vscodeExtension.supportedSyntax.templates') }}</h3>
         <p>{{ $t('vscodeExtension.supportedSyntax.templatesDesc') }}</p>
         <ul>
-          <li><code>{{"{{"}}variable{{"}}"}}</code> - {{ $t('vscodeExtension.supportedSyntax.templateVar') }}</li>
-          <li><code>{{"{{"}}param{{"}}"}}</code> - {{ $t('vscodeExtension.supportedSyntax.templateParam') }}</li>
-          <li><code>{{"{{"}}now{{"}}"}}</code>, <code>{{"{{"}}user{{"}}"}}</code> - {{ $t('vscodeExtension.supportedSyntax.templateSpecial') }}</li>
+          <li><code>&#123;&#123;variable&#125;&#125;</code> - {{ $t('vscodeExtension.supportedSyntax.templateVar') }}</li>
+          <li><code>&#123;&#123;param&#125;&#125;</code> - {{ $t('vscodeExtension.supportedSyntax.templateParam') }}</li>
+          <li><code>&#123;&#123;now&#125;&#125;</code>, <code>&#123;&#123;user&#125;&#125;</code> - {{ $t('vscodeExtension.supportedSyntax.templateSpecial') }}</li>
         </ul>
       </section>
 
