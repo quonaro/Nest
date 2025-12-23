@@ -715,6 +715,21 @@ impl Parser {
                             Ok((Directive::Script(script_content), true))
                         }
                     } else {
+                        // Single line script - but check if there are indented lines after (missing |)
+                        if self.current_index + 1 < self.lines.len() {
+                            let next_line = &self.lines[self.current_index + 1];
+                            let next_indent = get_indent_size(next_line);
+                            let next_trimmed = next_line.trim();
+                            
+                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
+                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                                return Err(ParseError::InvalidSyntax(
+                                    format!("Multiline script detected but missing '|' after 'script:'. Add '|' for multiline scripts or put script content on the same line."),
+                                    self.current_line_number()
+                                ));
+                            }
+                        }
+                        
                         // Single line script
                         if hide_output {
                             Ok((Directive::ScriptHide(directive_value.to_string()), false))
@@ -734,6 +749,21 @@ impl Parser {
                             Ok((Directive::Before(script_content), true))
                         }
                     } else {
+                        // Single line script - but check if there are indented lines after (missing |)
+                        if self.current_index + 1 < self.lines.len() {
+                            let next_line = &self.lines[self.current_index + 1];
+                            let next_indent = get_indent_size(next_line);
+                            let next_trimmed = next_line.trim();
+                            
+                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
+                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                                return Err(ParseError::InvalidSyntax(
+                                    format!("Multiline script detected but missing '|' after 'before:'. Add '|' for multiline scripts or put script content on the same line."),
+                                    self.current_line_number()
+                                ));
+                            }
+                        }
+                        
                         // Single line script
                         if hide_output {
                             Ok((Directive::BeforeHide(directive_value.to_string()), false))
@@ -753,6 +783,21 @@ impl Parser {
                             Ok((Directive::After(script_content), true))
                         }
                     } else {
+                        // Single line script - but check if there are indented lines after (missing |)
+                        if self.current_index + 1 < self.lines.len() {
+                            let next_line = &self.lines[self.current_index + 1];
+                            let next_indent = get_indent_size(next_line);
+                            let next_trimmed = next_line.trim();
+                            
+                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
+                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                                return Err(ParseError::InvalidSyntax(
+                                    format!("Multiline script detected but missing '|' after 'after:'. Add '|' for multiline scripts or put script content on the same line."),
+                                    self.current_line_number()
+                                ));
+                            }
+                        }
+                        
                         // Single line script
                         if hide_output {
                             Ok((Directive::AfterHide(directive_value.to_string()), false))
@@ -772,6 +817,21 @@ impl Parser {
                             Ok((Directive::Fallback(script_content), true))
                         }
                     } else {
+                        // Single line script - but check if there are indented lines after (missing |)
+                        if self.current_index + 1 < self.lines.len() {
+                            let next_line = &self.lines[self.current_index + 1];
+                            let next_indent = get_indent_size(next_line);
+                            let next_trimmed = next_line.trim();
+                            
+                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
+                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                                return Err(ParseError::InvalidSyntax(
+                                    format!("Multiline script detected but missing '|' after 'fallback:'. Add '|' for multiline scripts or put script content on the same line."),
+                                    self.current_line_number()
+                                ));
+                            }
+                        }
+                        
                         // Single line script
                         if hide_output {
                             Ok((Directive::FallbackHide(directive_value.to_string()), false))
@@ -791,6 +851,21 @@ impl Parser {
                             Ok((Directive::Finaly(script_content), true))
                         }
                     } else {
+                        // Single line script - but check if there are indented lines after (missing |)
+                        if self.current_index + 1 < self.lines.len() {
+                            let next_line = &self.lines[self.current_index + 1];
+                            let next_indent = get_indent_size(next_line);
+                            let next_trimmed = next_line.trim();
+                            
+                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
+                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                                return Err(ParseError::InvalidSyntax(
+                                    format!("Multiline script detected but missing '|' after 'finaly:'. Add '|' for multiline scripts or put script content on the same line."),
+                                    self.current_line_number()
+                                ));
+                            }
+                        }
+                        
                         // Single line script
                         if hide_output {
                             Ok((Directive::FinalyHide(directive_value.to_string()), false))
@@ -1040,6 +1115,7 @@ impl Parser {
 
     fn parse_multiline_block(&mut self, base_indent: u8) -> Result<String, ParseError> {
         let mut content = String::new();
+        let start_line = self.current_line_number();
         self.current_index += 1; // Move past the "> script: |" line
 
         while self.current_index < self.lines.len() {
@@ -1076,6 +1152,14 @@ impl Parser {
 
             content.push_str(content_line);
             self.current_index += 1;
+        }
+
+        // Validate that multiline block is not empty
+        if content.trim().is_empty() {
+            return Err(ParseError::InvalidSyntax(
+                format!("Multiline script block is empty. Add script content after '|' or use single-line format without '|'."),
+                start_line
+            ));
         }
 
         Ok(content)
