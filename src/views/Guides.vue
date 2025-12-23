@@ -344,8 +344,8 @@ $ nest dev lint -f true       # Use short alias</code></pre>
           <li><strong>Parameters</strong></li>
           <li><strong>Special</strong>:
             <ul>
-              <li><code v-pre>{{now}}</code> - Now</li>
-              <li><code v-pre>{{user}}</code> - User</li>
+              <li><code v-pre>{{now}}</code> - Current UTC time in RFC3339 format</li>
+              <li><code v-pre>{{user}}</code> - Current user from $USER environment variable</li>
             </ul>
           </li>
         </ul>
@@ -359,7 +359,7 @@ $ nest dev lint -f true       # Use short alias</code></pre>
         #!/bin/sh
         echo "Deploying {{version}} by {{user}} at {{now}}"
         ./deploy.sh {{version}}</code></pre>
-        <p><em>Note: The privileged directive prompts for sudo password when needed.</em></p>
+        <p><em>Note: Template variables are processed before script execution.</em></p>
       </section>
 
       <section id="wildcard">
@@ -380,7 +380,7 @@ $ nest dev lint -f true       # Use short alias</code></pre>
         <pre v-pre><code>$ nest docker-build
 $ nest docker-build --pull
 $ nest docker-build --pull --build-arg KEY=value</code></pre>
-        <p><em>Note: The privileged directive prompts for sudo password when needed.</em></p>
+        <p><em>Note: All arguments passed to the command are forwarded using &#123;&#123;*&#125;&#125;.</em></p>
       </section>
 
       <section id="privileged">
@@ -544,11 +544,11 @@ build():
         # Or call without arguments if function has defaults
         deploy(version="1.0.0")</code></pre>
 
-        <h3>Vs Commands</h3>
+        <h3>Functions vs Commands</h3>
         <ul>
-          <li>Vs1</li>
-          <li>Vs2</li>
-          <li>Vs3</li>
+          <li>Functions are reusable code blocks, commands are executable tasks</li>
+          <li>Functions are called from within scripts, commands are called from CLI</li>
+          <li>Functions can be used across multiple commands, commands are standalone</li>
         </ul>
       </section>
 
