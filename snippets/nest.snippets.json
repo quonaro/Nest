@@ -1,0 +1,93 @@
+{
+  "Command": {
+    "prefix": "nest-command",
+    "body": [
+      "${1:command_name}(${2:param}: ${3:str} = ${4:\"default\"}):",
+      "    > desc: ${5:Description}",
+      "    > script: |",
+      "        ${6:echo \"Running {{${2}}}\"}"
+    ],
+    "description": "Nest command with parameter, description and script"
+  },
+  "Group": {
+    "prefix": "nest-group",
+    "body": [
+      "${1:group}:",
+      "    > desc: ${2:Group description}",
+      "",
+      "    default(!${3:flag}|${4:f}: bool = false):",
+      "        > desc: ${5:Default group command}",
+      "        > script: |",
+      "            ${6:echo \"Default\"}"
+    ],
+    "description": "Nest group with default subcommand"
+  },
+  "Variable": {
+    "prefix": "nest-var",
+    "body": [
+      "@var ${1:NAME} = \"${2:value}\""
+    ],
+    "description": "Global variable"
+  },
+  "Constant": {
+    "prefix": "nest-const",
+    "body": [
+      "@const ${1:NAME} = \"${2:value}\""
+    ],
+    "description": "Global constant"
+  },
+  "Include": {
+    "prefix": "nest-include",
+    "body": [
+      "@include ${1:path/to/file.nest}"
+    ],
+    "description": "Include another Nestfile configuration"
+  },
+  "Function": {
+    "prefix": "nest-function",
+    "body": [
+      "@function ${1:name}(${2:param}: ${3:str}):",
+      "    @var ${4:LOCAL_VAR} = \"${5:value}\"",
+      "    ${6:echo \"Body\"}"
+    ],
+    "description": "Reusable Nest function"
+  },
+  "Depends": {
+    "prefix": "nest-depends",
+    "body": [
+      "> depends: ${1:build}, ${2:test}"
+    ],
+    "description": "Command dependencies"
+  },
+  "Validate": {
+    "prefix": "nest-validate",
+    "body": [
+      "> validate: ${1:param} matches /${2:regex}/"
+    ],
+    "description": "Parameter validation"
+  },
+  "Logs": {
+    "prefix": "nest-logs",
+    "body": [
+      "> logs:json ${1:./logs/{{now}}.json}"
+    ],
+    "description": "Logging directive"
+  },
+  "IfElifElse": {
+    "prefix": "nest-if",
+    "body": [
+      "> if: ${1:condition}",
+      "> script: |",
+      "    ${2:echo \"If\"}",
+      "> elif: ${3:other_condition}",
+      "> script: |",
+      "    ${4:echo \"Elif\"}",
+      "> else:",
+      "> script: |",
+      "    ${5:echo \"Else\"}"
+    ],
+    "description": "Conditional execution (if/elif/else)"
+  }
+}
+
+

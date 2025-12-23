@@ -1,11 +1,16 @@
-/target
-nest
-*.tar.gz
-*.zip
-*.sha256
-.cargo/config.toml
 node_modules/
 dist/
-package.json
-_metadata.json
-.vite
+
+# VS Code
+.vscode/*
+!.vscode/launch.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# VSIX packages
+*.vsix
+
+

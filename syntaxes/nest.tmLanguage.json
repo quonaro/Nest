@@ -1,0 +1,127 @@
+{
+    "scopeName": "source.nestfile",
+    "name": "Nestfile",
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#command"
+        },
+        {
+            "include": "#directives"
+        },
+        {
+            "include": "#meta"
+        },
+        {
+            "include": "#templates"
+        }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.number-sign.nestfile",
+                    "match": "^\\s*#.*$"
+                }
+            ]
+        },
+        "command": {
+            "patterns": [
+                {
+                    "name": "meta.command.nestfile",
+                    "match": "^(\\s*)([A-Za-z0-9_]+)\\s*(\\(([^)]*)\\))?\\s*:\\s*$",
+                    "captures": {
+                        "2": {
+                            "name": "entity.name.function.nestfile"
+                        },
+                        "4": {
+                            "name": "meta.parameters.nestfile"
+                        }
+                    }
+                }
+            ]
+        },
+        "directives": {
+            "patterns": [
+                {
+                    "name": "meta.directive.nestfile",
+                    "match": "^(\\s*>\\s*)([a-zA-Z_][a-zA-Z0-9_]*(?:\\[[^\\]]*\\])?)(\\s*:\\s*)(.*)$",
+                    "captures": {
+                        "1": {
+                            "name": "punctuation.definition.directive.nestfile"
+                        },
+                        "2": {
+                            "name": "keyword.other.directive.nestfile"
+                        },
+                        "3": {
+                            "name": "punctuation.separator.key-value.nestfile"
+                        },
+                        "4": {
+                            "name": "string.unquoted.nestfile"
+                        }
+                    }
+                }
+            ]
+        },
+        "meta": {
+            "patterns": [
+                {
+                    "name": "meta.variable.global.nestfile",
+                    "match": "^(\\s*)(@var|@const)\\s+([A-Za-z0-9_]+)\\s*(=)\\s*(.+)$",
+                    "captures": {
+                        "2": {
+                            "name": "keyword.other.variable.nestfile"
+                        },
+                        "3": {
+                            "name": "variable.other.nestfile"
+                        },
+                        "4": {
+                            "name": "keyword.operator.assignment.nestfile"
+                        },
+                        "5": {
+                            "name": "string.unquoted.nestfile"
+                        }
+                    }
+                },
+                {
+                    "name": "meta.function.nestfile",
+                    "match": "^(\\s*)(@function)\\s+([A-Za-z0-9_]+)\\s*(\\([^)]*\\))?\\s*:\\s*$",
+                    "captures": {
+                        "2": {
+                            "name": "keyword.other.function.nestfile"
+                        },
+                        "3": {
+                            "name": "entity.name.function.nestfile"
+                        }
+                    }
+                },
+                {
+                    "name": "meta.include.nestfile",
+                    "match": "^(\\s*)(@include)\\s+(.+)$",
+                    "captures": {
+                        "2": {
+                            "name": "keyword.other.include.nestfile"
+                        },
+                        "3": {
+                            "name": "string.unquoted.nestfile"
+                        }
+                    }
+                }
+            ]
+        },
+        "templates": {
+            "patterns": [
+                {
+                    "name": "meta.template.variable.nestfile",
+                    "match": "{{[^}]+}}"
+                },
+                {
+                    "name": "meta.command-substitution.nestfile",
+                    "match": "\\$\\([^)]*\\)"
+                }
+            ]
+        }
+    }
+}

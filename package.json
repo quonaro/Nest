@@ -1,0 +1,112 @@
+{
+  "name": "vscode-nestfile-support",
+  "displayName": "Nestfile Language Support",
+  "description": "Language support for Nestfile/Nest task runner configuration files: syntax highlighting, basic validation, and snippets.",
+  "version": "0.1.0",
+  "publisher": "quonaro",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:nestfile",
+    "onCommand:nestfile.validate",
+    "onCommand:nestfile.showAst"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nestfile",
+        "aliases": [
+          "Nestfile",
+          "Nest"
+        ],
+        "filenames": [
+          "Nestfile",
+          "nestfile",
+          "nest"
+        ],
+        "extensions": [
+          ".nest"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nestfile",
+        "scopeName": "source.nestfile",
+        "path": "./syntaxes/nest.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "nestfile",
+        "path": "./snippets/nest.snippets.json"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "nest-icons",
+        "label": "Nestfile Icons",
+        "path": "./icons/nest-icon-theme.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "nestfile.validate",
+        "title": "Nestfile: Validate Current File"
+      },
+      {
+        "command": "nestfile.showAst",
+        "title": "Nestfile: Show Parsed Commands (Debug)"
+      }
+    ],
+    "configurationDefaults": {
+      "[nestfile]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4,
+        "editor.detectIndentation": false,
+        "files.eol": "\n"
+      },
+      "files.associations": {
+        "Nestfile": "nestfile",
+        "nestfile": "nestfile",
+        "nest": "nestfile",
+        "*.nest": "nestfile"
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json",
+    "test": "npm run compile && echo \"No automated tests configured yet\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quonaro/Nest.git"
+  },
+  "keywords": [
+    "nest",
+    "nestfile",
+    "task-runner",
+    "language-support"
+  ],
+  "author": "quonaro",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/quonaro/Nest/issues"
+  },
+  "homepage": "https://github.com/quonaro/Nest#readme",
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/vscode": "^1.107.0",
+    "typescript": "^5.9.3",
+    "vscode-test": "^1.6.1"
+  }
+}
