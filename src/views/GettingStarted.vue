@@ -1,37 +1,37 @@
 <template>
   <Layout>
     <div class="getting-started">
-      <h1>{{ $t('gettingStarted.title') }}</h1>
+      <h1>Getting Started</h1>
       
       <section id="installation">
-        <h2>{{ $t('gettingStarted.installation') }}</h2>
+        <h2>Installation</h2>
         <p>
-          {{ $t('gettingStarted.installationDesc') }}
+          Nest can be installed using our official installers or manually from releases.
         </p>
         
-        <h3>{{ $t('gettingStarted.usingInstaller') }}</h3>
-        <p>{{ $t('gettingStarted.installerWill') }}</p>
+        <h3>Using Installer Scripts</h3>
+        <p>The install scripts will:</p>
         <ul>
-          <li>{{ $t('gettingStarted.installerDetect') }}</li>
-          <li>{{ $t('gettingStarted.installerDownload') }}</li>
-          <li>{{ $t('gettingStarted.installerInstall') }}</li>
-          <li>{{ $t('gettingStarted.installerProvide') }}</li>
+          <li>Detect your OS and architecture automatically</li>
+          <li>Download the latest release binary</li>
+          <li>Install it to ~/.local/bin (Unix) or %USERPROFILE%\.local\bin (Windows)</li>
+          <li>Provide instructions if the install directory is not in your PATH</li>
         </ul>
 
-        <h4>{{ $t('gettingStarted.linuxMacos') }}</h4>
+        <h4>Linux/macOS:</h4>
         <pre v-pre><code>curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash</code></pre>
 
-        <h4>{{ $t('gettingStarted.windows') }}</h4>
+        <h4>Windows (PowerShell):</h4>
         <pre v-pre><code>irm https://raw.githubusercontent.com/quonaro/nest/main/install.ps1 | iex</code></pre>
 
-        <h3>{{ $t('gettingStarted.manualInstallation') }}</h3>
+        <h3>Manual Installation</h3>
         <ol>
-          <li>{{ $t('gettingStarted.manualStep1') }} <a href="https://github.com/quonaro/nest/releases" target="_blank">Releases</a></li>
-          <li>{{ $t('gettingStarted.manualStep2') }}</li>
-          <li>{{ $t('gettingStarted.manualStep3') }}</li>
+          <li>Download the latest release for your platform from <a href="https://github.com/quonaro/nest/releases" target="_blank">Releases</a></li>
+          <li>Extract the binary</li>
+          <li>Add it to your PATH</li>
         </ol>
 
-        <h3>{{ $t('gettingStarted.fromSource') }}</h3>
+        <h3>From Source</h3>
         <pre v-pre><code>git clone https://github.com/quonaro/nest.git
 cd nest
 cargo build --release
@@ -39,52 +39,43 @@ sudo cp target/release/nest /usr/local/bin/</code></pre>
       </section>
 
       <section id="first-steps">
-        <h2>{{ $t('gettingStarted.firstSteps') }}</h2>
+        <h2>First Steps</h2>
         
-        <h3>1. {{ $t('gettingStarted.createNestfile') }}</h3>
-        <p>{{ $t('gettingStarted.createNestfileDesc') }}</p>
-        <p>Или используйте команду <code>nest --example</code> для загрузки примеров из GitHub.</p>
+        <h3>1. Create a Nestfile</h3>
+        <p>Create a Nestfile in your project root:</p>
+        <p>Or use the <code>nest --example</code> command to download examples from GitHub.</p>
         <pre v-pre><code>greet(name: str, message: str):
     > desc: Greet someone with a message
     > script: echo "Hello {{name}}, {{message}}!"</code></pre>
 
-        <h3>2. {{ $t('gettingStarted.runCommand') }}</h3>
+        <h3>2. Run Your Command</h3>
         <pre v-pre><code>$ nest greet "Alice" "welcome!"
 Hello Alice, welcome!</code></pre>
 
-        <h3>3. {{ $t('gettingStarted.viewHelp') }}</h3>
+        <h3>3. View Help</h3>
         <pre v-pre><code>$ nest --help
 $ nest greet --help</code></pre>
       </section>
 
       <section id="features">
-        <h2>{{ $t('gettingStarted.features') }}</h2>
+        <h2>Features</h2>
         
-        <h3>{{ $t('gettingStarted.currentlyImplemented') }}</h3>
+        <h3>Currently Implemented</h3>
         <ul>
-          <li>✅ <strong>{{ $t('gettingStarted.featureCommandStructure') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureParameters') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureDirectives') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureTemplateProcessing') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureCLIFeatures') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureExecution') }}</strong></li>
+          <li>✅ <strong>Command Structure - Top-level commands, nested subcommands, default subcommands</strong></li>
+          <li>✅ <strong>Parameters - Types (str, bool, num, arr), positional and named arguments, aliases, defaults</strong></li>
+          <li>✅ <strong>Directives - Descriptions, working directory, environment variables, scripts</strong></li>
+          <li>✅ <strong>Template Processing - Parameter substitution, special variables ([now], [user])</strong></li>
+          <li>✅ <strong>CLI Features - Dynamic CLI generation, help system, JSON/AST output</strong></li>
+          <li>✅ <strong>Execution - Script execution with environment variables and working directory support</strong></li>
         </ul>
 
-        <h3>{{ $t('gettingStarted.currentlyImplemented') }} (полный список)</h3>
+        <h3>Future Plans</h3>
         <ul>
-          <li>✅ <strong>{{ $t('gettingStarted.featureCommandStructure') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureParameters') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureDirectives') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureTemplateProcessing') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureCLIFeatures') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureExecution') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureVariables') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureFunctions') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureDependencies') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureConditional') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureInclude') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureValidation') }}</strong></li>
-          <li>✅ <strong>{{ $t('gettingStarted.featureLogging') }}</strong></li>
+          <li>🔜 <strong>Functions (#func) - Reusable script blocks</strong></li>
+          <li>🔜 <strong>Lifecycle hooks (#before, #after, #fallback)</strong></li>
+          <li>🔜 <strong>Command dependencies (#depends)</strong></li>
+          <li>🔜 <strong>Function calls (#call)</strong></li>
         </ul>
       </section>
     </div>

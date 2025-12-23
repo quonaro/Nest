@@ -4,46 +4,46 @@
       <div class="hero">
         <h1 class="hero-title">
           <img :src="logoPath" alt="Nest" class="hero-icon" />
-          {{ $t('home.title') }}
+          Nest
         </h1>
         <p class="hero-subtitle">
-          {{ $t('home.subtitle') }}
+          A declarative task runner that replaces brittle Makefiles and scattered shell scripts with a unified, readable, and maintainable task orchestration system.
         </p>
         <div class="hero-actions">
-          <router-link to="/getting-started" class="btn btn-primary">{{ $t('home.getStarted') }}</router-link>
-          <a href="https://github.com/quonaro/nest" target="_blank" class="btn btn-secondary">{{ $t('home.github') }}</a>
+          <router-link to="/getting-started" class="btn btn-primary">Get Started</router-link>
+          <a href="https://github.com/quonaro/nest" target="_blank" class="btn btn-secondary">GitHub</a>
         </div>
       </div>
 
       <section class="highlights">
-        <h2 class="section-title">{{ $t('home.highlights') }}</h2>
+        <h2 class="section-title">Highlights</h2>
         <div class="highlights-grid">
           <div class="highlight-card">
             <div class="highlight-icon">🚀</div>
-            <h3 class="highlight-title">{{ $t('home.highlightSingleTool') }}</h3>
-            <p class="highlight-text">{{ $t('home.highlightSingleToolDesc') }}</p>
+            <h3 class="highlight-title">Single Tool</h3>
+            <p class="highlight-text">Replace Makefiles and shell scripts with one unified system</p>
           </div>
           <div class="highlight-card">
             <div class="highlight-icon">📝</div>
-            <h3 class="highlight-title">{{ $t('home.highlightDeclarative') }}</h3>
-            <p class="highlight-text">{{ $t('home.highlightDeclarativeDesc') }}</p>
+            <h3 class="highlight-title">Declarative</h3>
+            <p class="highlight-text">Define commands in a simple, readable Nestfile format</p>
           </div>
           <div class="highlight-card">
             <div class="highlight-icon">🔧</div>
-            <h3 class="highlight-title">{{ $t('home.highlightFlexible') }}</h3>
-            <p class="highlight-text">{{ $t('home.highlightFlexibleDesc') }}</p>
+            <h3 class="highlight-title">Flexible</h3>
+            <p class="highlight-text">Support for parameters, nested commands, and environment variables</p>
           </div>
           <div class="highlight-card">
             <div class="highlight-icon">⚡</div>
-            <h3 class="highlight-title">{{ $t('home.highlightFast') }}</h3>
-            <p class="highlight-text">{{ $t('home.highlightFastDesc') }}</p>
+            <h3 class="highlight-title">Fast</h3>
+            <p class="highlight-text">Written in Rust for maximum performance</p>
           </div>
         </div>
       </section>
 
       <section class="installation">
-        <h2 class="section-title">{{ $t('home.installation') }}</h2>
-        <p class="section-text">{{ $t('home.installation') }}:</p>
+        <h2 class="section-title">Installation</h2>
+        <p class="section-text">Installation:</p>
         
         <div class="code-block">
           <div class="code-tabs">
@@ -67,28 +67,28 @@
       </section>
 
       <section class="quick-start">
-        <h2 class="section-title">{{ $t('home.quickStart') }}</h2>
-        <p class="section-text">{{ $t('home.createNestfile') }}</p>
+        <h2 class="section-title">Quick Start</h2>
+        <p class="section-text">Create a Nestfile in your project root:</p>
         
         <pre v-pre><code>greet(name: str, message: str):
     > desc: Greet someone with a message
     > script: echo "Hello {{name}}, {{message}}!"</code></pre>
 
-        <p class="section-text">{{ $t('home.thenRun') }}</p>
+        <p class="section-text">Then run your command:</p>
         
         <pre v-pre><code>$ nest greet "Alice" "welcome!"
 Hello Alice, welcome!</code></pre>
       </section>
 
       <section class="features">
-        <h2 class="section-title">{{ $t('home.features') }}</h2>
+        <h2 class="section-title">Features</h2>
         <ul class="features-list">
-          <li>✅ <strong>{{ $t('home.featureCommandStructure') }}</strong></li>
-          <li>✅ <strong>{{ $t('home.featureParameters') }}</strong></li>
-          <li>✅ <strong>{{ $t('home.featureDirectives') }}</strong></li>
-          <li>✅ <strong>{{ $t('home.featureTemplateProcessing') }}</strong></li>
-          <li>✅ <strong>{{ $t('home.featureDynamicCLI') }}</strong></li>
-          <li>✅ <strong>{{ $t('home.featureEnvironmentManagement') }}</strong></li>
+          <li>✅ <strong>Command Structure - Top-level and nested subcommands</strong></li>
+          <li>✅ <strong>Parameters - Positional and named arguments with types (str, bool, num, arr)</strong></li>
+          <li>✅ <strong>Directives - Control working directory, environment variables, and scripts</strong></li>
+          <li>✅ <strong>Template Processing - Variable substitution with [param] syntax</strong></li>
+          <li>✅ <strong>Dynamic CLI - Automatically generated from your Nestfile</strong></li>
+          <li>✅ <strong>Environment Management - Load from .env files or direct assignment</strong></li>
         </ul>
       </section>
     </div>

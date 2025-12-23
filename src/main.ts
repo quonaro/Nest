@@ -1,7 +1,6 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-import i18n from './i18n'
 import './assets/main.css'
 
 // Initialize theme before app mount to prevent flash
@@ -12,7 +11,6 @@ document.documentElement.setAttribute('data-theme', savedTheme)
 const app = createApp(App)
 
 app.use(router)
-app.use(i18n)
 
 // Handle GitHub Pages 404 redirect after router is set up
 // If we have a saved route from 404.html, navigate to it

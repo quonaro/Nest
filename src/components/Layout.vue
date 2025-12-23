@@ -9,20 +9,16 @@
           </router-link>
           <div class="header-right">
             <nav class="nav">
-              <router-link to="/getting-started" class="nav-link">{{ $t('nav.gettingStarted') }}</router-link>
-              <router-link to="/guides" class="nav-link">{{ $t('nav.guides') }}</router-link>
-              <router-link to="/concepts" class="nav-link">{{ $t('nav.concepts') }}</router-link>
-              <router-link to="/reference" class="nav-link">{{ $t('nav.reference') }}</router-link>
+              <router-link to="/getting-started" class="nav-link">Getting started</router-link>
+              <router-link to="/guides" class="nav-link">Guides</router-link>
+              <router-link to="/concepts" class="nav-link">Concepts</router-link>
+              <router-link to="/reference" class="nav-link">Reference</router-link>
             </nav>
             <div class="controls">
               <button @click="toggleTheme" class="control-btn" :title="theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'">
                 <span v-if="theme === 'light'">🌙</span>
                 <span v-else>☀️</span>
               </button>
-              <select v-model="locale" @change="changeLocale" class="locale-select">
-                <option value="en">EN</option>
-                <option value="ru">RU</option>
-              </select>
             </div>
           </div>
         </div>
@@ -33,45 +29,45 @@
         <aside class="sidebar">
           <nav class="sidebar-nav">
             <div class="nav-section">
-              <h3 class="nav-section-title">{{ $t('nav.sidebar.introduction') }}</h3>
-              <router-link to="/" class="nav-item">{{ $t('nav.sidebar.overview') }}</router-link>
+              <h3 class="nav-section-title">Introduction</h3>
+              <router-link to="/" class="nav-item">Overview</router-link>
             </div>
             <div class="nav-section">
-              <h3 class="nav-section-title">{{ $t('nav.sidebar.gettingStarted') }}</h3>
-              <router-link to="/getting-started" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && (!hash && !currentHash) }">{{ $t('nav.sidebar.installation') }}</router-link>
-              <a href="#first-steps" @click.prevent="scrollToSection('first-steps')" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && currentHash === 'first-steps' }">{{ $t('nav.sidebar.firstSteps') }}</a>
-              <a href="#features" @click.prevent="scrollToSection('features')" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && currentHash === 'features' }">{{ $t('nav.sidebar.features') }}</a>
+              <h3 class="nav-section-title">Getting started</h3>
+              <router-link to="/getting-started" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && (!hash && !currentHash) }">Installation</router-link>
+              <a href="#first-steps" @click.prevent="scrollToSection('first-steps')" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && currentHash === 'first-steps' }">First steps</a>
+              <a href="#features" @click.prevent="scrollToSection('features')" class="nav-item" :class="{ 'nav-item-active': isGettingStartedPage && currentHash === 'features' }">Features</a>
             </div>
             <div class="nav-section">
-              <h3 class="nav-section-title">{{ $t('nav.sidebar.guides') }}</h3>
-              <a href="#writing-nestfile" @click.prevent="scrollToSection('writing-nestfile')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && (currentHash === 'writing-nestfile' || (!currentHash && !hash && route.path === '/guides')) }">{{ $t('nav.sidebar.writingNestfile') }}</a>
-              <a href="#parameters" @click.prevent="scrollToSection('parameters')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'parameters' }">{{ $t('nav.sidebar.parameters') }}</a>
-              <a href="#aliases" @click.prevent="scrollToSection('aliases')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'aliases' }">{{ $t('nav.sidebar.aliases') }}</a>
-              <a href="#directives" @click.prevent="scrollToSection('directives')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'directives' }">{{ $t('nav.sidebar.directives') }}</a>
-              <a href="#nested-commands" @click.prevent="scrollToSection('nested-commands')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'nested-commands' }">{{ $t('nav.sidebar.nestedCommands') }}</a>
-              <a href="#templates" @click.prevent="scrollToSection('templates')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'templates' }">{{ $t('nav.sidebar.templates') }}</a>
-              <a href="#variables" @click.prevent="scrollToSection('variables')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'variables' }">{{ $t('nav.sidebar.variables') }}</a>
-              <a href="#functions" @click.prevent="scrollToSection('functions')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'functions' }">{{ $t('nav.sidebar.functions') }}</a>
-              <a href="#dependencies" @click.prevent="scrollToSection('dependencies')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'dependencies' }">{{ $t('nav.sidebar.dependencies') }}</a>
-              <a href="#before-after-fallback" @click.prevent="scrollToSection('before-after-fallback')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'before-after-fallback' }">{{ $t('nav.sidebar.beforeAfterFallback') }}</a>
-              <a href="#include" @click.prevent="scrollToSection('include')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'include' }">{{ $t('nav.sidebar.include') }}</a>
-              <a href="#conditional" @click.prevent="scrollToSection('conditional')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'conditional' }">{{ $t('nav.sidebar.conditional') }}</a>
-              <a href="#validation" @click.prevent="scrollToSection('validation')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'validation' }">{{ $t('nav.sidebar.validation') }}</a>
-              <a href="#logging" @click.prevent="scrollToSection('logging')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'logging' }">{{ $t('nav.sidebar.logging') }}</a>
-              <a href="#wildcard" @click.prevent="scrollToSection('wildcard')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'wildcard' }">{{ $t('nav.sidebar.wildcard') }}</a>
-              <a href="#privileged" @click.prevent="scrollToSection('privileged')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'privileged' }">{{ $t('nav.sidebar.privileged') }}</a>
-              <a href="#multiline" @click.prevent="scrollToSection('multiline')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'multiline' }">{{ $t('nav.sidebar.multiline') }}</a>
+              <h3 class="nav-section-title">Guides</h3>
+              <a href="#writing-nestfile" @click.prevent="scrollToSection('writing-nestfile')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && (currentHash === 'writing-nestfile' || (!currentHash && !hash && route.path === '/guides')) }">Writing Nestfile</a>
+              <a href="#parameters" @click.prevent="scrollToSection('parameters')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'parameters' }">Parameters</a>
+              <a href="#aliases" @click.prevent="scrollToSection('aliases')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'aliases' }">Aliases</a>
+              <a href="#directives" @click.prevent="scrollToSection('directives')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'directives' }">Directives</a>
+              <a href="#nested-commands" @click.prevent="scrollToSection('nested-commands')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'nested-commands' }">Nested Commands</a>
+              <a href="#templates" @click.prevent="scrollToSection('templates')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'templates' }">Templates</a>
+              <a href="#variables" @click.prevent="scrollToSection('variables')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'variables' }">Variables</a>
+              <a href="#functions" @click.prevent="scrollToSection('functions')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'functions' }">Functions</a>
+              <a href="#dependencies" @click.prevent="scrollToSection('dependencies')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'dependencies' }">Dependencies</a>
+              <a href="#before-after-fallback" @click.prevent="scrollToSection('before-after-fallback')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'before-after-fallback' }">Before, After, and Fallback</a>
+              <a href="#include" @click.prevent="scrollToSection('include')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'include' }">Include</a>
+              <a href="#conditional" @click.prevent="scrollToSection('conditional')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'conditional' }">Conditional</a>
+              <a href="#validation" @click.prevent="scrollToSection('validation')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'validation' }">Validation</a>
+              <a href="#logging" @click.prevent="scrollToSection('logging')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'logging' }">Logging</a>
+              <a href="#wildcard" @click.prevent="scrollToSection('wildcard')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'wildcard' }">Wildcard Parameters</a>
+              <a href="#privileged" @click.prevent="scrollToSection('privileged')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'privileged' }">Privileged Access</a>
+              <a href="#multiline" @click.prevent="scrollToSection('multiline')" class="nav-item" :class="{ 'nav-item-active': isGuidesPage && currentHash === 'multiline' }">Multiline Scripts</a>
             </div>
             <div class="nav-section">
-              <h3 class="nav-section-title">{{ $t('nav.sidebar.concepts') }}</h3>
-              <router-link to="/concepts" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && (!hash && !currentHash) }">{{ $t('nav.sidebar.projects') }}</router-link>
-              <a href="#commands" @click.prevent="scrollToSection('commands')" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && currentHash === 'commands' }">{{ $t('nav.sidebar.commands') }}</a>
-              <a href="#templates" @click.prevent="scrollToSection('templates')" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && currentHash === 'templates' }">{{ $t('nav.sidebar.templates') }}</a>
+              <h3 class="nav-section-title">Concepts</h3>
+              <router-link to="/concepts" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && (!hash && !currentHash) }">Projects</router-link>
+              <a href="#commands" @click.prevent="scrollToSection('commands')" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && currentHash === 'commands' }">Commands</a>
+              <a href="#templates" @click.prevent="scrollToSection('templates')" class="nav-item" :class="{ 'nav-item-active': isConceptsPage && currentHash === 'templates' }">Templates</a>
             </div>
             <div class="nav-section">
-              <h3 class="nav-section-title">{{ $t('nav.sidebar.reference') }}</h3>
-              <router-link to="/reference" class="nav-item" :class="{ 'nav-item-active': isReferencePage && (!hash && !currentHash) }">{{ $t('nav.sidebar.cliReference') }}</router-link>
-              <a href="#configuration" @click.prevent="scrollToSection('configuration')" class="nav-item" :class="{ 'nav-item-active': isReferencePage && currentHash === 'configuration' }">{{ $t('nav.sidebar.configuration') }}</a>
+              <h3 class="nav-section-title">Reference</h3>
+              <router-link to="/reference" class="nav-item" :class="{ 'nav-item-active': isReferencePage && (!hash && !currentHash) }">CLI Reference</router-link>
+              <a href="#configuration" @click.prevent="scrollToSection('configuration')" class="nav-item" :class="{ 'nav-item-active': isReferencePage && currentHash === 'configuration' }">Configuration</a>
             </div>
           </nav>
         </aside>
@@ -85,29 +81,12 @@
 
 <script setup lang="ts">
 import { onMounted, ref, onUnmounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '../composables/useTheme'
 
-const { locale: i18nLocale } = useI18n()
 const { theme, toggleTheme } = useTheme()
 const route = useRoute()
 const router = useRouter()
-
-// Create a local ref for locale to avoid issues with i18n's computed ref
-// Ensure we always have a valid locale value
-const getValidLocale = (): string => {
-  const saved = localStorage.getItem('locale')
-  if (saved === 'en' || saved === 'ru') {
-    return saved
-  }
-  const current = i18nLocale.value
-  if (current === 'en' || current === 'ru') {
-    return current
-  }
-  return 'en'
-}
-const locale = ref<string>(getValidLocale())
 
 const logoPath = `${import.meta.env.BASE_URL}Nest.png`
 const currentHash = ref('')
@@ -180,23 +159,6 @@ const handleScroll = () => {
   getActiveSectionFromScroll()
 }
 
-// Sync locale with i18n
-watch(locale, (newLocale) => {
-  if (newLocale === 'en' || newLocale === 'ru') {
-    // Only update if different to avoid infinite loops
-    if (i18nLocale.value !== newLocale) {
-      i18nLocale.value = newLocale
-    }
-  }
-})
-
-watch(() => i18nLocale.value, (newLocale) => {
-  // Only sync if i18nLocale has a valid value and it's different
-  if ((newLocale === 'en' || newLocale === 'ru') && locale.value !== newLocale) {
-    locale.value = newLocale
-  }
-}, { immediate: true })
-
 // Watch route changes
 watch(() => route.path, () => {
   updateActiveState()
@@ -239,15 +201,7 @@ watch(() => route.hash, (newHash) => {
   }
 })
 
-  // Initialize locale from localStorage on mount
 onMounted(() => {
-  const savedLocale = localStorage.getItem('locale')
-  const validLocale = (savedLocale === 'en' || savedLocale === 'ru') ? savedLocale : 'en'
-  locale.value = validLocale
-  if (i18nLocale.value !== validLocale) {
-    i18nLocale.value = validLocale
-  }
-  
   // Initial state update
   updateActiveState()
   
@@ -399,14 +353,6 @@ const performScroll = (sectionId: string) => {
   
   tryScroll()
 }
-
-const changeLocale = () => {
-  const newLocale = locale.value as string
-  if (newLocale && (newLocale === 'en' || newLocale === 'ru')) {
-    localStorage.setItem('locale', newLocale)
-    // The watch will handle syncing with i18nLocale
-  }
-}
 </script>
 
 <style scoped>
@@ -495,26 +441,6 @@ const changeLocale = () => {
 
 .control-btn:hover {
   background-color: var(--color-bg-secondary);
-  border-color: var(--color-primary);
-}
-
-.locale-select {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background-color: var(--color-bg);
-  color: var(--color-text);
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.locale-select:hover {
-  border-color: var(--color-primary);
-}
-
-.locale-select:focus {
-  outline: none;
   border-color: var(--color-primary);
 }
 
@@ -651,4 +577,3 @@ const changeLocale = () => {
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 </style>
-

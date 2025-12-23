@@ -1,34 +1,34 @@
 <template>
   <Layout>
     <div class="concepts">
-      <h1>{{ $t('concepts.title') }}</h1>
+      <h1>Concepts</h1>
       
       <section id="projects">
-        <h2>{{ $t('concepts.projects.title') }}</h2>
+        <h2>Projects</h2>
         <p>
-          {{ $t('concepts.projects.desc') }}
+          Nest manages project commands through a Nestfile located in your project root. This file defines all available commands, their parameters, and execution behavior.
         </p>
         
-        <h3>{{ $t('concepts.projects.fileConvention') }}</h3>
+        <h3>File Convention</h3>
         <ul>
-          <li><strong>{{ $t('concepts.projects.filename') }}</strong>: <code>Nestfile</code> ({{ $t('concepts.projects.filenameValue') }})</li>
-          <li><strong>{{ $t('concepts.projects.location') }}</strong>: {{ $t('concepts.projects.locationValue') }}</li>
+          <li><strong>Filename</strong>: <code>Nestfile</code> (Nestfile (no extension))</li>
+          <li><strong>Location</strong>: Project root directory</li>
         </ul>
       </section>
 
       <section id="commands">
-        <h2>{{ $t('concepts.commands.title') }}</h2>
+        <h2>Commands</h2>
         <p>
-          {{ $t('concepts.commands.desc') }}
+          Commands are the building blocks of Nest. Each command can have:
         </p>
         <ul>
-          <li><strong>{{ $t('concepts.commands.parameters') }}</strong></li>
-          <li><strong>{{ $t('concepts.commands.directives') }}</strong></li>
-          <li><strong>{{ $t('concepts.commands.subcommands') }}</strong></li>
-          <li><strong>{{ $t('concepts.commands.defaultSubcommand') }}</strong></li>
+          <li><strong>Parameters - Input values with types and defaults</strong></li>
+          <li><strong>Directives - Configuration for execution (script, env, cwd, etc.)</strong></li>
+          <li><strong>Subcommands - Nested commands for organization</strong></li>
+          <li><strong>Default subcommand - Executed when no subcommand is specified</strong></li>
         </ul>
 
-        <h3>{{ $t('concepts.commands.structure') }}</h3>
+        <h3>Command Structure</h3>
         <pre v-pre><code>command_name(param1: str, !param2|p: bool = false):
     > desc: Command description
     > cwd: ./path
@@ -39,21 +39,21 @@
       </section>
 
       <section id="templates">
-        <h2>{{ $t('concepts.templates.title') }}</h2>
-        <p>{{ $t('concepts.templates.desc') }}</p>
+        <h2>Templates</h2>
+        <p>Nest uses template variables to inject values into scripts. Variables are replaced with their actual values before script execution.</p>
 
-        <h3>{{ $t('concepts.templates.parameterSubstitution') }}</h3>
-        <p>{{ $t('concepts.templates.useParamName') }}</p>
+        <h3>Parameter Substitution</h3>
+        <p>Use [param_name] to reference command parameters:</p>
         <pre v-pre><code>greet(name: str):
     > script: echo "Hello {{name}}!"</code></pre>
 
-        <h3>{{ $t('concepts.templates.specialVariables') }}</h3>
+        <h3>Special Variables</h3>
         <ul>
-          <li><code v-pre>{{now}}</code> - {{ $t('concepts.templates.now') }}</li>
-          <li><code v-pre>{{user}}</code> - {{ $t('concepts.templates.user') }}</li>
+          <li><code v-pre>{{now}}</code> - [now] - Current UTC time in RFC3339 format</li>
+          <li><code v-pre>{{user}}</code> - [user] - Current user from $USER environment variable</li>
         </ul>
 
-        <h3>{{ $t('concepts.templates.example') }}</h3>
+        <h3>Example</h3>
         <pre v-pre><code>deploy(version: str):
     > env: DEPLOYER={{user}}
     > env: BUILD_TIME={{now}}
@@ -63,24 +63,24 @@
       </section>
 
       <section id="execution">
-        <h2>{{ $t('concepts.execution.title') }}</h2>
+        <h2>Execution</h2>
         <p>
-          {{ $t('concepts.execution.desc') }}
+          When a command is executed, Nest:
         </p>
         <ol>
-          <li>{{ $t('concepts.execution.step1') }}</li>
-          <li>{{ $t('concepts.execution.step2') }}</li>
-          <li>{{ $t('concepts.execution.step3') }}</li>
-          <li>{{ $t('concepts.execution.step4') }}</li>
-          <li>{{ $t('concepts.execution.step5') }}</li>
+          <li>Parses the command and its parameters from the CLI</li>
+          <li>Loads environment variables from directives</li>
+          <li>Processes template variables in the script</li>
+          <li>Sets the working directory (if specified)</li>
+          <li>Executes the script with the configured environment</li>
         </ol>
 
-        <h3>{{ $t('concepts.execution.envVars') }}</h3>
-        <p>{{ $t('concepts.execution.envVarsDesc') }}</p>
+        <h3>Environment Variables</h3>
+        <p>Environment variables can be set in multiple ways:</p>
         <ul>
-          <li>{{ $t('concepts.execution.directAssignment') }}</li>
-          <li>{{ $t('concepts.execution.loadFromFile') }}</li>
-          <li>{{ $t('concepts.execution.multipleDirectives') }}</li>
+          <li>Direct assignment: > env: NODE_ENV=production</li>
+          <li>Load from file: > env: .env.local</li>
+          <li>Multiple directives: Each > env: directive adds to the environment</li>
         </ul>
       </section>
     </div>
