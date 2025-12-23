@@ -1,6 +1,13 @@
 import * as vscode from "vscode";
 import { validateNestfileDocument } from "./validator";
 import { NestfileCompletionProvider } from "./completion";
+import { NestfileDefinitionProvider } from "./definition";
+import { NestfileHoverProvider } from "./hover";
+import { NestfileDocumentSymbolProvider } from "./symbols";
+import { NestfileReferenceProvider } from "./references";
+import { NestfileCodeActionProvider } from "./codeActions";
+import { NestfileFormatter } from "./formatting";
+import { NestfileCodeLensProvider } from "./codeLens";
 
 export function activate(context: vscode.ExtensionContext) {
   // Create diagnostic collection for nestfile validation errors
@@ -26,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Debounce validation: wait 300ms after last change
     const timer = setTimeout(() => {
       try {
-        const result = validateNestfileDocument(doc.getText());
+        const result = validateNestfileDocument(doc.getText(), {}, doc.uri);
         diagnostics.set(doc.uri, result);
       } catch (error) {
         // If validation fails, show error in output
@@ -46,7 +53,7 @@ export function activate(context: vscode.ExtensionContext) {
       // Immediate validation on open (no debounce needed)
       if (doc.languageId === "nestfile") {
         try {
-          const result = validateNestfileDocument(doc.getText());
+          const result = validateNestfileDocument(doc.getText(), {}, doc.uri);
           diagnostics.set(doc.uri, result);
         } catch (error) {
           console.error("Validation error:", error);
@@ -80,7 +87,15 @@ export function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         return;
       }
-      validateActiveDocument(editor.document);
+      if (editor) {
+        try {
+          const result = validateNestfileDocument(editor.document.getText(), {}, editor.document.uri);
+          diagnostics.set(editor.document.uri, result);
+        } catch (error) {
+          console.error("Validation error:", error);
+          diagnostics.set(editor.document.uri, []);
+        }
+      }
     }
   );
 
@@ -92,7 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
       const text = editor.document.getText();
-      const ast = validateNestfileDocument(text, { returnAst: true });
+      const ast = validateNestfileDocument(text, { returnAst: true }, editor.document.uri);
       const output = vscode.window.createOutputChannel("Nestfile AST");
       output.clear();
       output.appendLine(JSON.stringify(ast, null, 2));
@@ -113,6 +128,58 @@ export function activate(context: vscode.ExtensionContext) {
     "["  // Trigger on [ (for directive modifiers like [hide])
   );
   context.subscriptions.push(completionProvider);
+
+  // Register definition provider (for @include and other definitions)
+  const definitionProvider = vscode.languages.registerDefinitionProvider(
+    "nestfile",
+    new NestfileDefinitionProvider()
+  );
+  context.subscriptions.push(definitionProvider);
+
+  // Register hover provider
+  const hoverProvider = vscode.languages.registerHoverProvider(
+    "nestfile",
+    new NestfileHoverProvider()
+  );
+  context.subscriptions.push(hoverProvider);
+
+  // Register document symbols provider (Outline)
+  const documentSymbolProvider = vscode.languages.registerDocumentSymbolProvider(
+    "nestfile",
+    new NestfileDocumentSymbolProvider()
+  );
+  context.subscriptions.push(documentSymbolProvider);
+
+  // Register reference provider (Find References)
+  const referenceProvider = vscode.languages.registerReferenceProvider(
+    "nestfile",
+    new NestfileReferenceProvider()
+  );
+  context.subscriptions.push(referenceProvider);
+
+  // Register code actions provider (Quick Fixes)
+  const codeActionProvider = vscode.languages.registerCodeActionsProvider(
+    "nestfile",
+    new NestfileCodeActionProvider(),
+    {
+      providedCodeActionKinds: [vscode.CodeActionKind.QuickFix]
+    }
+  );
+  context.subscriptions.push(codeActionProvider);
+
+  // Register document formatter
+  const formatter = vscode.languages.registerDocumentFormattingEditProvider(
+    "nestfile",
+    new NestfileFormatter()
+  );
+  context.subscriptions.push(formatter);
+
+  // Register code lens provider (shows reference counts)
+  const codeLensProvider = vscode.languages.registerCodeLensProvider(
+    "nestfile",
+    new NestfileCodeLensProvider()
+  );
+  context.subscriptions.push(codeLensProvider);
 
   // Initial validation for already-open document
   validateActiveDocument(vscode.window.activeTextEditor?.document);

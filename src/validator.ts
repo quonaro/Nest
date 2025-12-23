@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 
 export interface ValidateOptions {
   returnAst?: boolean;
@@ -49,15 +51,19 @@ const VALID_DIRECTIVES = new Set([
 const RESERVED_SHORT_OPTIONS = new Set(["h", "V", "v", "n", "c"]);
 
 export function validateNestfileDocument(
-  text: string
-): vscode.Diagnostic[];
-export function validateNestfileDocument(
   text: string,
-  options: ValidateOptions & { returnAst: true }
+  options: ValidateOptions & { returnAst: true },
+  documentUri?: vscode.Uri
 ): { commands: NestfileCommand[] };
 export function validateNestfileDocument(
   text: string,
-  options: ValidateOptions = {}
+  options?: ValidateOptions,
+  documentUri?: vscode.Uri
+): vscode.Diagnostic[];
+export function validateNestfileDocument(
+  text: string,
+  options: ValidateOptions = {},
+  documentUri?: vscode.Uri
 ): vscode.Diagnostic[] | { commands: NestfileCommand[] } {
   const lines = text.split(/\r?\n/);
   const commands: NestfileCommand[] = [];
@@ -294,6 +300,83 @@ export function validateNestfileDocument(
         );
       }
 
+      // Check for multiline script directives (script, before, after, fallback, finaly)
+      const multilineDirectives = new Set(["script", "before", "after", "fallback", "finaly"]);
+      if (multilineDirectives.has(directiveBase)) {
+        const baseIndentSpaces = rawLine.match(/^(\s*)/)?.[1]?.length || 0;
+        
+        if (value === "|") {
+          // Check if the multiline block is empty
+          let hasContent = false;
+          const expectedIndentSpaces = baseIndentSpaces + 4; // One level deeper (4 spaces)
+          
+          // Look ahead to find content in the multiline block
+          for (let j = i + 1; j < lines.length; j++) {
+            const nextLine = lines[j];
+            const nextTrimmed = nextLine.trim();
+            const nextIndentSpaces = nextLine.match(/^(\s*)/)?.[1]?.length || 0;
+            
+            // If we hit a line with indent <= base indent and it's not empty, block ended
+            if (nextIndentSpaces <= baseIndentSpaces && nextTrimmed && !nextTrimmed.startsWith("#")) {
+              break;
+            }
+            
+            // If we hit an empty line at base indent, block ended
+            if (nextIndentSpaces === baseIndentSpaces && !nextTrimmed) {
+              break;
+            }
+            
+            // If we have a line with proper indent and content, block has content
+            if (nextIndentSpaces >= expectedIndentSpaces && nextTrimmed && !nextTrimmed.startsWith("#")) {
+              hasContent = true;
+              break;
+            }
+          }
+          
+          if (!hasContent) {
+            const pipeIndex = rawLine.indexOf("|");
+            const pipeEnd = pipeIndex >= 0 ? pipeIndex + 1 : rawLine.length;
+            
+            diagnostics.push(
+              createDiagnostic(
+                lineNumber,
+                pipeIndex >= 0 ? pipeIndex : rawLine.length - 1,
+                pipeEnd,
+                "Multiline script block is empty. Add script content after '|' or use single-line format without '|'.",
+                vscode.DiagnosticSeverity.Error
+              )
+            );
+          }
+        } else {
+          // Single line format - check if there are indented lines after (missing | for multiline)
+          if (i + 1 < lines.length) {
+            const nextLine = lines[i + 1];
+            const nextTrimmed = nextLine.trim();
+            const nextIndentSpaces = nextLine.match(/^(\s*)/)?.[1]?.length || 0;
+            const expectedIndentSpaces = baseIndentSpaces + 4; // One level deeper (4 spaces)
+            
+            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
+            if (nextIndentSpaces >= expectedIndentSpaces && 
+                nextTrimmed && 
+                !nextTrimmed.startsWith("#") && 
+                !nextTrimmed.startsWith(">")) {
+              const colonIndex = rawLine.indexOf(":");
+              const directiveEnd = colonIndex >= 0 ? colonIndex + 1 : rawLine.length;
+              
+              diagnostics.push(
+                createDiagnostic(
+                  lineNumber,
+                  colonIndex >= 0 ? colonIndex : rawLine.length - 1,
+                  directiveEnd,
+                  `Multiline script detected but missing '|' after '${directiveBase}:'. Add '|' for multiline scripts or put script content on the same line.`,
+                  vscode.DiagnosticSeverity.Error
+                )
+              );
+            }
+          }
+        }
+      }
+
       continue;
     }
 
@@ -346,6 +429,61 @@ export function validateNestfileDocument(
             vscode.DiagnosticSeverity.Error
           )
         );
+      } else if (documentUri) {
+        // Check if included file exists
+        try {
+          const baseDir = path.dirname(documentUri.fsPath);
+          let includePath: string;
+          
+          if (path.isAbsolute(pathPart)) {
+            includePath = pathPart;
+          } else {
+            includePath = path.resolve(baseDir, pathPart);
+          }
+          
+          // Handle wildcards and directories (check if base path exists)
+          if (pathPart.includes("*") || pathPart.endsWith("/") || pathPart.endsWith("\\")) {
+            // For wildcards and directories, check if the directory exists
+            const dirPath = pathPart.includes("*") 
+              ? path.dirname(includePath)
+              : includePath.endsWith("/") || includePath.endsWith("\\")
+              ? includePath.slice(0, -1)
+              : includePath;
+            
+            if (!fs.existsSync(dirPath)) {
+              const pathStart = rawLine.indexOf(pathPart);
+              const pathEnd = pathStart >= 0 ? pathStart + pathPart.length : rawLine.length;
+              
+              diagnostics.push(
+                createDiagnostic(
+                  lineNumber,
+                  Math.max(0, pathStart),
+                  pathEnd,
+                  `Include path not found: ${pathPart}`,
+                  vscode.DiagnosticSeverity.Warning
+                )
+              );
+            }
+          } else {
+            // Check if file exists
+            if (!fs.existsSync(includePath)) {
+              const pathStart = rawLine.indexOf(pathPart);
+              const pathEnd = pathStart >= 0 ? pathStart + pathPart.length : rawLine.length;
+              
+              diagnostics.push(
+                createDiagnostic(
+                  lineNumber,
+                  Math.max(0, pathStart),
+                  pathEnd,
+                  `Include file not found: ${pathPart}`,
+                  vscode.DiagnosticSeverity.Warning
+                )
+              );
+            }
+          }
+        } catch (error) {
+          // Silently ignore file system errors during validation
+        }
       }
     }
   }

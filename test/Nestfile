@@ -3,7 +3,7 @@
 @const COMPANY = "Test Company"
 
 @function print_header(env: str):
-    @var LOCAL_ENV = "{{env}}"
+@var LOCAL_ENV = "{{env}}"
     echo "=== {{APP_NAME}} v{{VERSION}} ({{COMPANY}}) ==="
     echo "Environment: {{LOCAL_ENV}}"
 
@@ -60,11 +60,10 @@ deploy(env: str, !force|f: bool = false, *rest[2]):
     > if: env == "production" && force == "true"
     > script: |
         echo "FORCED deploy to PRODUCTION"
-        echo "Extra args: {{*rest}}"
+        echo "Exntra args: {{*rest}}"
     > elif: env == "production"
-    > script: |
-        echo "Deploy to PRODUCTION (no force)"
-        echo "Extra args: {{*rest}}"
+    > script: echo "Deploy to PRODUCTION (no force)"
+
     > elif: env == "staging"
     > script: |
         echo "Deploy to STAGING"

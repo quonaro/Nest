@@ -5,7 +5,15 @@ Language support for Nest task runner configuration files (`Nestfile`, `nestfile
 Features:
 
 - Syntax highlighting based on the real Nestfile grammar from the CLI
-- Basic inline validation (diagnostics) for common mistakes
+- Inline validation (diagnostics) for common mistakes
+- Autocompletion for directives, commands, variables, parameters, and template variables
+- Hover information for directives, variables, and commands
+- Go to Definition (F12) for variables, commands, and @include files
+- Find References (Shift+F12) for variables and commands
+- Quick Fixes (Code Actions) for common errors
+- Document formatting
+- Document Symbols (Outline navigation - Ctrl+Shift+O)
+- Code Lens showing reference counts
 - Snippets for typical Nestfile patterns (commands, groups, variables, functions, includes, directives)
 
 ### Supported syntax
@@ -33,6 +41,8 @@ The extension runs a lightweight text validator for files with language `nestfil
 - Group commands with both children and `> script` (informational)
 - Unknown directives (`> something:` that does not exist in the Nest syntax)
 - Invalid `> logs:` format (expects `logs:json <path>` or `logs:txt <path>`)
+- Invalid `> env:` format (expects `KEY=VALUE` or `.env` file path)
+- Missing `@include` files (warning if included file doesn't exist)
 - Obvious syntax issues in `@var`, `@const`, `@function`, `@include`
 - Likely unclosed `$(...)` substitutions in directive values
 
@@ -57,6 +67,48 @@ The extension contributes snippets for:
 
 Type the snippet prefix (for example `nest-command`, `nest-group`, `nest-var`, `nest-include`)
 and accept the suggestion to insert a template.
+
+### Language Features
+
+#### Autocompletion
+
+- **Directives**: Type `>` to get suggestions for all available directives
+- **Meta commands**: Type `@` to get suggestions for `@var`, `@const`, `@function`, `@include`
+- **Template variables**: Type `{{` to get suggestions for variables and command parameters
+- **Command names**: Get suggestions when typing in `depends:` directives
+- **Parameter types**: Get suggestions for `str`, `bool`, `num`, `arr` types
+- **Environment files**: Get `.env` file suggestions when typing `> env:`
+
+#### Hover Information
+
+- Hover over directives to see their descriptions
+- Hover over template variables `{{VAR}}` to see their values
+- Hover over command names in `depends:` to see command descriptions
+
+#### Navigation
+
+- **Go to Definition (F12)**: 
+  - Jump to variable definition from `{{VAR}}`
+  - Jump to command definition from `depends: command`
+  - Open included files from `@include path.nest`
+- **Find References (Shift+F12)**: Find all usages of variables and commands
+- **Outline (Ctrl+Shift+O)**: Navigate document structure - see all commands, variables, and functions
+
+#### Quick Fixes
+
+- Fix invalid parameter types (suggest correct type)
+- Add missing `> script:` directive
+- Fix typos in directive names (suggest correct directive)
+
+#### Formatting
+
+- Format entire document (Shift+Alt+F)
+- Consistent indentation (4 spaces)
+- Proper alignment of directives
+
+#### Code Lens
+
+- See reference counts above variable and command definitions
 
 ### How to build and test the extension
 

@@ -293,7 +293,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
     // Check if we're inside a template variable {{...}}
     const templateInfo = isInsideTemplate(fullText, offset);
     if (templateInfo.inside) {
-      const commands = validateNestfileDocument(fullText, { returnAst: true }).commands;
+      const commands = validateNestfileDocument(fullText, { returnAst: true }, document.uri).commands;
       const variables = extractVariables(fullText);
       const parameters = getCommandParameters(document, position, commands);
       
@@ -317,7 +317,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
     }
     
     // Check if we're inside a command (for directive suggestions)
-    const commands = validateNestfileDocument(fullText, { returnAst: true }).commands;
+    const commands = validateNestfileDocument(fullText, { returnAst: true }, document.uri).commands;
     const currentCommand = findCommandAtLine(document, position, commands);
     const trimmedBefore = textBeforeCursor.trim();
     const lineIndent = (textBeforeCursor.match(/^(\s*)/)?.[1]?.length || 0);
@@ -494,7 +494,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
     // Check if we're typing after "depends:" - suggest command names
     const dependsMatch = textBeforeCursor.match(/^(\s*>\s*depends:\s*)(.*)$/);
     if (dependsMatch) {
-      const commands = validateNestfileDocument(fullText, { returnAst: true }).commands;
+      const commands = validateNestfileDocument(fullText, { returnAst: true }, document.uri).commands;
       const commandNames = extractCommandNames(commands);
       const existing = dependsMatch[2].split(",").map(s => s.trim()).filter(s => s);
       
