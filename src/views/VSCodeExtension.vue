@@ -1,99 +1,99 @@
 <template>
   <Layout>
     <div class="vscode-extension">
-      <h1>{{ $t('vscodeExtension.title') }}</h1>
+      <h1>VS Code Extension</h1>
       
       <section id="overview">
-        <h2>{{ $t('vscodeExtension.overview.title') }}</h2>
-        <p>{{ $t('vscodeExtension.overview.desc') }}</p>
+        <h2>Overview</h2>
+        <p>The VS Code extension provides comprehensive language support for Nestfile, including syntax highlighting, validation, autocompletion, and more.</p>
       </section>
 
       <section id="features">
-        <h2>{{ $t('vscodeExtension.features.title') }}</h2>
+        <h2>Features</h2>
         <ul>
-          <li><strong>{{ $t('vscodeExtension.features.syntaxHighlighting') }}</strong> - {{ $t('vscodeExtension.features.syntaxHighlightingDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.validation') }}</strong> - {{ $t('vscodeExtension.features.validationDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.autocompletion') }}</strong> - {{ $t('vscodeExtension.features.autocompletionDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.hover') }}</strong> - {{ $t('vscodeExtension.features.hoverDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.goToDefinition') }}</strong> - {{ $t('vscodeExtension.features.goToDefinitionDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.findReferences') }}</strong> - {{ $t('vscodeExtension.features.findReferencesDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.codeActions') }}</strong> - {{ $t('vscodeExtension.features.codeActionsDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.formatting') }}</strong> - {{ $t('vscodeExtension.features.formattingDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.snippets') }}</strong> - {{ $t('vscodeExtension.features.snippetsDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.features.codeLens') }}</strong> - {{ $t('vscodeExtension.features.codeLensDesc') }}</li>
+          <li><strong>Syntax Highlighting</strong> - Colorized syntax for better readability</li>
+          <li><strong>Validation</strong> - Real-time error checking and validation</li>
+          <li><strong>Autocompletion</strong> - Intelligent code completion for commands, directives, and parameters</li>
+          <li><strong>Hover Information</strong> - Detailed information on hover</li>
+          <li><strong>Go to Definition</strong> - Navigate to command and function definitions</li>
+          <li><strong>Find References</strong> - Find all references to commands and functions</li>
+          <li><strong>Code Actions</strong> - Quick fixes and refactoring options</li>
+          <li><strong>Formatting</strong> - Code formatting support</li>
+          <li><strong>Snippets</strong> - Code snippets for common patterns</li>
+          <li><strong>Code Lens</strong> - Additional context and actions</li>
         </ul>
       </section>
 
       <section id="installation">
-        <h2>{{ $t('vscodeExtension.installation.title') }}</h2>
+        <h2>Installation</h2>
         
-        <h3>{{ $t('vscodeExtension.installation.marketplace') }}</h3>
+        <h3>From Marketplace</h3>
         <ol>
-          <li>{{ $t('vscodeExtension.installation.marketplaceStep1') }}</li>
-          <li>{{ $t('vscodeExtension.installation.marketplaceStep2') }}</li>
-          <li>{{ $t('vscodeExtension.installation.marketplaceStep3') }}</li>
+          <li>Open VS Code</li>
+          <li>Go to Extensions view (Ctrl+Shift+X / Cmd+Shift+X)</li>
+          <li>Search for "Nestfile Language Support"</li>
         </ol>
 
-        <h3>{{ $t('vscodeExtension.installation.vsix') }}</h3>
+        <h3>From VSIX</h3>
         <ol>
-          <li>{{ $t('vscodeExtension.installation.vsixStep1') }}</li>
-          <li>{{ $t('vscodeExtension.installation.vsixStep2') }}</li>
-          <li>{{ $t('vscodeExtension.installation.vsixStep3') }}</li>
-          <li>{{ $t('vscodeExtension.installation.vsixStep4') }}</li>
+          <li>Download the .vsix file from the releases page</li>
+          <li>Open VS Code</li>
+          <li>Go to Extensions view</li>
+          <li>Click the "..." menu and select "Install from VSIX..."</li>
         </ol>
       </section>
 
       <section id="usage">
-        <h2>{{ $t('vscodeExtension.usage.title') }}</h2>
+        <h2>Usage</h2>
         
-        <h3>{{ $t('vscodeExtension.usage.syntaxHighlighting') }}</h3>
-        <p>{{ $t('vscodeExtension.usage.syntaxHighlightingDesc') }}</p>
+        <h3>Syntax Highlighting</h3>
+        <p>The extension automatically highlights Nestfile syntax when you open .nest files or files named "Nestfile".</p>
 
-        <h3>{{ $t('vscodeExtension.usage.autocompletion') }}</h3>
-        <p>{{ $t('vscodeExtension.usage.autocompletionDesc') }}</p>
+        <h3>Autocompletion</h3>
+        <p>Autocompletion is available for:</p>
         <ul>
-          <li>{{ $t('vscodeExtension.usage.autocompletionDirectives') }}</li>
-          <li>{{ $t('vscodeExtension.usage.autocompletionMeta') }}</li>
-          <li>{{ $t('vscodeExtension.usage.autocompletionTemplates') }}</li>
-          <li>{{ $t('vscodeExtension.usage.autocompletionCommands') }}</li>
+          <li>Directives (desc, cwd, env, script, etc.)</li>
+          <li>Meta commands (@var, @const, @function, @include)</li>
+          <li>Templates and variables</li>
+          <li>Commands and parameters</li>
         </ul>
 
-        <h3>{{ $t('vscodeExtension.usage.validation') }}</h3>
-        <p>{{ $t('vscodeExtension.usage.validationDesc') }}</p>
+        <h3>Validation</h3>
+        <p>The extension validates your Nestfile and shows errors for:</p>
         <ul>
-          <li>{{ $t('vscodeExtension.usage.validationDuplicate') }}</li>
-          <li>{{ $t('vscodeExtension.usage.validationTypes') }}</li>
-          <li>{{ $t('vscodeExtension.usage.validationDirectives') }}</li>
-          <li>{{ $t('vscodeExtension.usage.validationIncludes') }}</li>
+          <li>Duplicate command definitions</li>
+          <li>Invalid parameter types</li>
+          <li>Invalid directive usage</li>
+          <li>Missing include files</li>
         </ul>
 
-        <h3>{{ $t('vscodeExtension.usage.navigation') }}</h3>
-        <p>{{ $t('vscodeExtension.usage.navigationDesc') }}</p>
+        <h3>Navigation</h3>
+        <p>Use the following shortcuts to navigate your code:</p>
         <ul>
-          <li><strong>F12</strong> - {{ $t('vscodeExtension.usage.goToDefinition') }}</li>
-          <li><strong>Shift+F12</strong> - {{ $t('vscodeExtension.usage.findReferences') }}</li>
-          <li><strong>Ctrl+Shift+O</strong> / <strong>Cmd+Shift+O</strong> - {{ $t('vscodeExtension.usage.outline') }}</li>
+          <li><strong>F12</strong> - Go to definition</li>
+          <li><strong>Shift+F12</strong> - Find references</li>
+          <li><strong>Ctrl+Shift+O</strong> / <strong>Cmd+Shift+O</strong> - Show symbol outline</li>
         </ul>
 
-        <h3>{{ $t('vscodeExtension.usage.commands') }}</h3>
-        <p>{{ $t('vscodeExtension.usage.commandsDesc') }}</p>
+        <h3>Commands</h3>
+        <p>The extension provides the following commands:</p>
         <ul>
-          <li><strong>{{ $t('vscodeExtension.usage.commandValidate') }}</strong> - {{ $t('vscodeExtension.usage.commandValidateDesc') }}</li>
-          <li><strong>{{ $t('vscodeExtension.usage.commandShowAst') }}</strong> - {{ $t('vscodeExtension.usage.commandShowAstDesc') }}</li>
+          <li><strong>Nestfile: Validate Current File</strong> - Validate the current Nestfile</li>
+          <li><strong>Nestfile: Show Parsed Commands (Debug)</strong> - Show the AST representation of commands</li>
         </ul>
       </section>
 
       <section id="supported-syntax">
-        <h2>{{ $t('vscodeExtension.supportedSyntax.title') }}</h2>
-        <p>{{ $t('vscodeExtension.supportedSyntax.desc') }}</p>
+        <h2>Supported Syntax</h2>
+        <p>The extension supports all Nestfile syntax features.</p>
         
-        <h3>{{ $t('vscodeExtension.supportedSyntax.commands') }}</h3>
+        <h3>Commands</h3>
         <pre v-pre><code>command_name(param: type = default):
     > desc: Description
     > script: echo "Hello"</code></pre>
 
-        <h3>{{ $t('vscodeExtension.supportedSyntax.directives') }}</h3>
-        <p>{{ $t('vscodeExtension.supportedSyntax.directivesDesc') }}</p>
+        <h3>Directives</h3>
+        <p>All directives are supported:</p>
         <ul>
           <li><code>> desc:</code>, <code>> cwd:</code>, <code>> env:</code>, <code>> script:</code></li>
           <li><code>> before:</code>, <code>> after:</code>, <code>> fallback:</code>, <code>> finaly:</code></li>
@@ -102,29 +102,29 @@
           <li><code>> script[hide]:</code>, <code>> before[hide]:</code>, <code>> after[hide]:</code>, <code>> fallback[hide]:</code>, <code>> finaly[hide]:</code></li>
         </ul>
 
-        <h3>{{ $t('vscodeExtension.supportedSyntax.meta') }}</h3>
+        <h3>Meta Commands</h3>
         <ul>
-          <li><code>@var</code> - {{ $t('vscodeExtension.supportedSyntax.var') }}</li>
-          <li><code>@const</code> - {{ $t('vscodeExtension.supportedSyntax.const') }}</li>
-          <li><code>@function</code> - {{ $t('vscodeExtension.supportedSyntax.function') }}</li>
-          <li><code>@include</code> - {{ $t('vscodeExtension.supportedSyntax.include') }}</li>
+          <li><code>@var</code> - Variable declarations</li>
+          <li><code>@const</code> - Constant declarations</li>
+          <li><code>@function</code> - Function definitions</li>
+          <li><code>@include</code> - Include other files</li>
         </ul>
 
-        <h3>{{ $t('vscodeExtension.supportedSyntax.templates') }}</h3>
-        <p>{{ $t('vscodeExtension.supportedSyntax.templatesDesc') }}</p>
+        <h3>Templates</h3>
+        <p>Templates are supported for variable substitution:</p>
         <ul>
-          <li><code>&#123;&#123;variable&#125;&#125;</code> - {{ $t('vscodeExtension.supportedSyntax.templateVar') }}</li>
-          <li><code>&#123;&#123;param&#125;&#125;</code> - {{ $t('vscodeExtension.supportedSyntax.templateParam') }}</li>
-          <li><code>&#123;&#123;now&#125;&#125;</code>, <code>&#123;&#123;user&#125;&#125;</code> - {{ $t('vscodeExtension.supportedSyntax.templateSpecial') }}</li>
+          <li><code>&#123;&#123;variable&#125;&#125;</code> - Variable substitution</li>
+          <li><code>&#123;&#123;param&#125;&#125;</code> - Parameter substitution</li>
+          <li><code>&#123;&#123;now&#125;&#125;</code>, <code>&#123;&#123;user&#125;&#125;</code> - Special variables</li>
         </ul>
       </section>
 
       <section id="more-info">
-        <h2>{{ $t('vscodeExtension.moreInfo.title') }}</h2>
-        <p>{{ $t('vscodeExtension.moreInfo.desc') }}</p>
+        <h2>More Information</h2>
+        <p>For more information, visit the extension repository:</p>
         <p>
           <a href="https://github.com/quonaro/Nest/tree/main/vscode-nestfile-support" target="_blank">
-            {{ $t('vscodeExtension.moreInfo.link') }}
+            VS Code Extension Repository
           </a>
         </p>
       </section>
@@ -217,4 +217,3 @@ a:hover {
   text-decoration: underline;
 }
 </style>
-

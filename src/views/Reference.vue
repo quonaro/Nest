@@ -1,95 +1,95 @@
 <template>
   <Layout>
     <div class="reference">
-      <h1>{{ $t('reference.title') }}</h1>
+      <h1>Reference</h1>
       
       <section id="cli-reference">
-        <h2>{{ $t('reference.cliReference.title') }}</h2>
+        <h2>CLI Reference</h2>
         
-        <h3>{{ $t('reference.cliReference.basicUsage') }}</h3>
+        <h3>Basic Usage</h3>
         <pre v-pre><code>nest [command] [subcommand] [arguments] [options]</code></pre>
 
-        <h3>{{ $t('reference.cliReference.globalFlags') }}</h3>
+        <h3>Global Flags</h3>
         <ul>
-          <li><code>--version</code>, <code>-V</code> - {{ $t('reference.cliReference.version') }}</li>
-          <li><code>--help</code>, <code>-h</code> - {{ $t('reference.cliReference.help') }}</li>
-          <li><code>--show &lt;format&gt;</code> - {{ $t('reference.cliReference.show') }}
+          <li><code>--version</code>, <code>-V</code> - Show version information</li>
+          <li><code>--help</code>, <code>-h</code> - Show help message</li>
+          <li><code>--show &lt;format&gt;</code> - Show commands in specified format
             <ul>
-              <li><code>json</code> - {{ $t('reference.cliReference.json') }}</li>
-              <li><code>ast</code> - {{ $t('reference.cliReference.ast') }}</li>
+              <li><code>json</code> - JSON format</li>
+              <li><code>ast</code> - AST format</li>
             </ul>
           </li>
-          <li><code>--dry-run</code>, <code>-n</code> - {{ $t('reference.cliReference.dryRun') }}</li>
-          <li><code>--verbose</code>, <code>-v</code> - {{ $t('reference.cliReference.verbose') }}</li>
-          <li><code>--example</code> - {{ $t('reference.cliReference.example') }}</li>
-          <li><code>--config</code>, <code>-c &lt;path&gt;</code> - {{ $t('reference.cliReference.config') }}</li>
-          <li><code>update</code> - {{ $t('reference.cliReference.update') }}</li>
+          <li><code>--dry-run</code>, <code>-n</code> - Show what would be executed without running</li>
+          <li><code>--verbose</code>, <code>-v</code> - Enable verbose output</li>
+          <li><code>--example</code> - Download example Nestfile</li>
+          <li><code>--config</code>, <code>-c &lt;path&gt;</code> - Specify custom config file path</li>
+          <li><code>update</code> - Update Nest CLI to latest version</li>
         </ul>
 
-        <h3>{{ $t('reference.cliReference.commandExecution') }}</h3>
-        <p>{{ $t('reference.cliReference.executionDesc') }}</p>
+        <h3>Command Execution</h3>
+        <p>Commands can be executed in various ways:</p>
         <pre v-pre><code>$ nest &lt;command&gt;
 $ nest &lt;command&gt; &lt;subcommand&gt;
 $ nest &lt;command&gt; --param value
 $ nest &lt;command&gt; positional_arg --named-arg value</code></pre>
 
-        <h3>{{ $t('reference.cliReference.helpSystem') }}</h3>
-        <p>{{ $t('reference.cliReference.helpDesc') }}</p>
+        <h3>Help System</h3>
+        <p>Get help for commands and subcommands:</p>
         <pre v-pre><code>$ nest --help
 $ nest &lt;command&gt; --help
 $ nest &lt;command&gt; &lt;subcommand&gt; --help</code></pre>
 
-        <p><em>{{ $t('reference.cliReference.configNote') }}</em></p>
+        <p><em>Note: The config file must be named "Nestfile" or "nestfile" and located in the project root, or specified with --config flag.</em></p>
       </section>
 
       <section id="configuration">
-        <h2>{{ $t('reference.configuration.title') }}</h2>
+        <h2>Configuration</h2>
         
-        <h3>{{ $t('reference.configuration.nestfileFormat') }}</h3>
-        <p>{{ $t('reference.configuration.formatDesc') }}</p>
+        <h3>Nestfile Format</h3>
+        <p>The Nestfile uses a declarative syntax to define commands, their parameters, and execution behavior.</p>
         
-        <h4>{{ $t('reference.configuration.commandDefinition') }}</h4>
+        <h4>Command Definition</h4>
         <pre v-pre><code>command_name(param1: type, !param2|alias: type = default):
     > directive: value</code></pre>
 
-        <h4>{{ $t('reference.configuration.parameterTypes') }}</h4>
+        <h4>Parameter Types</h4>
         <ul>
-          <li><code>str</code> - {{ $t('guides.parameters.str') }}</li>
-          <li><code>bool</code> - {{ $t('guides.parameters.bool') }}</li>
-          <li><code>num</code> - {{ $t('guides.parameters.num') }}</li>
-          <li><code>arr</code> - {{ $t('guides.parameters.arr') }}</li>
+          <li><code>str</code> - String values</li>
+          <li><code>bool</code> - Boolean values (true/false)</li>
+          <li><code>num</code> - Numeric values</li>
+          <li><code>arr</code> - Array of strings</li>
         </ul>
 
-        <h4>{{ $t('reference.configuration.directives') }}</h4>
+        <h4>Directives</h4>
         <ul>
-          <li><code>> desc: &lt;description&gt;</code> - {{ $t('reference.configuration.descDirective') }}</li>
-          <li><code>> cwd: &lt;path&gt;</code> - {{ $t('reference.configuration.cwdDirective') }}</li>
-          <li><code>> env: &lt;VAR=value&gt;</code> - {{ $t('reference.configuration.envDirective') }}</li>
-          <li><code>> env: &lt;.env.file&gt;</code> - {{ $t('reference.configuration.envFileDirective') }}</li>
-          <li><code>> env: ${VAR:-default}</code> - {{ $t('reference.configuration.envSystemDirective') }}</li>
-          <li><code>> script: &lt;command&gt;</code> - {{ $t('reference.configuration.scriptDirective') }}</li>
-          <li><code>> script: |</code> - {{ $t('reference.configuration.scriptMultiDirective') }}</li>
-          <li><code>> script[hide]:</code> - {{ $t('reference.configuration.scriptHideDirective') }}</li>
-          <li><code>> before:</code> - {{ $t('reference.configuration.beforeDirective') }}</li>
-          <li><code>> before[hide]:</code> - {{ $t('reference.configuration.beforeHideDirective') }}</li>
-          <li><code>> after:</code> - {{ $t('reference.configuration.afterDirective') }}</li>
-          <li><code>> after[hide]:</code> - {{ $t('reference.configuration.afterHideDirective') }}</li>
-          <li><code>> fallback:</code> - {{ $t('reference.configuration.fallbackDirective') }}</li>
-          <li><code>> fallback[hide]:</code> - {{ $t('reference.configuration.fallbackHideDirective') }}</li>
-          <li><code>> finaly:</code> - {{ $t('reference.configuration.finalyDirective') }}</li>
-          <li><code>> finaly[hide]:</code> - {{ $t('reference.configuration.finalyHideDirective') }}</li>
-          <li><code>> require_confirm: &lt;message&gt;</code> - {{ $t('reference.configuration.requireConfirmDirective') }}</li>
-          <li><code>> depends:</code> - {{ $t('reference.configuration.dependsDirective') }}</li>
-          <li><code>> validate:</code> - {{ $t('reference.configuration.validateDirective') }}</li>
-          <li><code>> if: / > elif: / > else:</code> - {{ $t('reference.configuration.ifDirective') }}</li>
-          <li><code>> logs:json &lt;path&gt; / > logs:txt &lt;path&gt;</code> - {{ $t('reference.configuration.logsDirective') }}</li>
-          <li><code>> privileged: true</code> {{ $t('reference.configuration.privilegedOr') }} <code>> privileged</code> - {{ $t('reference.configuration.privilegedDirective') }}</li>
+          <li><code>> desc: &lt;description&gt;</code> - Command description shown in help</li>
+          <li><code>> cwd: &lt;path&gt;</code> - Set working directory for command execution</li>
+          <li><code>> env: &lt;VAR=value&gt;</code> - Set environment variable</li>
+          <li><code>> env: &lt;.env.file&gt;</code> - Load environment variables from file</li>
+          <li><code>> env: ${VAR:-default}</code> - Use system environment variable with default</li>
+          <li><code>> script: &lt;command&gt;</code> - Single-line script to execute</li>
+          <li><code>> script: |</code> - Multi-line script to execute</li>
+          <li><code>> script[hide]:</code> - Hide script output from console</li>
+          <li><code>> before:</code> - Execute before main script</li>
+          <li><code>> before[hide]:</code> - Execute before main script (hidden output)</li>
+          <li><code>> after:</code> - Execute after main script (on success)</li>
+          <li><code>> after[hide]:</code> - Execute after main script (hidden output, on success)</li>
+          <li><code>> fallback:</code> - Execute on script failure (replaces error output)</li>
+          <li><code>> fallback[hide]:</code> - Execute on script failure (hidden output)</li>
+          <li><code>> finaly:</code> - Always execute (regardless of success/failure)</li>
+          <li><code>> finaly[hide]:</code> - Always execute (hidden output)</li>
+          <li><code>> require_confirm: &lt;message&gt;</code> - Require user confirmation before execution</li>
+          <li><code>> depends:</code> - Specify command dependencies</li>
+          <li><code>> validate:</code> - Validate parameter values</li>
+          <li><code>> if: / > elif: / > else:</code> - Conditional execution</li>
+          <li><code>> logs:json &lt;path&gt; / > logs:txt &lt;path&gt;</code> - Log command execution to file</li>
+          <li><code>> privileged: true</code> or <code>> privileged</code> - Require elevated permissions</li>
         </ul>
 
-        <h3>{{ $t('reference.configuration.fileLocation') }}</h3>
-        <p>{{ $t('reference.configuration.fileLocationDesc') }}</p>
+        <h3>File Location</h3>
+        <p>The Nestfile must be named "Nestfile" or "nestfile" (case-sensitive) and located in the project root directory. You can also specify a custom path using the --config flag.</p>
 
-        <h3>{{ $t('reference.examples.withDependencies') }}</h3>
+        <h3>Commands with Dependencies</h3>
         <pre v-pre><code>clean():
     > desc: Clean build artifacts
     > script: rm -rf build/
@@ -104,7 +104,7 @@ deploy():
     > depends: build, test
     > script: npm run deploy</code></pre>
 
-        <h3>{{ $t('reference.examples.withConditional') }}</h3>
+        <h3>Commands with Conditional Logic</h3>
         <pre v-pre><code>deploy(env: str):
     > desc: Deploy to different environments
     > if: env == "production"
@@ -117,14 +117,14 @@ deploy():
     > script: |
         echo "Deploying to development..."</code></pre>
 
-        <h3>{{ $t('reference.examples.withValidation') }}</h3>
+        <h3>Commands with Validation</h3>
         <pre v-pre><code>deploy(version: str):
     > desc: Deploy with version validation
     > validate: version matches /^v?\d+\.\d+\.\d+$/
     > script: |
         echo "Deploying {{version}}"</code></pre>
 
-        <h3>{{ $t('reference.examples.withLogging') }}</h3>
+        <h3>Commands with Logging</h3>
         <pre v-pre><code>deploy(version: str):
     > desc: Deploy with JSON logging
     > logs:json ./logs/deploy-{{version}}.json
@@ -133,24 +133,24 @@ deploy():
       </section>
 
       <section id="examples">
-        <h2>{{ $t('reference.examples.title') }}</h2>
+        <h2>Examples</h2>
         
-        <h3>{{ $t('reference.examples.simpleCommand') }}</h3>
+        <h3>Simple Command</h3>
         <pre v-pre><code>hello():
     > desc: Print hello world
     > script: echo "Hello, World!"</code></pre>
 
-        <h3>{{ $t('reference.examples.commandWithParams') }}</h3>
+        <h3>Command with Parameters</h3>
         <pre v-pre><code>greet(name: str, message: str):
     > desc: Greet someone
     > script: echo "Hello {{name}}, {{message}}!"</code></pre>
 
-        <h3>{{ $t('reference.examples.commandWithNamed') }}</h3>
+        <h3>Command with Named Parameters</h3>
         <pre v-pre><code>build(!target|t: str = "x86_64", !release|r: bool = false):
     > desc: Build project
     > script: cargo build --target {{target}} ${release:+--release}</code></pre>
 
-        <h3>{{ $t('reference.examples.nestedCommands') }}</h3>
+        <h3>Nested Commands</h3>
         <pre v-pre><code>dev:
     > desc: Development tools
 
