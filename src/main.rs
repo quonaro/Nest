@@ -63,10 +63,45 @@ fn main() {
     }
 
     // Check for --config flag and extract config path
-    let config_path_arg = args.iter()
-        .position(|a| a == "--config" || a == "-c")
-        .and_then(|pos| args.get(pos + 1))
-        .map(|s| s.as_str());
+    //
+    // Important behavioural rule:
+    // - Global --config / -c is only honoured when it appears
+    //   *before* the first non-flag argument (i.e. before the command name).
+    // - This ensures that constructs like:
+    //     nest psql -c "\dt"
+    //   are treated as passing -c to the subcommand, not to Nest itself.
+    //
+    // Examples:
+    // - `nest -c nestfile dev`      -> uses custom config (OK)
+    // - `nest dev -c nestfile`      -> -c belongs to `dev` / its script (ignored by Nest)
+    // - `nest --config nestfile dev`-> uses custom config (OK)
+    // - `nest dev --config nestfile`-> ignored by Nest
+    let mut config_path_arg: Option<&str> = None;
+    let mut first_non_flag_index: Option<usize> = None;
+
+    // Start from index 1 (skip program name)
+    for (idx, arg) in args.iter().enumerate().skip(1) {
+        // Detect first non-flag argument (command name)
+        if first_non_flag_index.is_none() && !arg.starts_with('-') {
+            first_non_flag_index = Some(idx);
+        }
+
+        if arg == "--config" || arg == "-c" {
+            // Only treat as global config if it appears before first non-flag (command name)
+            if let Some(cmd_idx) = first_non_flag_index {
+                if idx >= cmd_idx {
+                    // This -c/--config is after the command name -> belongs to subcommand
+                    break;
+                }
+            }
+
+            // Take next argument as config path if available
+            if let Some(path) = args.get(idx + 1) {
+                config_path_arg = Some(path.as_str());
+            }
+            break;
+        }
+    }
 
     let (parse_result, config_path) = match load_and_parse_config(config_path_arg) {
         Ok(result) => result,

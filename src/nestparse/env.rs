@@ -127,7 +127,12 @@ impl EnvironmentManager {
     /// resolve_env_value("${HOME}", env_vars) -> "/home/user" (if set) or "" (if not set)
     /// resolve_env_value("$HOME", env_vars) -> "/home/user" (if set) or "" (if not set)
     /// ```
-    fn resolve_env_value(value: &str, env_vars: &HashMap<String, String>) -> String {
+    /// Resolves environment variable references in a value string.
+    ///
+    /// This function is intentionally public so it can be reused by other
+    /// modules (e.g. condition evaluation) to provide a consistent behaviour
+    /// for `$VAR` / `${VAR:-default}` style expansions.
+    pub fn resolve_env_value(value: &str, env_vars: &HashMap<String, String>) -> String {
         let mut result = String::new();
         let mut chars = value.chars().peekable();
         

@@ -4,6 +4,7 @@
 //! with support for comparison operators (==, !=, <=, >=) and logical operators (&&, ||, !).
 
 use super::ast::{Constant, Variable};
+use super::env::EnvironmentManager;
 use super::template::TemplateProcessor;
 use std::collections::HashMap;
 
@@ -62,6 +63,7 @@ pub fn evaluate_condition(
     parent_variables: &[Variable],
     parent_constants: &[Constant],
     parent_args: &HashMap<String, String>,
+    env_vars: &HashMap<String, String>,
 ) -> Result<bool, String> {
     let trimmed = condition.trim();
     if trimmed.is_empty() {
@@ -82,6 +84,7 @@ pub fn evaluate_condition(
         parent_variables,
         parent_constants,
         parent_args,
+        env_vars,
     )
 }
 
@@ -254,6 +257,7 @@ fn evaluate_expr(
     parent_variables: &[Variable],
     parent_constants: &[Constant],
     parent_args: &HashMap<String, String>,
+    env_vars: &HashMap<String, String>,
 ) -> Result<bool, String> {
     match expr {
         ConditionExpr::Comparison(left, op, right) => {
@@ -281,13 +285,19 @@ fn evaluate_expr(
                 parent_args,
             );
 
+            // Resolve environment variables in the processed values so that
+            // conditions like `$DEV == "true"` work consistently with how
+            // env vars are handled in `> env:` directives.
+            let left_resolved = EnvironmentManager::resolve_env_value(&left_val, env_vars);
+            let right_resolved = EnvironmentManager::resolve_env_value(&right_val, env_vars);
+
             // Try to parse as numbers for <= and >=
-            let left_num = left_val.trim().parse::<f64>();
-            let right_num = right_val.trim().parse::<f64>();
+            let left_num = left_resolved.trim().parse::<f64>();
+            let right_num = right_resolved.trim().parse::<f64>();
 
             match op {
-                ComparisonOp::Equal => Ok(left_val.trim() == right_val.trim()),
-                ComparisonOp::NotEqual => Ok(left_val.trim() != right_val.trim()),
+                ComparisonOp::Equal => Ok(left_resolved.trim() == right_resolved.trim()),
+                ComparisonOp::NotEqual => Ok(left_resolved.trim() != right_resolved.trim()),
                 ComparisonOp::LessOrEqual | ComparisonOp::GreaterOrEqual => {
                     if let (Ok(l), Ok(r)) = (left_num, right_num) {
                         match op {
@@ -321,6 +331,7 @@ fn evaluate_expr(
                 parent_variables,
                 parent_constants,
                 parent_args,
+                env_vars,
             )?;
             Ok(!result)
         }
@@ -335,6 +346,7 @@ fn evaluate_expr(
                 parent_variables,
                 parent_constants,
                 parent_args,
+                env_vars,
             )?;
             // Short-circuit evaluation
             if !left_result {
@@ -350,6 +362,7 @@ fn evaluate_expr(
                 parent_variables,
                 parent_constants,
                 parent_args,
+                env_vars,
             )?;
             Ok(left_result && right_result)
         }
@@ -364,6 +377,7 @@ fn evaluate_expr(
                 parent_variables,
                 parent_constants,
                 parent_args,
+                env_vars,
             )?;
             // Short-circuit evaluation
             if left_result {
@@ -379,6 +393,7 @@ fn evaluate_expr(
                 parent_variables,
                 parent_constants,
                 parent_args,
+                env_vars,
             )?;
             Ok(left_result || right_result)
         }

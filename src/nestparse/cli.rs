@@ -2406,6 +2406,7 @@ impl CliGenerator {
                                 &parent_variables,
                                 &parent_constants,
                                 &merged_parent_args,
+                                &env_vars,
                             ) {
                                 Ok(true) => {
                                     matched_script = Some(script.clone());
@@ -2433,6 +2434,7 @@ impl CliGenerator {
                                 &parent_variables,
                                 &parent_constants,
                                 &merged_parent_args,
+                                &env_vars,
                             ) {
                                 Ok(true) => {
                                     matched_script = Some(script.clone());
