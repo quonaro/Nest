@@ -1,26 +1,72 @@
 import * as vscode from "vscode";
 import { validateNestfileDocument } from "./validator";
+import { NestfileCompletionProvider } from "./completion";
 
 export function activate(context: vscode.ExtensionContext) {
+  // Create diagnostic collection for nestfile validation errors
   const diagnostics = vscode.languages.createDiagnosticCollection("nestfile");
   context.subscriptions.push(diagnostics);
+
+  // Debounce timer for validation to avoid excessive validation on every keystroke
+  const validationTimers = new Map<string, NodeJS.Timeout>();
 
   const validateActiveDocument = (doc: vscode.TextDocument | undefined) => {
     if (!doc || doc.languageId !== "nestfile") {
       return;
     }
-    const result = validateNestfileDocument(doc.getText());
-    diagnostics.set(doc.uri, result);
+
+    const uri = doc.uri.toString();
+    
+    // Clear existing timer for this document
+    const existingTimer = validationTimers.get(uri);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Debounce validation: wait 300ms after last change
+    const timer = setTimeout(() => {
+      try {
+        const result = validateNestfileDocument(doc.getText());
+        diagnostics.set(doc.uri, result);
+      } catch (error) {
+        // If validation fails, show error in output
+        console.error("Validation error:", error);
+        diagnostics.set(doc.uri, []);
+      } finally {
+        validationTimers.delete(uri);
+      }
+    }, 300);
+
+    validationTimers.set(uri, timer);
   };
 
   // Validate on open and change
   context.subscriptions.push(
-    vscode.workspace.onDidOpenTextDocument((doc) => validateActiveDocument(doc)),
-    vscode.workspace.onDidChangeTextDocument((e) =>
-      validateActiveDocument(e.document)
-    ),
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      // Immediate validation on open (no debounce needed)
+      if (doc.languageId === "nestfile") {
+        try {
+          const result = validateNestfileDocument(doc.getText());
+          diagnostics.set(doc.uri, result);
+        } catch (error) {
+          console.error("Validation error:", error);
+          diagnostics.set(doc.uri, []);
+        }
+      }
+    }),
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      // Debounced validation on change
+      validateActiveDocument(e.document);
+    }),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       if (doc.languageId === "nestfile") {
+        // Clear timer if document is closed
+        const uri = doc.uri.toString();
+        const timer = validationTimers.get(uri);
+        if (timer) {
+          clearTimeout(timer);
+          validationTimers.delete(uri);
+        }
         diagnostics.delete(doc.uri);
       }
     })
@@ -55,6 +101,18 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(validateCommand, showAstCommand);
+
+  // Register completion provider
+  const completionProvider = vscode.languages.registerCompletionItemProvider(
+    "nestfile",
+    new NestfileCompletionProvider(),
+    ">", // Trigger on > (for directives)
+    "@", // Trigger on @ (for meta commands)
+    ":", // Trigger on : (for directive values and parameter types)
+    "{", // Trigger on { (for template variables {{...}})
+    "["  // Trigger on [ (for directive modifiers like [hide])
+  );
+  context.subscriptions.push(completionProvider);
 
   // Initial validation for already-open document
   validateActiveDocument(vscode.window.activeTextEditor?.document);

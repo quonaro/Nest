@@ -11,9 +11,8 @@
 
 build(!target|t: str = "x86_64", !release|r: bool = false):
     > desc: Build with all core directives
-    > cwd: ./build
     > env: NODE_ENV=production
-    > env: .env.build
+    > env: .env
     > validate: target matches /^[a-zA-Z0-9_-]+$/
     > depends: clean, preflight(target="x86_64", release=true)
     > logs:json ./logs/build-{{now}}.json
@@ -39,7 +38,6 @@ build(!target|t: str = "x86_64", !release|r: bool = false):
         rm -rf ./build/tmp
     > finaly: |
         echo "[finaly] Build command finished (success or failure)."
-
 clean():
     > desc: Clean build artifacts
     > logs:txt ./logs/clean.log

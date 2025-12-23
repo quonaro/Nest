@@ -1,0 +1,8 @@
+@var APP_NAME = "vscode-nestfile-support"
+
+hello(name: str = "world"):
+    > desc: Simple greeting
+    > script: |
+        echo "Hello {{name}} from Nestfile in VS Code extension"
+
+

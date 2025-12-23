@@ -203,17 +203,68 @@ export function validateNestfileDocument(
         ? "else"
         : name;
       if (!VALID_DIRECTIVES.has(directiveBase)) {
+        // Find the position of the directive name after ">"
+        const directiveMatch = trimmed.match(/^>\s*([a-zA-Z_]+(?:\[[^\]]+\])?)/);
+        const directiveStart = directiveMatch 
+          ? rawLine.indexOf(directiveMatch[1])
+          : rawLine.indexOf(name);
+        const directiveEnd = directiveStart >= 0 ? directiveStart + name.length : rawLine.length;
+        
         diagnostics.push(
           createDiagnostic(
             lineNumber,
-            0,
-            rawLine.length,
+            Math.max(0, directiveStart),
+            directiveEnd,
             `Unknown directive "${name}"`,
-            vscode.DiagnosticSeverity.Warning
+            vscode.DiagnosticSeverity.Error
           )
         );
       }
 
+      // env format check
+      if (directiveBase === "env" && value) {
+        const trimmedValue = value.trim();
+        
+        // Check if it's in KEY=VALUE format (with optional ${VAR} substitutions)
+        // Examples: NODE_ENV=production, KEY=${VAR}, KEY=${VAR:-default}
+        const keyValuePattern = /^[A-Za-z_][A-Za-z0-9_]*=.*$/;
+        
+        // Check if it looks like a .env file path
+        // Examples: .env, .env.local, config.env, ./path/.env, path/to/file.env
+        const envFilePattern = /^(\.env|\.\/.*\.env|.*\/\.env|.*\.env)$/;
+        
+        // Empty value is also invalid
+        if (!trimmedValue) {
+          const valueStart = rawLine.indexOf(":");
+          const valueEnd = rawLine.length;
+          
+          diagnostics.push(
+            createDiagnostic(
+              lineNumber,
+              valueStart >= 0 ? valueStart + 1 : 0,
+              valueEnd,
+              'Invalid env directive. Expected format: "env: KEY=VALUE" or "env: .env" or "env: path/to/file.env".',
+              vscode.DiagnosticSeverity.Error
+            )
+          );
+        } else if (!keyValuePattern.test(trimmedValue) && !envFilePattern.test(trimmedValue)) {
+          // Find the position of the value after "env:"
+          const colonIndex = rawLine.indexOf(":");
+          const valueStart = colonIndex >= 0 ? colonIndex + 1 : rawLine.indexOf(trimmedValue);
+          const valueEnd = valueStart >= 0 ? valueStart + trimmedValue.length : rawLine.length;
+          
+          diagnostics.push(
+            createDiagnostic(
+              lineNumber,
+              Math.max(0, valueStart),
+              valueEnd,
+              'Invalid env directive. Expected format: "env: KEY=VALUE" or "env: .env" or "env: path/to/file.env".',
+              vscode.DiagnosticSeverity.Error
+            )
+          );
+        }
+      }
+      
       // logs format check
       if (directiveBase === "logs") {
         const parts = value.split(/\s+/);
@@ -449,11 +500,16 @@ function validateParameters(
     }
 
     if (!VALID_PARAM_TYPES.has(param.type)) {
+      // Find the position of the type in the parameter string
+      const typeMatch = rawLine.match(new RegExp(`\\b${param.type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`));
+      const typeStart = typeMatch ? typeMatch.index || 0 : 0;
+      const typeEnd = typeStart + param.type.length;
+      
       diagnostics.push(
         createDiagnostic(
           param.line,
-          0,
-          rawLine.length,
+          typeStart,
+          typeEnd,
           `Invalid parameter type "${param.type}" for parameter "${cleanName}". Expected one of: str, bool, num, arr.`,
           vscode.DiagnosticSeverity.Error
         )
@@ -558,12 +614,18 @@ function createDiagnostic(
   message: string,
   severity: vscode.DiagnosticSeverity
 ): vscode.Diagnostic {
+  // Ensure valid range (endChar should be >= startChar)
+  const validEndChar = Math.max(startChar, endChar);
   const range = new vscode.Range(
     new vscode.Position(line, startChar),
-    new vscode.Position(line, Math.max(startChar, endChar))
+    new vscode.Position(line, validEndChar)
   );
   const diagnostic = new vscode.Diagnostic(range, message, severity);
   diagnostic.source = "nestfile";
+  
+  // Add tags for better visibility (if needed)
+  // diagnostic.tags = [vscode.DiagnosticTag.Unnecessary]; // Optional: mark as unnecessary
+  
   return diagnostic;
 }
 

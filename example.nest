@@ -1,0 +1,14 @@
+@var PROJECT = "vscode-nestfile-support"
+
+test_all():
+    > desc: Run TypeScript compile
+    > depends: build
+    > script: |
+        npm run compile
+
+build():
+    > desc: Dummy build command
+    > script: |
+        echo "Building {{PROJECT}}"
+
+
