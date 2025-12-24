@@ -1809,6 +1809,52 @@ impl CliGenerator {
         parent_directives
     }
 
+    /// Collects ENV directives from all parent commands in the path.
+    ///
+    /// This function traverses the command path and collects ENV directives from each parent command.
+    /// The order is from root to leaf, so directives from closer parents can override directives
+    /// from farther parents. However, if a directive is defined in the current command, it takes
+    /// precedence over all parent directives.
+    ///
+    /// # Arguments
+    ///
+    /// * `command_path` - The path to the command (e.g., ["db", "migrate"])
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of ENV directive values, ordered from root to leaf.
+    fn collect_parent_env_directives(
+        &self,
+        command_path: &[String],
+    ) -> Vec<String> {
+        let mut parent_env_directives = Vec::new();
+
+        // If path is empty or has only one element, no parents
+        if command_path.len() <= 1 {
+            return parent_env_directives;
+        }
+
+        // Traverse path from root to parent (excluding the last element which is the current command)
+        // We collect in order from root to leaf, so when we process them,
+        // later ones (closer parents) will override earlier ones (farther parents)
+        let mut current = &self.commands;
+        for name in command_path.iter().take(command_path.len() - 1) {
+            if let Some(cmd) = current.iter().find(|c| &c.name == name) {
+                // Collect all ENV directives from this parent command
+                for directive in &cmd.directives {
+                    if let super::ast::Directive::Env(env_value) = directive {
+                        parent_env_directives.push(env_value.clone());
+                    }
+                }
+                current = &cmd.children;
+            } else {
+                break;
+            }
+        }
+
+        parent_env_directives
+    }
+
     /// Finds a function by its name.
     ///
     /// # Arguments
@@ -2321,7 +2367,29 @@ impl CliGenerator {
         }
 
         // Prepare environment
-        let env_vars = EnvironmentManager::extract_env_vars(&command.directives);
+        // First, collect ENV directives from parent groups
+        let parent_env_directives = if let Some(path) = command_path {
+            self.collect_parent_env_directives(path)
+        } else {
+            Vec::new()
+        };
+        
+        // Convert parent ENV directives to Directive::Env format
+        let mut all_env_directives: Vec<super::ast::Directive> = parent_env_directives
+            .iter()
+            .map(|env_value| super::ast::Directive::Env(env_value.clone()))
+            .collect();
+        
+        // Add command ENV directives (they will override parent ones)
+        for directive in &command.directives {
+            if let super::ast::Directive::Env(_) = directive {
+                all_env_directives.push(directive.clone());
+            }
+        }
+        
+        // Extract environment variables from all directives (parent + command)
+        // EnvironmentManager processes them in order, so command vars override parent vars
+        let env_vars = EnvironmentManager::extract_env_vars(&all_env_directives);
 
         // Collect parent directives (CWD, AFTER, BEFORE, FALLBACK)
         let parent_directives = if let Some(path) = command_path {
