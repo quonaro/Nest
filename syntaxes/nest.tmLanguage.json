@@ -46,6 +46,30 @@
         "directives": {
             "patterns": [
                 {
+                    "name": "meta.directive.script.multiline.nestfile",
+                    "begin": "^(\\s*>\\s*)(script)\\s*(:)\\s*(\\|)\\s*$",
+                    "end": "^(?=\\s*(?:>|[A-Za-z0-9_]+\\s*\\([^)]*\\)?\\s*:|$))",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "punctuation.definition.directive.nestfile"
+                        },
+                        "2": {
+                            "name": "keyword.other.directive.nestfile"
+                        },
+                        "3": {
+                            "name": "punctuation.separator.key-value.nestfile"
+                        },
+                        "4": {
+                            "name": "punctuation.definition.multiline.nestfile"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#script-content"
+                        }
+                    ]
+                },
+                {
                     "name": "meta.directive.nestfile",
                     "match": "^(\\s*>\\s*)([a-zA-Z_][a-zA-Z0-9_]*(?:\\[[^\\]]*\\])?)(\\s*:\\s*)(.*)$",
                     "captures": {
@@ -60,6 +84,43 @@
                         },
                         "4": {
                             "name": "string.unquoted.nestfile"
+                        }
+                    }
+                }
+            ]
+        },
+        "script-content": {
+            "patterns": [
+                {
+                    "name": "string.unquoted.nestfile",
+                    "match": "^\\s+(.+)$",
+                    "captures": {
+                        "1": {
+                            "patterns": [
+                                {
+                                    "include": "#templates"
+                                },
+                                {
+                                    "name": "string.quoted.double.shell",
+                                    "match": "\"([^\"]|\\\\.)*\""
+                                },
+                                {
+                                    "name": "string.quoted.single.shell",
+                                    "match": "'([^']|\\\\.)*'"
+                                },
+                                {
+                                    "name": "variable.other.readwrite.shell",
+                                    "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+                                },
+                                {
+                                    "name": "keyword.control.flow.shell",
+                                    "match": "\\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in)\\b"
+                                },
+                                {
+                                    "name": "support.function.builtin.shell",
+                                    "match": "\\b(echo|cd|pwd|ls|cat|grep|find|sort|cut|awk|sed|psql|pg_dump|docker|npm|uv|aerich)\\b"
+                                }
+                            ]
                         }
                     }
                 }
