@@ -167,12 +167,12 @@ export function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(codeActionProvider);
 
-  // Register document formatter
-  const formatter = vscode.languages.registerDocumentFormattingEditProvider(
-    "nestfile",
-    new NestfileFormatter()
-  );
-  context.subscriptions.push(formatter);
+  // Register document formatter - DISABLED to preserve original formatting
+  // const formatter = vscode.languages.registerDocumentFormattingEditProvider(
+  //   "nestfile",
+  //   new NestfileFormatter()
+  // );
+  // context.subscriptions.push(formatter);
 
   // Register code lens provider (shows reference counts)
   const codeLensProvider = vscode.languages.registerCodeLensProvider(

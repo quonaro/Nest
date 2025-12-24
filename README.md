@@ -112,6 +112,49 @@ and accept the suggestion to insert a template.
 
 - See reference counts above variable and command definitions
 
+### File Display and Icons Configuration
+
+#### Local Configuration via settings.json
+
+To configure nest file display locally in your project, create or update `.vscode/settings.json`:
+
+```json
+{
+  // Associate nest files with nestfile language for syntax highlighting
+  "files.associations": {
+    "Nestfile": "nestfile",
+    "nestfile": "nestfile",
+    "nest": "nestfile",
+    "*.nest": "nestfile"
+  },
+  
+  // Select Nestfile Icons theme for custom file icons (optional)
+  "workbench.iconTheme": "nest-icons",
+  
+  // Editor settings for nest files
+  "[nestfile]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4,
+    "editor.detectIndentation": false,
+    "files.eol": "\n"
+  }
+}
+```
+
+#### Global Configuration via VS Code Settings UI
+
+Alternatively, you can configure this globally:
+
+1. Open VS Code Settings (`Ctrl+,` / `Cmd+,`)
+2. Search for "File Icon Theme"
+3. Select **"Nestfile Icons"** from the dropdown
+
+This will apply custom icons to:
+- Files with `.nest` extension
+- Files named `Nestfile`, `nestfile`, or `nest`
+
+**Note**: The `files.associations` setting ensures proper language recognition and syntax highlighting. The icon theme is optional but provides enhanced visual appearance.
+
 ### How to build and test the extension
 
 1. Install dependencies:
