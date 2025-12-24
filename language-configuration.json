@@ -26,10 +26,7 @@
     "decreaseIndentPattern": "^\\s*$"
   },
   "folding": {
-    "markers": {
-      "start": "^\\s*([A-Za-z0-9_]+\\s*\\(|[A-Za-z0-9_]+\\s*):\\s*$",
-      "end": "^\\s*$"
-    }
+    "indentationBased": true
   },
   "wordPattern": "(-?\\d*\\.\\d\\w*)|([A-Za-z0-9_\\-\\.\\/\\(\\)\\[\\]]+|@[A-Za-z0-9_]+|\\{\\{[^}]+\\}\\})"
 }
