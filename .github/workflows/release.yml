@@ -7,12 +7,14 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '20.x'
+  NODE_VERSION: "20.x"
 
 jobs:
   build:
     name: Build VSIX
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,7 +23,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -57,28 +59,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get version from package.json
-        id: get_version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
-
-          # Check if tag already exists
-          TAG_NAME="v$VERSION"
-          if git rev-parse "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
-            echo "Warning: Tag ${TAG_NAME} already exists. Version remains unchanged."
-            echo "tag_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "Tag ${TAG_NAME} does not exist. Will create new release."
-            echo "tag_exists=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Download VSIX artifact
         uses: actions/download-artifact@v4
         with:
@@ -87,10 +67,10 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          name: VS Code Extension v${{ steps.get_version.outputs.version }}
+          tag_name: v${{ needs.build.outputs.version }}
+          name: VS Code Extension v${{ needs.build.outputs.version }}
           body: |
-            ## VS Code Extension Release v${{ steps.get_version.outputs.version }}
+            ## VS Code Extension Release v${{ needs.build.outputs.version }}
 
             ### Installation
 
@@ -132,7 +112,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -143,26 +123,26 @@ jobs:
           # Get current version from package.json
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           echo "Current version: $CURRENT_VERSION"
-          
+
           # Parse version parts (major.minor.patch)
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-          
+
           # Increment patch version
           PATCH=$((PATCH + 1))
-          
+
           # If patch reaches 10, increment minor and reset patch to 0
           if [ $PATCH -ge 10 ]; then
             MINOR=$((MINOR + 1))
             PATCH=0
           fi
-          
+
           # Construct new version (major stays the same)
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "New version: $NEW_VERSION"
-          
+
           # Update package.json using npm version (this also updates package-lock.json)
           npm version $NEW_VERSION --no-git-tag-version
-          
+
           # Output for other steps
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "old_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
@@ -196,4 +176,3 @@ jobs:
         run: vsce publish -p ${{ secrets.VSCE_PAT }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
