@@ -5,7 +5,7 @@
   "version": "0.3.3",
   "publisher": "quonaro",
   "engines": {
-    "vscode": "^1.107.0"
+    "vscode": "^1.60.0"
   },
   "categories": [
     "Programming Languages"
@@ -105,7 +105,7 @@
   "homepage": "https://github.com/quonaro/Nest#readme",
   "devDependencies": {
     "@types/node": "^25.0.3",
-    "@types/vscode": "^1.107.0",
+    "@types/vscode": "^1.60.0",
     "@vscode/vsce": "^2.26.0",
     "typescript": "^5.9.3",
     "vscode-test": "^1.6.1"
