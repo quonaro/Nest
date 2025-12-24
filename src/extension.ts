@@ -8,6 +8,7 @@ import { NestfileReferenceProvider } from "./references";
 import { NestfileCodeActionProvider } from "./codeActions";
 import { NestfileFormatter } from "./formatting";
 import { NestfileCodeLensProvider } from "./codeLens";
+import { NestfileFileDecorationProvider } from "./fileDecoration";
 
 export function activate(context: vscode.ExtensionContext) {
   // Create diagnostic collection for nestfile validation errors
@@ -180,6 +181,11 @@ export function activate(context: vscode.ExtensionContext) {
     new NestfileCodeLensProvider()
   );
   context.subscriptions.push(codeLensProvider);
+
+  // Register file decoration provider (adds badge "N" to nest files)
+  const fileDecorationProvider = new NestfileFileDecorationProvider();
+  const fileDecorationDisposable = vscode.window.registerFileDecorationProvider(fileDecorationProvider);
+  context.subscriptions.push(fileDecorationDisposable);
 
   // Initial validation for already-open document
   validateActiveDocument(vscode.window.activeTextEditor?.document);

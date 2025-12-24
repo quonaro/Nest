@@ -5,11 +5,14 @@
         }
     },
     "fileExtensions": {
-        "nest": "nestfile-icon"
+        ".nest": "nestfile-icon"
     },
     "fileNames": {
         "Nestfile": "nestfile-icon",
         "nestfile": "nestfile-icon",
         "nest": "nestfile-icon"
+    },
+    "languageIds": {
+        "nestfile": "nestfile-icon"
     }
 }
