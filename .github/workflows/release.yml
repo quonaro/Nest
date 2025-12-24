@@ -13,8 +13,6 @@ jobs:
   build:
     name: Build VSIX
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -50,50 +48,6 @@ jobs:
           name: vscode-nestfile-support-${{ steps.get_version.outputs.version }}.vsix
           path: dist/vscode-nestfile-support-${{ steps.get_version.outputs.version }}.vsix
           retention-days: 30
-
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/vscode-extension'
-    permissions:
-      contents: write
-    steps:
-      - name: Download VSIX artifact
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ needs.build.outputs.version }}
-          name: VS Code Extension v${{ needs.build.outputs.version }}
-          body: |
-            ## VS Code Extension Release v${{ needs.build.outputs.version }}
-
-            ### Installation
-
-            **From VSIX file:**
-            1. Download the `.vsix` file from the assets below
-            2. Open VS Code
-            3. Go to Extensions view (Ctrl+Shift+X / Cmd+Shift+X)
-            4. Click the "..." menu and select "Install from VSIX..."
-            5. Select the downloaded `.vsix` file
-
-            **From Marketplace:**
-            Search for "Nestfile Language Support" in VS Code Extensions marketplace.
-
-            ### Changes
-
-            See the [extension README](https://github.com/quonaro/Nest/tree/main/vscode-nestfile-support) for full feature list.
-
-          files: dist/*.vsix
-          generate_release_notes: false
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     name: Publish to Marketplace
