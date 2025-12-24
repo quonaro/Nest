@@ -2,6 +2,8 @@
 
 Language support for Nest task runner configuration files (`Nestfile`, `nestfile`, `nest`, `*.nest`).
 
+**[Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=quonaro.vscode-nestfile-support)**
+
 Features:
 
 - Syntax highlighting based on the real Nestfile grammar from the CLI
