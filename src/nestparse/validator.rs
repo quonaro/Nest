@@ -183,6 +183,25 @@ fn validate_command_recursive(
             });
         }
 
+        // Validate that arr type can only be used in named arguments (exclude wildcard parameters)
+        if param.param_type == "arr" 
+            && !matches!(param.kind, super::ast::ParamKind::Wildcard { .. })
+            && !param.is_named {
+            errors.push(ValidationError {
+                line: 1,
+                column: None,
+                message: format!(
+                    "Array type 'arr' can only be used in named arguments for parameter '{}' in command '{}'",
+                    param.name, full_name
+                ),
+                suggestion: Some(format!(
+                    "Use '!{}' prefix to make it a named argument (e.g., '!{}: arr')",
+                    param.name, param.name
+                )),
+                command_path: current_path.clone(),
+            });
+        }
+
         // Additional structural validation for wildcard parameters
         if let super::ast::ParamKind::Wildcard { name: _, count } = &param.kind {
             if let Some(c) = count {

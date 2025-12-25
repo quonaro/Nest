@@ -48,12 +48,25 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
         
         "arr" => {
             // Arrays are passed as comma-separated strings
+            // Support two formats:
+            // - --array="string,string,string" (with quotes, shell will remove them, but handle if present)
+            // - --array=string,string,string (without quotes)
             // Empty arrays are:
             // - always valid for wildcard parameters (e.g., `*` in signatures),
             //   because an empty wildcard simply means "no extra arguments"
             // - valid for normal parameters only when their default is an empty array (`[]`)
             let trimmed = value.trim();
-            if trimmed.is_empty() {
+            
+            // Remove outer quotes if present (handles cases where quotes weren't removed by shell)
+            let unquoted = if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+                || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+            {
+                &trimmed[1..trimmed.len() - 1]
+            } else {
+                trimmed
+            };
+            
+            if unquoted.is_empty() {
                 // Allow empty value for wildcard parameters (used as splats like `*` or `*name`)
                 if matches!(param.kind, ParamKind::Wildcard { .. }) {
                     return Ok(String::new());
@@ -64,7 +77,7 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
                     if let super::ast::Value::Array(arr) = default {
                         if arr.is_empty() {
                             // Empty array matches empty default, it's valid
-                            return Ok(value.to_string());
+                            return Ok(String::new());
                         }
                     }
                 }
@@ -78,7 +91,7 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
 
             // Check if it looks like a valid array (comma-separated or single value)
             // We'll accept any non-empty string as it will be split later
-            Ok(value.to_string())
+            Ok(unquoted.to_string())
         },
         
         _ => {

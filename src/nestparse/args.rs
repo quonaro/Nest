@@ -63,7 +63,11 @@ impl ArgumentExtractor {
                             Self::extract_value_arg_positional(matches, param)
                         };
 
-                        if let Some(value) = value {
+                        if let Some(mut value) = value {
+                            // Convert comma-separated array values to space-separated
+                            if param.param_type == "arr" {
+                                value = value.replace(",", " ");
+                            }
                             args.insert(param.name.clone(), value);
                         } else if let Some(default) = &param.default {
                             if let Some(default_str) = generator.value_to_string(default) {
@@ -162,7 +166,11 @@ impl ArgumentExtractor {
                             Self::extract_value_arg_for_default_positional(matches, param)
                         };
 
-                        if let Some(value) = value {
+                        if let Some(mut value) = value {
+                            // Convert comma-separated array values to space-separated
+                            if param.param_type == "arr" {
+                                value = value.replace(",", " ");
+                            }
                             args.insert(param.name.clone(), value);
                         } else if let Some(default) = &param.default {
                             if let Some(default_str) = generator.value_to_string(default) {

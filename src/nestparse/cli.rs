@@ -478,13 +478,13 @@ impl CliGenerator {
     /// Returns `Some(string)` with the string representation,
     /// or `None` if conversion is not possible.
     ///
-    /// Arrays are joined with commas.
+    /// Arrays are joined with spaces by default.
     pub fn value_to_string(&self, value: &Value) -> Option<String> {
         match value {
             Value::String(s) => Some(s.clone()),
             Value::Bool(b) => Some(b.to_string()),
             Value::Number(n) => Some(n.to_string()),
-            Value::Array(a) => Some(a.join(",")),
+            Value::Array(a) => Some(a.join(" ")),
         }
     }
 
