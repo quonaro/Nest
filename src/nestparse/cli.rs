@@ -2416,6 +2416,25 @@ impl CliGenerator {
         // Don't override with current args - parent args are for inheritance only
         // Current args will be processed separately with highest priority
 
+        // Process environment variables through template processor to resolve Nest templates (e.g., {{type}})
+        // This allows parent command arguments to be used in environment variables
+        let mut processed_env_vars = std::collections::HashMap::new();
+        for (key, value) in &env_vars {
+            let processed_value = TemplateProcessor::process(
+                value,
+                args,
+                &self.variables,
+                &self.constants,
+                &command.local_variables,
+                &command.local_constants,
+                &parent_variables,
+                &parent_constants,
+                &merged_parent_args,
+            );
+            processed_env_vars.insert(key.clone(), processed_value);
+        }
+        let env_vars = processed_env_vars;
+
         // Execute before script (if present in command or inherited from parent)
         let before_info = Self::get_directive_value_with_hide(&command.directives, "before")
             .or_else(|| parent_directives.get("before").cloned());
