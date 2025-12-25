@@ -46,13 +46,22 @@ impl ArgumentExtractor {
             match &param.kind {
                 ParamKind::Normal => {
                     if param.param_type == "bool" {
-                        let value = if param.is_named {
-                            Self::extract_bool_flag(matches, param, generator)
+                        let (bool_value, flag_mode) = if param.is_named {
+                            Self::extract_bool_flag_with_mode(matches, param, generator)
                         } else {
-                            // Positional bool arguments
-                            Self::extract_bool_positional(matches, param, generator)
+                            // Positional bool arguments (always have explicit values)
+                            let value = Self::extract_bool_positional(matches, param, generator);
+                            (value, false)
                         };
-                        args.insert(param.name.clone(), value.to_string());
+                        
+                        // Store flag mode info: if passed as flag (without value), store as "--param" for copy modifier
+                        // Otherwise store as "true" or "false" for normal substitution
+                        let stored_value = if flag_mode {
+                            format!("--{}", param.name)
+                        } else {
+                            bool_value.to_string()
+                        };
+                        args.insert(param.name.clone(), stored_value);
                     } else {
                         let value = if param.is_named {
                             // For named arguments, use param_id from generator
@@ -82,7 +91,7 @@ impl ArgumentExtractor {
                     let collected: Vec<String> = matches
                         .get_many::<String>(id)
                         .map(|vals| vals.cloned().collect())
-                        .unwrap_or_else(Vec::new);
+                        .unwrap_or_default();
 
                     if let Some(expected) = count {
                         if collected.len() != *expected {
@@ -150,12 +159,21 @@ impl ArgumentExtractor {
             match &param.kind {
                 ParamKind::Normal => {
                     if param.param_type == "bool" {
-                        let value = if param.is_named {
-                            Self::extract_bool_flag_for_default(matches, param, generator)
+                        let (bool_value, flag_mode) = if param.is_named {
+                            Self::extract_bool_flag_for_default_with_mode(matches, param, generator)
                         } else {
-                            Self::extract_bool_positional(matches, param, generator)
+                            // Positional bool arguments (always have explicit values)
+                            let value = Self::extract_bool_positional(matches, param, generator);
+                            (value, false)
                         };
-                        args.insert(param.name.clone(), value.to_string());
+                        
+                        // Store flag mode info: if passed as flag (without value), store as "--param" for copy modifier
+                        let stored_value = if flag_mode {
+                            format!("--{}", param.name)
+                        } else {
+                            bool_value.to_string()
+                        };
+                        args.insert(param.name.clone(), stored_value);
                     } else {
                         let value = if param.is_named {
                             // For named arguments, use param_id from generator
@@ -184,7 +202,7 @@ impl ArgumentExtractor {
                     let collected: Vec<String> = matches
                         .get_many::<String>(id)
                         .map(|vals| vals.cloned().collect())
-                        .unwrap_or_else(Vec::new);
+                        .unwrap_or_default();
 
                     if let Some(expected) = count {
                         if collected.len() != *expected {
@@ -222,11 +240,14 @@ impl ArgumentExtractor {
         }
     }
 
-    fn extract_bool_flag(
+    /// Extracts boolean flag value and returns (bool_value, was_passed_as_flag).
+    /// was_passed_as_flag is true if the parameter was passed as a flag without explicit value (e.g., --build),
+    /// false if it was passed with explicit value (e.g., --build=true or --build=false).
+    fn extract_bool_flag_with_mode(
         matches: &ArgMatches,
         param: &Parameter,
         generator: &CliGenerator,
-    ) -> bool {
+    ) -> (bool, bool) {
         // Use parameter name directly as ID (same as used in parameter_to_arg_with_id)
         let param_id = &param.name;
 
@@ -234,14 +255,14 @@ impl ArgumentExtractor {
         if matches.contains_id(param_id) {
             // If value is provided, parse it
             if let Some(value_str) = matches.get_one::<String>(param_id) {
-                value_str == BOOL_TRUE
+                (value_str == BOOL_TRUE, false) // Explicit value, not a flag
             } else {
-                // Flag present without value means true
-                true
+                // Flag present without value means true, and it was passed as flag
+                (true, true)
             }
         } else {
             // If not found, check default value
-            if let Some(default) = &param.default {
+            let default_value = if let Some(default) = &param.default {
                 if let Some(default_str) = generator.value_to_string(default) {
                     default_str == BOOL_TRUE
                 } else {
@@ -249,15 +270,16 @@ impl ArgumentExtractor {
                 }
             } else {
                 false
-            }
+            };
+            (default_value, false) // Default value, not passed as flag
         }
     }
 
-    fn extract_bool_flag_for_default(
+    fn extract_bool_flag_for_default_with_mode(
         matches: &ArgMatches,
         param: &Parameter,
         generator: &CliGenerator,
-    ) -> bool {
+    ) -> (bool, bool) {
         // Use parameter name directly as ID (same as used in parameter_to_arg_with_id)
         let param_id = &param.name;
 
@@ -265,14 +287,14 @@ impl ArgumentExtractor {
         if matches.contains_id(param_id) {
             // If value is provided, parse it
             if let Some(value_str) = matches.get_one::<String>(param_id) {
-                value_str == BOOL_TRUE
+                (value_str == BOOL_TRUE, false) // Explicit value, not a flag
             } else {
-                // Flag present without value means true
-                true
+                // Flag present without value means true, and it was passed as flag
+                (true, true)
             }
         } else {
             // If not found, check default value
-            if let Some(default) = &param.default {
+            let default_value = if let Some(default) = &param.default {
                 if let Some(default_str) = generator.value_to_string(default) {
                     default_str == BOOL_TRUE
                 } else {
@@ -280,7 +302,8 @@ impl ArgumentExtractor {
                 }
             } else {
                 false
-            }
+            };
+            (default_value, false) // Default value, not passed as flag
         }
     }
 

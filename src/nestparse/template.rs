@@ -3,7 +3,9 @@
 //! This module handles replacing placeholders in scripts with actual values.
 //! Supports parameter placeholders ({{param}}), variables ({{VAR}}), constants ({{CONST}}),
 //! and special variables ({{now}}, {{user}}).
-//! Also supports modifiers like {{var|sep:","}} to replace default separator (space) with a custom one.
+//! Also supports modifiers:
+//! - {{var|sep:","}} - for arrays: replace default separator (space) with a custom one
+//! - {{var|copy}} - for boolean values: copy the argument format (flag -> "--param", true -> "true", false -> "")
 
 use super::ast::{Constant, Variable};
 use crate::constants::{
@@ -29,9 +31,10 @@ impl TemplateProcessor {
     /// - `{{user}}` - Replaced with the USER environment variable (only if not overridden)
     /// - `{{SYSTEM_ERROR_MESSAGE}}` - Replaced with error message (available in fallback scripts)
     ///
-    /// Supported modifiers for array values (arrays are space-separated by default):
-    /// - `{{var|sep:","}}` - Replace spaces with comma (e.g., "redis celery backend" -> "redis,celery,backend")
+    /// Supported modifiers:
+    /// - `{{var|sep:","}}` - For arrays: replace spaces with comma (e.g., "redis celery backend" -> "redis,celery,backend")
     /// - `{{var|rep:" "=>","}}` - Explicit replacement: replace space with comma
+    /// - `{{var|copy}}` - For boolean values: copy the argument format (flag -> "--param", true -> "true", false -> "")
     ///
     /// Priority order:
     /// 1. Parameters (from args) - highest priority
@@ -236,7 +239,23 @@ impl TemplateProcessor {
                             let modifier_part = trimmed[pipe_pos + 1..].trim();
                             
                             if let Some(value) = combined_map.get(var_name) {
-                                let modified_value = if modifier_part.starts_with("sep:") {
+                                let modified_value = if modifier_part == "copy" {
+                                    // copy modifier for boolean values: {{param|copy}}
+                                    // If value is "true" (regardless of how passed), output "--param" (flag format)
+                                    // If value is "false", output empty string
+                                    // If value starts with "--", it's already in flag format -> output as is
+                                    if value == "true" {
+                                        // Convert parameter name to flag format (--param)
+                                        format!("--{}", var_name)
+                                    } else if value.starts_with("--") {
+                                        // Already in flag format
+                                        value.clone()
+                                    } else if value == "false" {
+                                        String::new()
+                                    } else {
+                                        value.clone()
+                                    }
+                                } else if modifier_part.starts_with("sep:") {
                                     // sep modifier: {{var|sep:","}}
                                     let sep_value = &modifier_part[4..];
                                     let sep = Self::parse_modifier_value(sep_value);
@@ -265,7 +284,13 @@ impl TemplateProcessor {
                         } else {
                             // Simple placeholder: {{var}}
                             if let Some(value) = combined_map.get(trimmed) {
-                                result.push_str(value);
+                                // For boolean flags (values starting with "--"), convert to "true" for normal substitution
+                                let output_value = if value.starts_with("--") {
+                                    "true"
+                                } else {
+                                    value
+                                };
+                                result.push_str(output_value);
                             } else {
                                 // Variable not found, keep placeholder as is
                                 result.push_str("{{");
