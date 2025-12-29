@@ -151,21 +151,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Compile TypeScript
-        run: npm run compile
-
-      - name: Install ovsx
-        run: npm install -g @openvsx/ovsx
-
-      - name: Get version from package.json
-        id: get_version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
-
       - name: Publish to Open VSX Registry
-        run: ovsx publish -p ${{ secrets.OVSX_PAT }}
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.OVSX_PAT }}
+          registryUrl: https://open-vsx.org
 
