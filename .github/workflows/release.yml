@@ -151,6 +151,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install ovsx CLI
+        run: npm install -g ovsx
+
+      - name: Create namespace if not exists
+        run: ovsx create-namespace quonaro || echo "Namespace may already exist"
+        continue-on-error: true
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
       - name: Publish to Open VSX Registry
         uses: HaaLeo/publish-vscode-extension@v2
         with:
