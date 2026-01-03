@@ -33,7 +33,7 @@ function extractVariables(text: string): Map<string, { value: string; isConst: b
     const trimmed = line.trim();
 
     // Match @var NAME = ... or @const NAME = ...
-    const varMatch = trimmed.match(/^@(var|const)\s+([A-Za-z0-9_]+)\s*=\s*(.+)$/);
+    const varMatch = line.match(/^\s*@(var|const)\s+([A-Za-z0-9_]+)\s*=\s*(.+)$/);
     if (varMatch) {
       const isConst = varMatch[1] === "const";
       const name = varMatch[2];
@@ -244,11 +244,11 @@ export class NestfileHoverProvider implements vscode.HoverProvider {
         const directiveBase = name.startsWith("logs")
           ? "logs"
           : name === "else"
-          ? "else"
-          : name;
+            ? "else"
+            : name;
 
-        const directive = DIRECTIVES.find(d => 
-          d.name === directiveBase || 
+        const directive = DIRECTIVES.find(d =>
+          d.name === directiveBase ||
           (directiveBase === "logs" && (name === "logs:json" || name === "logs:txt"))
         );
 
@@ -256,7 +256,7 @@ export class NestfileHoverProvider implements vscode.HoverProvider {
           const displayName = directiveBase === "logs" && (name === "logs:json" || name === "logs:txt")
             ? name
             : directive.name;
-          
+
           const markdown = new vscode.MarkdownString();
           markdown.appendMarkdown(`**Directive:** \`> ${displayName}:\`\n\n`);
           markdown.appendMarkdown(directive.description);
@@ -270,10 +270,10 @@ export class NestfileHoverProvider implements vscode.HoverProvider {
     if (dependsMatch) {
       const dependsValue = dependsMatch[2];
       const cursorInDepends = position.character >= lineText.indexOf(dependsValue);
-      
+
       if (cursorInDepends) {
         const commands = validateNestfileDocument(fullText, { returnAst: true }, document.uri).commands;
-        
+
         // Try to find which command name we're hovering over
         const words = dependsValue.split(/[,\s]+/);
         for (const word of words) {

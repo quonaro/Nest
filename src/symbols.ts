@@ -16,7 +16,7 @@ function extractVariableSymbols(
     const trimmed = line.trim();
 
     // Match @var NAME = ... or @const NAME = ...
-    const varMatch = trimmed.match(/^@(var|const)\s+([A-Za-z0-9_]+)\s*=\s*(.+)$/);
+    const varMatch = line.match(/^\s*@(var|const)\s+([A-Za-z0-9_]+)\s*=\s*(.+)$/);
     if (varMatch) {
       const isConst = varMatch[1] === "const";
       const name = varMatch[2];

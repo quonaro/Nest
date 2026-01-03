@@ -39,11 +39,12 @@ build(!target|t: str = "x86_64", !release|r: bool = false):
     > finaly: |
         echo "[finaly] Build command finished (success or failure)."
 clean():
+    @var HI = "Hello, World!"
     > desc: Clean build artifacts
     > logs:txt ./logs/clean.log
     > script: |
         $DDADASDSAD
-        {{3123123123}}
+        echo {{HI}}
         echo "Cleaning build directory..."
         rm -rf ./build
 
@@ -56,7 +57,7 @@ preflight(*args):
 deploy(env: str, !force|f: bool = false, *rest[2]):
     > desc: Deploy using multiple directives and wildcard args
     > env: NODE_ENV={{env}}
-    > env: DEPLOYER={{user}}
+    > env: DEPLOYER={{force}}
     > logs:json ./logs/deploy-{{env}}-{{now}}.json
     > depends: build(target="x86_64", release=true)
     > if: env == "production" && force == "true"

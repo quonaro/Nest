@@ -15,7 +15,7 @@ function extractVariables(text: string): Map<string, { line: number; char: numbe
     const trimmed = line.trim();
 
     // Match @var NAME = ... or @const NAME = ...
-    const varMatch = trimmed.match(/^@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
+    const varMatch = line.match(/^\s*@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
     if (varMatch) {
       const name = varMatch[2];
       const char = line.indexOf(name);
@@ -166,8 +166,8 @@ export class NestfileDefinitionProvider implements vscode.DefinitionProvider {
         const dirPath = includePart.includes("*")
           ? path.dirname(includePath)
           : includePath.endsWith("/") || includePath.endsWith("\\")
-          ? includePath.slice(0, -1)
-          : includePath;
+            ? includePath.slice(0, -1)
+            : includePath;
 
         if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
           return new vscode.Location(

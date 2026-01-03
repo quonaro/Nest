@@ -40,8 +40,7 @@ export class NestfileInlayHintsProvider implements vscode.InlayHintsProvider {
         const variables = new Map<string, string>();
         const lines = text.split(/\r?\n/);
         for (const line of lines) {
-            const trimmed = line.trim();
-            const varMatch = trimmed.match(/^@(var|const)\s+([A-Za-z0-9_]+)\s*=\s*(.+)$/);
+            const varMatch = line.match(/^\s*@(var|const)\s+([A-Za-z0-9_]+)\s*=\s*(.+)$/);
             if (varMatch) {
                 variables.set(varMatch[2], varMatch[3].trim());
             }

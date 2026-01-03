@@ -780,7 +780,7 @@ function validateUndefinedVariables(
 
   // From @var and @const
   for (const line of lines) {
-    const varMatch = line.match(/^@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
+    const varMatch = line.match(/^\s*@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
     if (varMatch) {
       definedVars.add(varMatch[2]);
     }

@@ -15,7 +15,7 @@ function extractVariableDefinitions(
     const trimmed = line.trim();
 
     // Match @var NAME = ... or @const NAME = ...
-    const varMatch = trimmed.match(/^@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
+    const varMatch = line.match(/^\s*@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
     if (varMatch) {
       const name = varMatch[2];
       const char = line.indexOf(name);
@@ -132,12 +132,12 @@ export class NestfileReferenceProvider implements vscode.ReferenceProvider {
     if (variables.has(word)) {
       const varDef = variables.get(word)!;
       const defPos = new vscode.Position(varDef.line, varDef.char);
-      
+
       // Check if we're at the definition
       if (position.line === varDef.line && position.character >= varDef.char && position.character <= varDef.charEnd) {
         // Find all references
         const references = findVariableReferences(fullText, word, document);
-        return context.includeDeclaration ? references : references.filter(ref => 
+        return context.includeDeclaration ? references : references.filter(ref =>
           !(ref.range.start.line === varDef.line && ref.range.start.character === varDef.char)
         );
       }
@@ -150,11 +150,11 @@ export class NestfileReferenceProvider implements vscode.ReferenceProvider {
       const lines = fullText.split(/\r?\n/);
       const cmdLine = lines[cmd.line];
       const nameMatch = cmdLine.match(/^(\s*)([A-Za-z0-9_]+)/);
-      
+
       if (nameMatch) {
         const nameStart = nameMatch[1].length;
         const nameEnd = nameStart + word.length;
-        
+
         // Check if we're at the command definition
         if (position.line === cmd.line && position.character >= nameStart && position.character <= nameEnd) {
           const references = findCommandReferences(fullText, word, document);
@@ -162,7 +162,7 @@ export class NestfileReferenceProvider implements vscode.ReferenceProvider {
             document.uri,
             new vscode.Range(cmd.line, nameStart, cmd.line, nameEnd)
           );
-          
+
           if (context.includeDeclaration) {
             return [defLocation, ...references];
           } else {
@@ -182,11 +182,11 @@ export class NestfileReferenceProvider implements vscode.ReferenceProvider {
           new vscode.Range(varDef.line, varDef.char, varDef.line, varDef.charEnd)
         );
         const references = findVariableReferences(fullText, word, document);
-        
+
         if (context.includeDeclaration) {
           return [defLocation, ...references];
         } else {
-          return references.filter(ref => 
+          return references.filter(ref =>
             !(ref.range.start.line === varDef.line && ref.range.start.character === varDef.char)
           );
         }
@@ -203,7 +203,7 @@ export class NestfileReferenceProvider implements vscode.ReferenceProvider {
           const lines = fullText.split(/\r?\n/);
           const cmdLine = lines[cmd.line];
           const nameMatch = cmdLine.match(/^(\s*)([A-Za-z0-9_]+)/);
-          
+
           if (nameMatch) {
             const nameStart = nameMatch[1].length;
             const nameEnd = nameStart + word.length;
@@ -212,11 +212,11 @@ export class NestfileReferenceProvider implements vscode.ReferenceProvider {
               new vscode.Range(cmd.line, nameStart, cmd.line, nameEnd)
             );
             const references = findCommandReferences(fullText, word, document);
-            
+
             if (context.includeDeclaration) {
               return [defLocation, ...references];
             } else {
-              return references.filter(ref => 
+              return references.filter(ref =>
                 !(ref.range.start.line === cmd.line && ref.range.start.character === nameStart)
               );
             }
