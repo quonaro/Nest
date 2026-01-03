@@ -206,16 +206,16 @@ export function validateNestfileDocument(
       const directiveBase = name.startsWith("logs")
         ? "logs"
         : name === "else"
-        ? "else"
-        : name;
+          ? "else"
+          : name;
       if (!VALID_DIRECTIVES.has(directiveBase)) {
         // Find the position of the directive name after ">"
         const directiveMatch = trimmed.match(/^>\s*([a-zA-Z_]+(?:\[[^\]]+\])?)/);
-        const directiveStart = directiveMatch 
+        const directiveStart = directiveMatch
           ? rawLine.indexOf(directiveMatch[1])
           : rawLine.indexOf(name);
         const directiveEnd = directiveStart >= 0 ? directiveStart + name.length : rawLine.length;
-        
+
         diagnostics.push(
           createDiagnostic(
             lineNumber,
@@ -230,20 +230,20 @@ export function validateNestfileDocument(
       // env format check
       if (directiveBase === "env" && value) {
         const trimmedValue = value.trim();
-        
+
         // Check if it's in KEY=VALUE format (with optional ${VAR} substitutions)
         // Examples: NODE_ENV=production, KEY=${VAR}, KEY=${VAR:-default}
         const keyValuePattern = /^[A-Za-z_][A-Za-z0-9_]*=.*$/;
-        
+
         // Check if it looks like a .env file path
         // Examples: .env, .env.local, config.env, ./path/.env, path/to/file.env
         const envFilePattern = /^(\.env|\.\/.*\.env|.*\/\.env|.*\.env)$/;
-        
+
         // Empty value is also invalid
         if (!trimmedValue) {
           const valueStart = rawLine.indexOf(":");
           const valueEnd = rawLine.length;
-          
+
           diagnostics.push(
             createDiagnostic(
               lineNumber,
@@ -258,7 +258,7 @@ export function validateNestfileDocument(
           const colonIndex = rawLine.indexOf(":");
           const valueStart = colonIndex >= 0 ? colonIndex + 1 : rawLine.indexOf(trimmedValue);
           const valueEnd = valueStart >= 0 ? valueStart + trimmedValue.length : rawLine.length;
-          
+
           diagnostics.push(
             createDiagnostic(
               lineNumber,
@@ -270,7 +270,7 @@ export function validateNestfileDocument(
           );
         }
       }
-      
+
       // logs format check
       if (directiveBase === "logs") {
         const parts = value.split(/\s+/);
@@ -304,39 +304,39 @@ export function validateNestfileDocument(
       const multilineDirectives = new Set(["script", "before", "after", "fallback", "finaly"]);
       if (multilineDirectives.has(directiveBase)) {
         const baseIndentSpaces = rawLine.match(/^(\s*)/)?.[1]?.length || 0;
-        
+
         if (value === "|") {
           // Check if the multiline block is empty
           let hasContent = false;
           const expectedIndentSpaces = baseIndentSpaces + 4; // One level deeper (4 spaces)
-          
+
           // Look ahead to find content in the multiline block
           for (let j = i + 1; j < lines.length; j++) {
             const nextLine = lines[j];
             const nextTrimmed = nextLine.trim();
             const nextIndentSpaces = nextLine.match(/^(\s*)/)?.[1]?.length || 0;
-            
+
             // If we hit a line with indent <= base indent and it's not empty, block ended
             if (nextIndentSpaces <= baseIndentSpaces && nextTrimmed && !nextTrimmed.startsWith("#")) {
               break;
             }
-            
+
             // If we hit an empty line at base indent, block ended
             if (nextIndentSpaces === baseIndentSpaces && !nextTrimmed) {
               break;
             }
-            
+
             // If we have a line with proper indent and content, block has content
             if (nextIndentSpaces >= expectedIndentSpaces && nextTrimmed && !nextTrimmed.startsWith("#")) {
               hasContent = true;
               break;
             }
           }
-          
+
           if (!hasContent) {
             const pipeIndex = rawLine.indexOf("|");
             const pipeEnd = pipeIndex >= 0 ? pipeIndex + 1 : rawLine.length;
-            
+
             diagnostics.push(
               createDiagnostic(
                 lineNumber,
@@ -354,15 +354,15 @@ export function validateNestfileDocument(
             const nextTrimmed = nextLine.trim();
             const nextIndentSpaces = nextLine.match(/^(\s*)/)?.[1]?.length || 0;
             const expectedIndentSpaces = baseIndentSpaces + 4; // One level deeper (4 spaces)
-            
+
             // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-            if (nextIndentSpaces >= expectedIndentSpaces && 
-                nextTrimmed && 
-                !nextTrimmed.startsWith("#") && 
-                !nextTrimmed.startsWith(">")) {
+            if (nextIndentSpaces >= expectedIndentSpaces &&
+              nextTrimmed &&
+              !nextTrimmed.startsWith("#") &&
+              !nextTrimmed.startsWith(">")) {
               const colonIndex = rawLine.indexOf(":");
               const directiveEnd = colonIndex >= 0 ? colonIndex + 1 : rawLine.length;
-              
+
               diagnostics.push(
                 createDiagnostic(
                   lineNumber,
@@ -434,26 +434,26 @@ export function validateNestfileDocument(
         try {
           const baseDir = path.dirname(documentUri.fsPath);
           let includePath: string;
-          
+
           if (path.isAbsolute(pathPart)) {
             includePath = pathPart;
           } else {
             includePath = path.resolve(baseDir, pathPart);
           }
-          
+
           // Handle wildcards and directories (check if base path exists)
           if (pathPart.includes("*") || pathPart.endsWith("/") || pathPart.endsWith("\\")) {
             // For wildcards and directories, check if the directory exists
-            const dirPath = pathPart.includes("*") 
+            const dirPath = pathPart.includes("*")
               ? path.dirname(includePath)
               : includePath.endsWith("/") || includePath.endsWith("\\")
-              ? includePath.slice(0, -1)
-              : includePath;
-            
+                ? includePath.slice(0, -1)
+                : includePath;
+
             if (!fs.existsSync(dirPath)) {
               const pathStart = rawLine.indexOf(pathPart);
               const pathEnd = pathStart >= 0 ? pathStart + pathPart.length : rawLine.length;
-              
+
               diagnostics.push(
                 createDiagnostic(
                   lineNumber,
@@ -469,7 +469,7 @@ export function validateNestfileDocument(
             if (!fs.existsSync(includePath)) {
               const pathStart = rawLine.indexOf(pathPart);
               const pathEnd = pathStart >= 0 ? pathStart + pathPart.length : rawLine.length;
-              
+
               diagnostics.push(
                 createDiagnostic(
                   lineNumber,
@@ -487,6 +487,9 @@ export function validateNestfileDocument(
       }
     }
   }
+
+  // Final pass to check for undefined variables in the entire document
+  validateUndefinedVariables(text, diagnostics, lines);
 
   // Command-level checks after full pass
   for (const cmd of commands) {
@@ -642,7 +645,7 @@ function validateParameters(
       const typeMatch = rawLine.match(new RegExp(`\\b${param.type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`));
       const typeStart = typeMatch ? typeMatch.index || 0 : 0;
       const typeEnd = typeStart + param.type.length;
-      
+
       diagnostics.push(
         createDiagnostic(
           param.line,
@@ -760,11 +763,66 @@ function createDiagnostic(
   );
   const diagnostic = new vscode.Diagnostic(range, message, severity);
   diagnostic.source = "nestfile";
-  
+
   // Add tags for better visibility (if needed)
   // diagnostic.tags = [vscode.DiagnosticTag.Unnecessary]; // Optional: mark as unnecessary
-  
+
   return diagnostic;
+}
+
+function validateUndefinedVariables(
+  text: string,
+  diagnostics: vscode.Diagnostic[],
+  lines: string[]
+) {
+  // 1. Extract all defined variables
+  const definedVars = new Set<string>();
+
+  // From @var and @const
+  for (const line of lines) {
+    const varMatch = line.match(/^@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
+    if (varMatch) {
+      definedVars.add(varMatch[2]);
+    }
+  }
+
+  // From command parameters (we'll need to parse commands again or pass AST)
+  // For simplicity, let's extract them with regex if they look like parameters
+  for (const line of lines) {
+    const paramMatch = line.match(/\(([^\)]+)\)\s*:\s*$/);
+    if (paramMatch) {
+      const params = paramMatch[1].split(",");
+      for (const p of params) {
+        const nameMatch = p.trim().match(/^(!?[A-Za-z0-9_]+)/);
+        if (nameMatch) {
+          let name = nameMatch[1];
+          if (name.startsWith("!")) name = name.substring(1);
+          definedVars.add(name);
+        }
+      }
+    }
+  }
+
+  // 2. Check all {{var}} usages
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const regex = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
+    let match;
+    while ((match = regex.exec(line)) !== null) {
+      const varName = match[1];
+      if (!definedVars.has(varName)) {
+        diagnostics.push(
+          createDiagnostic(
+            i,
+            match.index + 2,
+            match.index + 2 + varName.length,
+            `Undefined variable "${varName}". Ensure it is defined with @var or is a command parameter.`,
+            vscode.DiagnosticSeverity.Error
+          )
+        );
+      }
+    }
+  }
 }
 
 

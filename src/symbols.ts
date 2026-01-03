@@ -88,7 +88,7 @@ function commandToSymbol(
 ): vscode.DocumentSymbol {
   const line = lines[cmd.line];
   const trimmed = line.trim();
-  
+
   // Find the command name position
   const nameMatch = trimmed.match(/^([A-Za-z0-9_]+)/);
   const nameStart = nameMatch ? line.indexOf(nameMatch[1]) : 0;
@@ -99,11 +99,13 @@ function commandToSymbol(
 
   // Get description from directives
   const descDirective = cmd.directives.find(d => d.name === "desc");
-  const detail = descDirective
-    ? descDirective.raw.match(/desc:\s*(.+)/)?.[1]?.trim() || ""
-    : cmd.parameters.length > 0
-    ? `(${cmd.parameters.length} parameter${cmd.parameters.length > 1 ? "s" : ""})`
+  const paramsPreview = cmd.parameters.length > 0
+    ? `(${cmd.parameters.map(p => `${p.name}:${p.type}`).join(", ")})`
     : "";
+
+  const detail = descDirective
+    ? descDirective.raw.match(/desc:\s*(.+)/)?.[1]?.trim() || paramsPreview
+    : paramsPreview;
 
   const symbol = new vscode.DocumentSymbol(
     cmd.name,

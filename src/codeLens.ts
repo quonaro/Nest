@@ -10,7 +10,7 @@ function countCommandReferences(text: string, cmdName: string): number {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    
+
     // Check depends: directives
     if (trimmed.startsWith(">") && trimmed.includes("depends:")) {
       const dependsMatch = trimmed.match(/depends:\s*(.+)/);
@@ -48,52 +48,29 @@ export class NestfileCodeLensProvider implements vscode.CodeLensProvider {
 
     // Add code lens for commands
     const ast = validateNestfileDocument(text, { returnAst: true }, document.uri);
-    
-    function addLensForCommand(cmd: NestfileCommand) {
-      const count = countCommandReferences(text, cmd.name);
-      if (count > 0) {
-        const line = document.lineAt(cmd.line);
-        const range = new vscode.Range(cmd.line, 0, cmd.line, line.text.length);
-        const codeLens = new vscode.CodeLens(range);
-        codeLens.command = {
-          title: `${count} reference${count !== 1 ? "s" : ""}`,
-          command: "",
-        };
-        codeLenses.push(codeLens);
-      }
+
+    const addLensForCommand = (cmd: NestfileCommand) => {
+      const line = document.lineAt(cmd.line);
+      const range = new vscode.Range(cmd.line, 0, cmd.line, line.text.length);
+
+      // 1. Add "Run" Lens
+      const runLens = new vscode.CodeLens(range);
+      runLens.command = {
+        title: "▶ Run Command",
+        command: "nestfile.runCommand",
+        arguments: [cmd.name]
+      };
+      codeLenses.push(runLens);
 
       // Recursively add for children
       for (const child of cmd.children) {
         addLensForCommand(child);
       }
-    }
+    };
 
     for (const cmd of ast.commands) {
       addLensForCommand(cmd);
     }
-
-    // Add code lens for variables
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmed = line.trim();
-
-      // Match @var NAME = ... or @const NAME = ...
-      const varMatch = trimmed.match(/^@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
-      if (varMatch) {
-        const varName = varMatch[2];
-        const count = countVariableReferences(text, varName);
-        if (count > 0) {
-          const range = new vscode.Range(i, 0, i, line.length);
-          const codeLens = new vscode.CodeLens(range);
-          codeLens.command = {
-            title: `${count} reference${count !== 1 ? "s" : ""}`,
-            command: "",
-          };
-          codeLenses.push(codeLens);
-        }
-      }
-    }
-
     return codeLenses;
   }
 }

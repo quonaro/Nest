@@ -8,6 +8,7 @@ import { NestfileReferenceProvider } from "./references";
 import { NestfileCodeActionProvider } from "./codeActions";
 import { NestfileFormatter } from "./formatting";
 import { NestfileCodeLensProvider } from "./codeLens";
+import { NestfileInlayHintsProvider } from "./inlayHints";
 
 export function activate(context: vscode.ExtensionContext) {
   // Create diagnostic collection for nestfile validation errors
@@ -23,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const uri = doc.uri.toString();
-    
+
     // Clear existing timer for this document
     const existingTimer = validationTimers.get(uri);
     if (existingTimer) {
@@ -87,14 +88,12 @@ export function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         return;
       }
-      if (editor) {
-        try {
-          const result = validateNestfileDocument(editor.document.getText(), {}, editor.document.uri);
-          diagnostics.set(editor.document.uri, result);
-        } catch (error) {
-          console.error("Validation error:", error);
-          diagnostics.set(editor.document.uri, []);
-        }
+      try {
+        const result = validateNestfileDocument(editor.document.getText(), {}, editor.document.uri);
+        diagnostics.set(editor.document.uri, result);
+      } catch (error) {
+        console.error("Validation error:", error);
+        diagnostics.set(editor.document.uri, []);
       }
     }
   );
@@ -115,7 +114,16 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  context.subscriptions.push(validateCommand, showAstCommand);
+  const runCommand = vscode.commands.registerCommand(
+    "nestfile.runCommand",
+    (commandName: string) => {
+      const terminal = vscode.window.terminals.find(t => t.name === "Nest") || vscode.window.createTerminal("Nest");
+      terminal.show();
+      terminal.sendText(`nest ${commandName}`);
+    }
+  );
+
+  context.subscriptions.push(validateCommand, showAstCommand, runCommand);
 
   // Register completion provider
   const completionProvider = vscode.languages.registerCompletionItemProvider(
@@ -180,6 +188,15 @@ export function activate(context: vscode.ExtensionContext) {
     new NestfileCodeLensProvider()
   );
   context.subscriptions.push(codeLensProvider);
+
+  // Register inlay hints provider
+  if (vscode.languages.registerInlayHintsProvider) {
+    const inlayHintsProvider = vscode.languages.registerInlayHintsProvider(
+      "nestfile",
+      new NestfileInlayHintsProvider()
+    );
+    context.subscriptions.push(inlayHintsProvider);
+  }
 
   // Initial validation for already-open document
   validateActiveDocument(vscode.window.activeTextEditor?.document);
