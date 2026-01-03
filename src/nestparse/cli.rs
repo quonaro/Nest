@@ -948,7 +948,12 @@ impl CliGenerator {
         let shell_operators = [
             "|", "&&", "||", ";", ">", "<", ">>", "<<", "&", "$", "`", "[", "]", "=",
         ];
-        if shell_operators.iter().any(|&op| trimmed.contains(op)) {
+
+        // If it looks like a potential Nest call (ends with ')'), we bypass the shell operator check
+        // because those operators are likely inside string arguments (e.g., SQL queries with ';').
+        let is_potential_call = trimmed.contains('(') && trimmed.ends_with(')');
+
+        if !is_potential_call && shell_operators.iter().any(|&op| trimmed.contains(op)) {
             return None;
         }
 
