@@ -3,32 +3,74 @@
     "lineComment": "#"
   },
   "brackets": [
-    ["{", "}"],
-    ["[", "]"],
-    ["(", ")"]
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ]
   ],
   "autoClosingPairs": [
-    { "open": "{", "close": "}" },
-    { "open": "[", "close": "]" },
-    { "open": "(", "close": ")" },
-    { "open": "\"", "close": "\"", "notIn": ["string"] },
-    { "open": "'", "close": "'", "notIn": ["string"] }
+    {
+      "open": "{",
+      "close": "}"
+    },
+    {
+      "open": "[",
+      "close": "]"
+    },
+    {
+      "open": "(",
+      "close": ")"
+    },
+    {
+      "open": "\"",
+      "close": "\"",
+      "notIn": [
+        "string"
+      ]
+    },
+    {
+      "open": "'",
+      "close": "'",
+      "notIn": [
+        "string"
+      ]
+    }
   ],
   "surroundingPairs": [
-    ["{", "}"],
-    ["[", "]"],
-    ["(", ")"],
-    ["\"", "\""],
-    ["'", "'"]
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "\"",
+      "\""
+    ],
+    [
+      "'",
+      "'"
+    ]
   ],
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*([A-Za-z0-9_]+\\s*\\(|[A-Za-z0-9_]+\\s*):\\s*$",
-    "decreaseIndentPattern": "^\\s*$"
+    "increaseIndentPattern": "^\\s*([A-Za-z0-9_]+\\s*\\(|[A-Za-z0-9_]+\\s*):\\s*$"
   },
   "folding": {
-    "indentationBased": true
+    "offSide": true
   },
   "wordPattern": "(-?\\d*\\.\\d\\w*)|([A-Za-z0-9_\\-\\.\\/\\(\\)\\[\\]]+|@[A-Za-z0-9_]+|\\{\\{[^}]+\\}\\})"
 }
-
-

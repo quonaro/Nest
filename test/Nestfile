@@ -19,7 +19,7 @@ build(!target|t: str = "x86_64", !release|r: bool = false):
     > require_confirm: Are you sure you want to build?
     > if: release == "true"
     > script: |
-        echo "Building release for {{target}}"
+        echo "Building release $dasdsad for {{target}}"
         mkdir -p ./release
         echo "release" > ./release/flag
     > elif: target == "debug"
@@ -42,6 +42,8 @@ clean():
     > desc: Clean build artifacts
     > logs:txt ./logs/clean.log
     > script: |
+        $DDADASDSAD
+        {{3123123123}}
         echo "Cleaning build directory..."
         rm -rf ./build
 
