@@ -264,10 +264,8 @@ impl CliGenerator {
         // Wildcard parameters are represented as positional arguments that can
         // accept multiple values.
         let mut positional_index = 1; // Start from 1 (0 is command name)
-        let positional_params: Vec<&Parameter> = parameters
-            .iter()
-            .filter(|p| !p.is_named)
-            .collect();
+        let positional_params: Vec<&Parameter> =
+            parameters.iter().filter(|p| !p.is_named).collect();
 
         for (idx, param) in positional_params.iter().enumerate() {
             match &param.kind {
@@ -277,8 +275,7 @@ impl CliGenerator {
                     positional_index += 1;
                 }
                 ParamKind::Wildcard { name: _, count } => {
-                    let param_name: &'static str =
-                        Box::leak(param.name.clone().into_boxed_str());
+                    let param_name: &'static str = Box::leak(param.name.clone().into_boxed_str());
                     let mut arg = Arg::new(param_name).index(positional_index);
 
                     // Wildcard parameters always accept hyphen-prefixed values.
@@ -286,32 +283,25 @@ impl CliGenerator {
 
                     if let Some(n) = count {
                         // Fixed-size wildcard: must capture exactly n arguments.
-                        arg = arg
-                            .num_args(*n)
-                            .help(format!(
-                                "Wildcard positional segment '{}' capturing exactly {} argument(s)",
-                                param.name, n
-                            ));
+                        arg = arg.num_args(*n).help(format!(
+                            "Wildcard positional segment '{}' capturing exactly {} argument(s)",
+                            param.name, n
+                        ));
                     } else {
                         // Unbounded wildcard: only safe when it's the last positional parameter.
                         let is_last = idx == positional_params.len() - 1;
                         if is_last {
-                            arg = arg
-                                .num_args(1..)
-                                .trailing_var_arg(true)
-                                .help(format!(
-                                    "Wildcard positional segment '{}' capturing remaining arguments",
-                                    param.name
-                                ));
+                            arg = arg.num_args(1..).trailing_var_arg(true).help(format!(
+                                "Wildcard positional segment '{}' capturing remaining arguments",
+                                param.name
+                            ));
                         } else {
                             // Fallback: require at least one argument but let clap handle
                             // distribution. This is intentionally strict to avoid ambiguity.
-                            arg = arg
-                                .num_args(1..)
-                                .help(format!(
-                                    "Wildcard positional segment '{}' capturing one or more arguments",
-                                    param.name
-                                ));
+                            arg = arg.num_args(1..).help(format!(
+                                "Wildcard positional segment '{}' capturing one or more arguments",
+                                param.name
+                            ));
                         }
                     }
 
@@ -1611,7 +1601,7 @@ impl CliGenerator {
                 if let Some(&'{') = chars.peek() {
                     chars.next(); // consume second '{'
                     buffer.clear();
-                    
+
                     // Collect content until }}
                     let mut found_close = false;
                     while let Some(ch) = chars.next() {
@@ -1630,11 +1620,13 @@ impl CliGenerator {
 
                     if found_close {
                         let template_expr = buffer.trim();
-                        
+
                         // Check if it's a function call (contains parentheses)
                         if template_expr.contains('(') && template_expr.contains(')') {
                             // Try to parse as function call
-                            if let Some((func_name, func_args)) = Self::parse_command_call(template_expr) {
+                            if let Some((func_name, func_args)) =
+                                Self::parse_command_call(template_expr)
+                            {
                                 // Check if it's a function (no colons, exists in functions list)
                                 if !func_name.contains(':') {
                                     if let Some(func) = self.find_function(&func_name) {
@@ -1658,7 +1650,7 @@ impl CliGenerator {
                                 }
                             }
                         }
-                        
+
                         // Not a function call or function not found - keep original template
                         result.push_str("{{");
                         result.push_str(template_expr);
@@ -1667,7 +1659,7 @@ impl CliGenerator {
                     }
                 }
             }
-            
+
             result.push(ch);
         }
 
@@ -1823,10 +1815,7 @@ impl CliGenerator {
     /// # Returns
     ///
     /// Returns a vector of ENV directive values, ordered from root to leaf.
-    fn collect_parent_env_directives(
-        &self,
-        command_path: &[String],
-    ) -> Vec<String> {
+    fn collect_parent_env_directives(&self, command_path: &[String]) -> Vec<String> {
         let mut parent_env_directives = Vec::new();
 
         // If path is empty or has only one element, no parents
@@ -1999,11 +1988,7 @@ impl CliGenerator {
                 let return_value = if trimmed_line.len() > 7 {
                     // Process template variables in return value
                     let return_expr = trimmed_line[7..].trim_start();
-                    Self::process_template_in_return_value(
-                        return_expr,
-                        args,
-                        &var_map,
-                    )
+                    Self::process_template_in_return_value(return_expr, args, &var_map)
                 } else {
                     String::new()
                 };
@@ -2048,7 +2033,14 @@ impl CliGenerator {
                         &[],
                         &empty_parent_args,
                     );
-                    Self::execute_shell_script(&processed_command, env_vars, cwd, args, verbose, hide_output)?;
+                    Self::execute_shell_script(
+                        &processed_command,
+                        env_vars,
+                        cwd,
+                        args,
+                        verbose,
+                        hide_output,
+                    )?;
                 }
                 continue;
             }
@@ -2117,13 +2109,7 @@ impl CliGenerator {
 
                 // Execute command (recursive call detection handled in execute_command)
                 if let Some(cmd) = self.find_command(&resolved_path) {
-                    self.execute_command(
-                        cmd,
-                        &call_args,
-                        Some(&resolved_path),
-                        dry_run,
-                        verbose,
-                    )?;
+                    self.execute_command(cmd, &call_args, Some(&resolved_path), dry_run, verbose)?;
                 } else {
                     // Not a command, treat as shell command
                     current_shell_block.push(line.to_string());
@@ -2137,14 +2123,7 @@ impl CliGenerator {
         // Execute any remaining shell commands
         if !current_shell_block.is_empty() {
             let shell_script = current_shell_block.join("\n");
-            Self::execute_shell_script(
-                &shell_script,
-                env_vars,
-                cwd,
-                args,
-                verbose,
-                hide_output,
-            )?;
+            Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose, hide_output)?;
         }
 
         // Function completed without @return - return None
@@ -2373,20 +2352,20 @@ impl CliGenerator {
         } else {
             Vec::new()
         };
-        
+
         // Convert parent ENV directives to Directive::Env format
         let mut all_env_directives: Vec<super::ast::Directive> = parent_env_directives
             .iter()
             .map(|env_value| super::ast::Directive::Env(env_value.clone()))
             .collect();
-        
+
         // Add command ENV directives (they will override parent ones)
         for directive in &command.directives {
             if let super::ast::Directive::Env(_) = directive {
                 all_env_directives.push(directive.clone());
             }
         }
-        
+
         // Extract environment variables from all directives (parent + command)
         // EnvironmentManager processes them in order, so command vars override parent vars
         let env_vars = EnvironmentManager::extract_env_vars(&all_env_directives);
@@ -2746,7 +2725,7 @@ impl CliGenerator {
                 Ok(_) => Ok(()),
                 Err(e) => Err(e.clone()),
             };
-            
+
             let processed_finaly = TemplateProcessor::process(
                 &finaly_script,
                 args,
@@ -2782,7 +2761,7 @@ impl CliGenerator {
                     OutputFormatter::warning(&format!("Finaly script failed: {}", e));
                 }
             }
-            
+
             // Return original result (finaly doesn't change the command result)
             return original_result;
         }
@@ -2846,11 +2825,19 @@ impl CliGenerator {
 pub fn handle_version() {
     use super::output::colors;
     use super::output::OutputFormatter;
+    let libc = detect_libc();
+    let libc_info = if libc.to_lowercase() == "musl" {
+        "musl"
+    } else {
+        "glibc"
+    };
+
     println!(
-        "{}nest{} {}",
+        "{}nest{} {} ({})",
         colors::BRIGHT_BLUE,
         colors::RESET,
-        OutputFormatter::value(env!("CARGO_PKG_VERSION"))
+        OutputFormatter::value(env!("CARGO_PKG_VERSION")),
+        libc_info
     );
     std::process::exit(0);
 }
@@ -3512,7 +3499,6 @@ pub fn handle_update() {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
-    use super::output::colors;
     use super::output::OutputFormatter;
 
     // Detect OS and architecture
@@ -3527,7 +3513,16 @@ pub fn handle_update() {
     // libc / flavor selection for Linux x86_64:
     // - default: glibc (asset: nest-linux-x86_64.tar.gz)
     // - NEST_LIBC=musl -> static musl (asset: nest-linux-musl-x86_64.tar.gz)
-    let libc_flavor = env::var("NEST_LIBC").unwrap_or_else(|_| "glibc".to_string());
+    let libc_flavor = match env::var("NEST_LIBC") {
+        Ok(v) => v,
+        Err(_) => {
+            if platform == "linux" && architecture == "x86_64" {
+                detect_libc()
+            } else {
+                "glibc".to_string()
+            }
+        }
+    };
 
     // Archive platform name (differs for linux glibc vs musl)
     let platform_archive = if platform == "linux" && architecture == "x86_64" {
@@ -3788,38 +3783,37 @@ pub fn handle_update() {
         }
     }
 
-    // Try to remove old binary first (if it exists and is not in use)
-    // This is best-effort - if it fails due to "Text file busy", we'll try rename anyway
-    if binary_path.exists() {
-        let _ = fs::remove_file(&binary_path);
+    // Try to replace the binary.
+    // On Linux, if the binary is running, we MUST move the old one out of the way (unlink it)
+    // instead of trying to remove it directly if rename fails.
+    let mut replaced = false;
+
+    // 1. Try direct rename (atomically replace)
+    if fs::rename(&new_binary_path, &binary_path).is_ok() {
+        replaced = true;
+    } else {
+        // 2. If rename failed (likely "Text file busy"), try moving the OLD binary to a backup first
+        let backup_path = binary_path.with_extension("old");
+        if fs::rename(&binary_path, &backup_path).is_ok() {
+            // Now that the old binary is moved (unlinked from the name 'nest'), we can rename the new one in
+            if fs::rename(&new_binary_path, &binary_path).is_ok() {
+                replaced = true;
+                // Try to remove the backup, but don't fail if we can't (it might be in use)
+                let _ = fs::remove_file(&backup_path).ok();
+            } else {
+                // If this still fails, try to restore the original
+                let _ = fs::rename(&backup_path, &binary_path);
+            }
+        }
     }
 
-    // Atomically replace old binary with new one using rename
-    // This should work even if the old binary is in use, as rename is atomic
-    if let Err(e) = fs::rename(&new_binary_path, &binary_path) {
-        // If rename fails, try to restore the new binary and give helpful error
-        let error_msg = format!("Failed to install binary: {}", e);
-
-        // Check if it's the "Text file busy" error
-        if error_msg.contains("Text file busy") || error_msg.contains("os error 26") {
-            OutputFormatter::error("Cannot update binary while it is running.");
-            OutputFormatter::info(
-                "Please close this terminal session and run the update command again.",
-            );
-            OutputFormatter::info("Alternatively, you can manually replace the binary:");
-            println!(
-                "  {}mv{} {} {}",
-                OutputFormatter::help_label("mv"),
-                colors::RESET,
-                OutputFormatter::path(&new_binary_path.display().to_string()),
-                OutputFormatter::path(&binary_path.display().to_string())
-            );
-        } else {
-            OutputFormatter::error(&error_msg);
-        }
-
+    if !replaced {
+        OutputFormatter::error(
+            "Failed to install binary: Text file busy (binary is currently running)",
+        );
+        OutputFormatter::info("Please close this terminal session and try again.");
         let _ = fs::remove_dir_all(&temp_dir);
-        // Don't remove new_binary_path - user might want to manually install it
+        let _ = fs::remove_file(&new_binary_path);
         std::process::exit(1);
     }
 
@@ -3828,17 +3822,44 @@ pub fn handle_update() {
 
     // Success message
     OutputFormatter::success("Nest CLI updated successfully!");
-    println!(
-        "  {}Location:{} {}",
-        OutputFormatter::help_label("Location:"),
-        colors::RESET,
-        OutputFormatter::path(&binary_path.display().to_string())
-    );
-    println!(
-        "  Run {}nest --version{} to verify the update.",
-        colors::BRIGHT_BLUE,
-        colors::RESET
-    );
+
+    // Attempt to run the new version to show it
+    if let Ok(output) = Command::new(&binary_path).arg("--version").output() {
+        if output.status.success() {
+            let version_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            println!(
+                "  Current version: {}",
+                OutputFormatter::value(&version_str)
+            );
+        }
+    }
+}
+
+/// Detects the libc flavor of the currently running binary.
+/// Returns "musl" or "glibc".
+fn detect_libc() -> String {
+    use std::process::Command;
+
+    // Check ldd on the current executable
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Ok(output) = Command::new("ldd").arg(current_exe).output() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if stdout.contains("musl") {
+                return "musl".to_string();
+            }
+            if stdout.contains("libc.so") || stdout.contains("ld-linux") {
+                return "glibc".to_string();
+            }
+            // If it's a static binary, ldd might say "not a dynamic executable"
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("not a dynamic executable") || stdout.contains("statically linked") {
+                // We assume musl for our static builds
+                return "musl".to_string();
+            }
+        }
+    }
+
+    "glibc".to_string()
 }
 
 /// Detects the platform and architecture.

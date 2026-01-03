@@ -259,6 +259,9 @@ echo "${INFO} ${BOLD}Installing binary...${RESET}"
 mv "${BINARY_NAME}" "${BINARY_PATH}"
 chmod +x "${BINARY_PATH}"
 echo "   ${CHECK} Binary installed to ${BINARY_PATH}"
+if [ "$VERSION" != "latest" ]; then
+    echo "   ${CHECK} Installed version: ${BOLD}${VERSION}${RESET}"
+fi
 
 # Cleanup
 rm -rf "${TEMP_DIR}"

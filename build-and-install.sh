@@ -228,7 +228,7 @@ if [ ! -f "$RELEASE_BINARY" ]; then
     exit 1
 fi
 
-cp "$RELEASE_BINARY" "$BINARY_PATH"
+mv "$RELEASE_BINARY" "$BINARY_PATH"
 chmod +x "$BINARY_PATH"
 echo "   ${CHECK} Binary installed to ${BOLD}${BINARY_PATH}${RESET}"
 
