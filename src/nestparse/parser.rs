@@ -65,7 +65,6 @@ impl Parser {
         }
     }
 
-
     /// Gets the current line number (1-based).
     fn current_line_number(&self) -> usize {
         self.current_index + 1
@@ -100,8 +99,8 @@ impl Parser {
             let trimmed = line.trim();
 
             // Check for source file marker: # @source: /path/to/file
-            if trimmed.starts_with("# @source: ") {
-                let source_path = trimmed[12..].trim();
+            if let Some(source_path) = trimmed.strip_prefix("# @source: ") {
+                let source_path = source_path.trim();
                 if !source_path.is_empty() {
                     self.current_source_file = Some(std::path::PathBuf::from(source_path));
                 }
@@ -199,8 +198,8 @@ impl Parser {
             }
 
             // Check for source file marker: # @source: /path/to/file
-            if next_trimmed.starts_with("# @source: ") {
-                let source_path = next_trimmed[12..].trim();
+            if let Some(source_path) = next_trimmed.strip_prefix("# @source: ") {
+                let source_path = source_path.trim();
                 if !source_path.is_empty() {
                     self.current_source_file = Some(std::path::PathBuf::from(source_path));
                 }
@@ -257,7 +256,9 @@ impl Parser {
             }
         }
 
-        let has_wildcard = parameters.iter().any(|p| matches!(p.kind, super::ast::ParamKind::Wildcard { .. }));
+        let has_wildcard = parameters
+            .iter()
+            .any(|p| matches!(p.kind, super::ast::ParamKind::Wildcard { .. }));
 
         Ok(super::ast::Command {
             name,
@@ -664,14 +665,15 @@ impl Parser {
             let directive_value = content[colon_pos + 1..].trim();
 
             // Parse directive name and modifiers (e.g., "script[hide]" -> ("script", true))
-            let (directive_name, hide_output) = if let Some(bracket_start) = directive_name_with_modifiers.find('[') {
-                let name = directive_name_with_modifiers[..bracket_start].trim();
-                let modifier = &directive_name_with_modifiers[bracket_start..];
-                let hide = modifier == "[hide]";
-                (name, hide)
-            } else {
-                (directive_name_with_modifiers, false)
-            };
+            let (directive_name, hide_output) =
+                if let Some(bracket_start) = directive_name_with_modifiers.find('[') {
+                    let name = directive_name_with_modifiers[..bracket_start].trim();
+                    let modifier = &directive_name_with_modifiers[bracket_start..];
+                    let hide = modifier == "[hide]";
+                    (name, hide)
+                } else {
+                    (directive_name_with_modifiers, false)
+                };
 
             match directive_name {
                 "desc" => Ok((Directive::Desc(directive_value.to_string()), false)),
@@ -720,16 +722,20 @@ impl Parser {
                             let next_line = &self.lines[self.current_index + 1];
                             let next_indent = get_indent_size(next_line);
                             let next_trimmed = next_line.trim();
-                            
+
                             // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                            if next_indent > indent
+                                && !next_trimmed.is_empty()
+                                && !next_trimmed.starts_with('#')
+                                && !next_trimmed.starts_with('>')
+                            {
                                 return Err(ParseError::InvalidSyntax(
                                     format!("Multiline script detected but missing '|' after 'script:'. Add '|' for multiline scripts or put script content on the same line."),
                                     self.current_line_number()
                                 ));
                             }
                         }
-                        
+
                         // Single line script
                         if hide_output {
                             Ok((Directive::ScriptHide(directive_value.to_string()), false))
@@ -754,16 +760,20 @@ impl Parser {
                             let next_line = &self.lines[self.current_index + 1];
                             let next_indent = get_indent_size(next_line);
                             let next_trimmed = next_line.trim();
-                            
+
                             // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                            if next_indent > indent
+                                && !next_trimmed.is_empty()
+                                && !next_trimmed.starts_with('#')
+                                && !next_trimmed.starts_with('>')
+                            {
                                 return Err(ParseError::InvalidSyntax(
                                     format!("Multiline script detected but missing '|' after 'before:'. Add '|' for multiline scripts or put script content on the same line."),
                                     self.current_line_number()
                                 ));
                             }
                         }
-                        
+
                         // Single line script
                         if hide_output {
                             Ok((Directive::BeforeHide(directive_value.to_string()), false))
@@ -788,16 +798,20 @@ impl Parser {
                             let next_line = &self.lines[self.current_index + 1];
                             let next_indent = get_indent_size(next_line);
                             let next_trimmed = next_line.trim();
-                            
+
                             // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                            if next_indent > indent
+                                && !next_trimmed.is_empty()
+                                && !next_trimmed.starts_with('#')
+                                && !next_trimmed.starts_with('>')
+                            {
                                 return Err(ParseError::InvalidSyntax(
                                     format!("Multiline script detected but missing '|' after 'after:'. Add '|' for multiline scripts or put script content on the same line."),
                                     self.current_line_number()
                                 ));
                             }
                         }
-                        
+
                         // Single line script
                         if hide_output {
                             Ok((Directive::AfterHide(directive_value.to_string()), false))
@@ -822,16 +836,20 @@ impl Parser {
                             let next_line = &self.lines[self.current_index + 1];
                             let next_indent = get_indent_size(next_line);
                             let next_trimmed = next_line.trim();
-                            
+
                             // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                            if next_indent > indent
+                                && !next_trimmed.is_empty()
+                                && !next_trimmed.starts_with('#')
+                                && !next_trimmed.starts_with('>')
+                            {
                                 return Err(ParseError::InvalidSyntax(
                                     format!("Multiline script detected but missing '|' after 'fallback:'. Add '|' for multiline scripts or put script content on the same line."),
                                     self.current_line_number()
                                 ));
                             }
                         }
-                        
+
                         // Single line script
                         if hide_output {
                             Ok((Directive::FallbackHide(directive_value.to_string()), false))
@@ -856,16 +874,20 @@ impl Parser {
                             let next_line = &self.lines[self.current_index + 1];
                             let next_indent = get_indent_size(next_line);
                             let next_trimmed = next_line.trim();
-                            
+
                             // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent && !next_trimmed.is_empty() && !next_trimmed.starts_with('#') && !next_trimmed.starts_with('>') {
+                            if next_indent > indent
+                                && !next_trimmed.is_empty()
+                                && !next_trimmed.starts_with('#')
+                                && !next_trimmed.starts_with('>')
+                            {
                                 return Err(ParseError::InvalidSyntax(
                                     format!("Multiline script detected but missing '|' after 'finaly:'. Add '|' for multiline scripts or put script content on the same line."),
                                     self.current_line_number()
                                 ));
                             }
                         }
-                        
+
                         // Single line script
                         if hide_output {
                             Ok((Directive::FinalyHide(directive_value.to_string()), false))
@@ -914,7 +936,10 @@ impl Parser {
                 }
                 "require_confirm" => {
                     // Require confirmation directive: require_confirm: message (optional)
-                    Ok((Directive::RequireConfirm(directive_value.to_string()), false))
+                    Ok((
+                        Directive::RequireConfirm(directive_value.to_string()),
+                        false,
+                    ))
                 }
                 _ => Err(ParseError::InvalidSyntax(
                     format!("Unknown directive: {}", directive_name),
