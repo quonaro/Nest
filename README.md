@@ -19,35 +19,28 @@ The install scripts will:
 - Install it to `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
 - Provide instructions if the install directory is not in your PATH
 
-**Linux/macOS (glibc, user install by default):**
+**Interactive Installation (Recommended):**
 
 ```bash
-# Latest release, installed for current user (~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash
-
-# Specific version (e.g. 0.1.0)
-curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash -s -- 0.1.0
-# or via environment variable
-NEST_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash
-
-# Install globally to /usr/local/bin (requires root)
-NEST_INSTALL_SCOPE=global sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash'
 ```
+The script will interactively ask for your preferences (e.g., glibc vs musl on Linux) if running in a terminal.
 
-**Linux x86_64 (static musl binary):**
+**Non-Interactive / CI Installation:**
+
+You can pass arguments to the script to bypass prompts:
 
 ```bash
-# Latest static release (musl, recommended for older/minimal systems)
-curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash
+# Install specific version and target musl (static)
+curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash -s -- -T musl -V 0.15.9
 
-# Specific static version (e.g. 0.1.0)
-curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash -s -- 0.1.0
-# or via environment variable
-NEST_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash
-
-# Static binary installed globally to /usr/local/bin (requires root)
-NEST_INSTALL_SCOPE=global sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.static.sh | bash'
+# Install latest version, default libc (glibc on Linux)
+curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash -s -- -V latest
 ```
+
+**Options:**
+- `-T, --target <flavor>`: Target libc flavor (`glibc` or `musl`). Default: `glibc`.
+- `-V, --version <ver>`: Target version (e.g., `0.15.9` or `latest`). Default: `latest`.
 
 **Windows (PowerShell):**
 

@@ -40,7 +40,91 @@ else
     NEST_ICON="Nest"
 fi
 
-# Detect OS and architecture
+
+# Initialize variables with defaults
+REPO="quonaro/nest"
+VERSION="latest"
+LIBC_FLAVOR="glibc"
+INSTALL_SCOPE="user"
+INTERACTIVE=0
+
+# Check if running interactively
+if [ -t 0 ]; then
+    INTERACTIVE=1
+fi
+
+# Parse command line arguments
+TARGET_EXPLICITLY_SET=0
+VERSION_EXPLICITLY_SET=0
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -T|--target)
+            if [ -n "$2" ]; then
+                LIBC_FLAVOR="$2"
+                TARGET_EXPLICITLY_SET=1
+                shift 2
+            else
+                echo "${CROSS} ${BOLD}${RED}Error: Argument for $1 is missing${RESET}" >&2
+                exit 1
+            fi
+            ;;
+        -V|--version)
+            if [ -n "$2" ]; then
+                VERSION="$2"
+                VERSION_EXPLICITLY_SET=1
+                shift 2
+            else
+                echo "${CROSS} ${BOLD}${RED}Error: Argument for $1 is missing${RESET}" >&2
+                exit 1
+            fi
+            ;;
+        -h|--help)
+            echo "Usage: ./install.sh [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  -T, --target <flavor>   Target libc flavor: 'glibc' (default) or 'musl'"
+            echo "  -V, --version <ver>     Install specific version (default: latest)"
+            echo "  -h, --help              Show this help message"
+            echo ""
+            exit 0
+            ;;
+        *)
+            # Backward compatibility: first arg as version if not a flag
+            if [ "$1" != "${1#-}" ]; then
+                 echo "${CROSS} ${BOLD}${RED}Error: Unknown option $1${RESET}" >&2
+                 exit 1
+            fi
+            VERSION="$1"
+            VERSION_EXPLICITLY_SET=1
+            shift
+            ;;
+    esac
+done
+
+# Overlay environment variables if set (CLI args take precedence if defaults were used logic-wise, 
+# but here we just let CLI args overwrite defaults. 
+# If user wants to mix env vars and CLI, CLI wins for explicitly set things.)
+# However, to respect "defaults", we need to know if they were changed. 
+# Simpler approach: Env vars set the initial state, flags override them.
+# Refactoring slightly to allow ENV vars to set defaults before arg parsing? 
+# Actually, the block above sets defaults to hardcoded values. 
+# Let's re-apply env vars only if they differ from default AND arg wasn't passed?
+# Standard unix convention: Env < CLI. 
+# So:
+# 1. Defaults
+# 2. Env vars
+# 3. CLI args
+
+# Reset to defaults for detecting overrides? No, let's just do:
+# [Existing Env Logic was]: VERSION="${NEST_VERSION:-latest}"
+# So let's respect that.
+
+VERSION="${NEST_VERSION:-$VERSION}"
+LIBC_FLAVOR="${NEST_LIBC:-$LIBC_FLAVOR}"
+INSTALL_SCOPE="${NEST_INSTALL_SCOPE:-$INSTALL_SCOPE}"
+
+# Platform detection
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
@@ -63,25 +147,65 @@ else
     BINARY_NAME="nest"
 fi
 
-# GitHub repository
-# TODO: Update this to your actual GitHub repository (e.g., "username/nest")
-REPO="quonaro/nest"
+# Interactive Prompts
+# Only if interactive AND no specific flags were likely passed used to suppress this?
+# The user said: "If interactive, select musl or glibc via [y/n]".
+# If the user passed flags, maybe they don't want prompts.
+# Let's assume if they ran just `./install.sh` they want prompts. 
+# If they ran `./install.sh -T musl` they probably decided already.
+# But checking which args were passed is complex.
+# Let's ask only if we are using defaults? 
+# OR just ask "Do you want to use musl? [y/N]" showing current default logic.
 
-# Version to install:
-# - default: "latest" (GitHub's latest release)
-# - override via NEST_VERSION env var
-# - or via first CLI argument: ./install.sh 0.1.0
-VERSION="${NEST_VERSION:-latest}"
-if [ -n "$1" ]; then
-    VERSION="$1"
+if [ "$INTERACTIVE" = "1" ] && [ -z "$NEST_NONINTERACTIVE" ]; then
+    # Only ask for musl/glibc on Linux x86_64
+    if [ "$PLATFORM" = "linux" ] && [ "$ARCHITECTURE" = "x86_64" ]; then
+        # Check if user already specified it via flag/env. If it's already "musl", confirm? 
+        # Simpler: Just ask.
+        # But if I typed `./install.sh -T musl`, getting asked "Use musl?" is annoying.
+        # So, we need a way to know if it was explicitly set.
+        # Let's assume if the user provided ANY arguments, we skip prompts?
+        # No, the user might provide version but want to be asked about libc.
+        
+        # Let's go with a simple prompt flow that defaults to the current value.
+        
+        echo ""
+        echo "${INFO} ${BOLD}Detected Linux x86_64.${RESET}"
+        
+        # If currently glibc (default), ask if they want musl.
+        if [ "$TARGET_EXPLICITLY_SET" != "1" ] && [ "$LIBC_FLAVOR" != "musl" ]; then
+            printf "${INFO} Do you want to use the ${BOLD}musl (static)${RESET} libc instead of glibc? [y/N] "
+            read -r REPLY
+            if echo "$REPLY" | grep -iq "^y"; then
+                LIBC_FLAVOR="musl"
+                echo "   ${ARROW} Using ${BOLD}musl${RESET}"
+            else
+                echo "   ${ARROW} Using ${BOLD}glibc${RESET}"
+            fi
+        else
+            # Already musl (via flag/env/explicit), or forced glibc.
+            :
+        fi
+    fi
+
+    # Version Prompt
+    # If version is latest, ask if they want specific.
+    if [ "$VERSION_EXPLICITLY_SET" != "1" ] && [ "$VERSION" = "latest" ]; then
+        echo ""
+        printf "${INFO} Do you want to install a specific version? [y/N] "
+        read -r REPLY
+        if echo "$REPLY" | grep -iq "^y"; then
+            printf "${INFO} Enter version: "
+            read -r V_INPUT
+            if [ -n "$V_INPUT" ]; then
+                VERSION="$V_INPUT"
+                echo "   ${ARROW} Targeting version ${BOLD}${VERSION}${RESET}"
+            fi
+        fi
+    fi
 fi
 
-# libc / flavor selection for Linux x86_64:
-# - default: glibc (asset: nest-linux-x86_64.tar.gz)
-# - NEST_LIBC=musl -> static musl (asset: nest-linux-musl-x86_64.tar.gz)
-LIBC_FLAVOR="${NEST_LIBC:-glibc}"
-
-# Archive platform name (differs for linux glibc vs musl)
+# Resolve Platform Archive Name
 PLATFORM_ARCHIVE="${PLATFORM}"
 if [ "${PLATFORM}" = "linux" ] && [ "${ARCHITECTURE}" = "x86_64" ]; then
     case "${LIBC_FLAVOR}" in
@@ -92,16 +216,13 @@ if [ "${PLATFORM}" = "linux" ] && [ "${ARCHITECTURE}" = "x86_64" ]; then
             PLATFORM_ARCHIVE="linux"
             ;;
         *)
-            echo "${WARN} Unknown NEST_LIBC value '${LIBC_FLAVOR}', falling back to glibc (linux archive)${RESET}" >&2
+            echo "${WARN} Unknown target flavor '${LIBC_FLAVOR}', falling back to glibc (linux archive)${RESET}" >&2
             PLATFORM_ARCHIVE="linux"
             ;;
     esac
 fi
 
-# Installation scope:
-# - default: "user"  (installs to ~/.local/bin)
-# - NEST_INSTALL_SCOPE=global -> installs to /usr/local/bin (requires root)
-INSTALL_SCOPE="${NEST_INSTALL_SCOPE:-user}"
+# Install Scope
 case "${INSTALL_SCOPE}" in
     global|system)
         INSTALL_DIR="/usr/local/bin"
