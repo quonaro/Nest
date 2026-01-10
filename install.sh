@@ -51,6 +51,10 @@ INTERACTIVE=0
 # Check if running interactively
 if [ -t 0 ]; then
     INTERACTIVE=1
+    INPUT_SOURCE="/dev/stdin"
+elif [ -r /dev/tty ]; then
+    INTERACTIVE=1
+    INPUT_SOURCE="/dev/tty"
 fi
 
 # Parse command line arguments
@@ -175,7 +179,7 @@ if [ "$INTERACTIVE" = "1" ] && [ -z "$NEST_NONINTERACTIVE" ]; then
         # If currently glibc (default), ask if they want musl.
         if [ "$TARGET_EXPLICITLY_SET" != "1" ] && [ "$LIBC_FLAVOR" != "musl" ]; then
             printf "${INFO} Do you want to use the ${BOLD}musl (static)${RESET} libc instead of glibc? [y/N] "
-            read -r REPLY
+            read -r REPLY < "$INPUT_SOURCE"
             if echo "$REPLY" | grep -iq "^y"; then
                 LIBC_FLAVOR="musl"
                 echo "   ${ARROW} Using ${BOLD}musl${RESET}"
@@ -193,10 +197,10 @@ if [ "$INTERACTIVE" = "1" ] && [ -z "$NEST_NONINTERACTIVE" ]; then
     if [ "$VERSION_EXPLICITLY_SET" != "1" ] && [ "$VERSION" = "latest" ]; then
         echo ""
         printf "${INFO} Do you want to install a specific version? [y/N] "
-        read -r REPLY
+        read -r REPLY < "$INPUT_SOURCE"
         if echo "$REPLY" | grep -iq "^y"; then
             printf "${INFO} Enter version: "
-            read -r V_INPUT
+            read -r V_INPUT < "$INPUT_SOURCE"
             if [ -n "$V_INPUT" ]; then
                 VERSION="$V_INPUT"
                 echo "   ${ARROW} Targeting version ${BOLD}${VERSION}${RESET}"
