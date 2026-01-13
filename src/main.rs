@@ -11,7 +11,7 @@ use constants::{FLAG_COMPLETE, FLAG_SHOW, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST
 use nestparse::cli::{handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version, CliGenerator};
 use nestparse::command_handler::CommandHandler;
 use nestparse::completion::CompletionManager;
-use nestparse::file::read_config_file;
+use nestparse::file::read_file_unchecked;
 use nestparse::include::process_includes;
 use nestparse::parser::{Parser, ParseError, ParseResult};
 use nestparse::path::find_config_file;
@@ -238,7 +238,7 @@ fn load_and_parse_config(config_path_arg: Option<&str>) -> Result<(ParseResult, 
     };
 
     let content =
-        read_config_file(&config_path).map_err(|e| format!("Error reading file: {}", e))?;
+        read_file_unchecked(&config_path).map_err(|e| format!("Error reading file: {}", e))?;
 
     // Process includes before parsing
     let mut visited = std::collections::HashSet::new();
@@ -253,7 +253,7 @@ fn load_and_parse_config(config_path_arg: Option<&str>) -> Result<(ParseResult, 
     content_with_source.push_str(&processed_content);
 
     let mut parser = Parser::new(&content_with_source);
-    let parse_result = parser
+    let mut parse_result = parser
         .parse()
         .map_err(|e| {
             match e {
@@ -268,6 +268,9 @@ fn load_and_parse_config(config_path_arg: Option<&str>) -> Result<(ParseResult, 
                 }
             }
         })?;
+
+    // Merge duplicate commands (e.g. from includes or overrides)
+    parse_result.commands = nestparse::merger::merge_commands(parse_result.commands);
 
     Ok((parse_result, config_path))
 }

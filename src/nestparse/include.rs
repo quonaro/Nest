@@ -86,7 +86,16 @@ pub fn process_includes(
         
         // Check if this is an include directive
         if trimmed.starts_with("@include ") {
-            let include_path_str = trimmed[9..].trim(); // Skip "@include "
+            let rest = trimmed[9..].trim(); // Skip "@include "
+            
+            // Check for "into" syntax: @include path/to/file into group_name
+            let (include_path_str, into_group) = if let Some(into_pos) = rest.find(" into ") {
+                let path_part = rest[..into_pos].trim();
+                let group_part = rest[into_pos + 6..].trim();
+                (path_part, Some(group_part))
+            } else {
+                (rest, None)
+            };
             
             if include_path_str.is_empty() {
                 return Err(IncludeError::InvalidPath("Empty include path".to_string()));
@@ -105,8 +114,34 @@ pub fn process_includes(
             };
 
             // Add the included content
-            result.push_str(&included_content);
-            result.push('\n');
+            if let Some(group_name) = into_group {
+                // If importing into a group, we need to:
+                // 1. Create the group command
+                // 2. Indent the included content
+                
+                if group_name.is_empty() {
+                    return Err(IncludeError::InvalidPath("Empty group name in 'into' clause".to_string()));
+                }
+                
+                // Add group definition
+                result.push_str(line.split("@include").next().unwrap_or("")); // Preserve original indentation
+                result.push_str(group_name);
+                result.push_str(":\n");
+                
+                // Indent content
+                for content_line in included_content.lines() {
+                    // Preserve original indentation of the @include line for the content
+                    let base_indent = line.split("@include").next().unwrap_or("");
+                    result.push_str(base_indent);
+                    result.push_str("    "); // Add 4 spaces indentation
+                    result.push_str(content_line);
+                    result.push('\n');
+                }
+            } else {
+                // Regular include, just append content
+                result.push_str(&included_content);
+                result.push('\n');
+            }
         } else {
             // Regular line, add it as-is
             result.push_str(line);

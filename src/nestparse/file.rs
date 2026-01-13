@@ -1,6 +1,6 @@
 //! File reading utilities for configuration files.
 
-use super::path::is_config_file;
+
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -26,22 +26,9 @@ use std::path::Path;
 /// - The file does not exist
 /// - The file name is not a valid configuration file name
 /// - The file cannot be read
-pub fn read_config_file(path: &Path) -> io::Result<String> {
-    if !path.exists() {
-        return Err(io::Error::new(io::ErrorKind::NotFound, "File not found"));
-    }
-    if let Some(file_name) = path.file_name() {
-        if let Some(file_name_str) = file_name.to_str() {
-            if !is_config_file(file_name_str) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Not a config file",
-        ));
-            }
-        }
-    }
-    fs::read_to_string(path)
-}
+
+// read_config_file removed as it is unused and read_file_unchecked is preferred.
+
 
 /// Reads the contents of a file without validating the file name.
 ///

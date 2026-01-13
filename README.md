@@ -867,7 +867,47 @@ Include directives allow you to split your configuration into multiple files for
 
 1. **Specific file**: `@include docker.nest` - Includes commands from a specific file
 2. **Pattern with wildcard**: `@include modules/*.nest` - Includes all files matching the pattern
-3. **Directory**: `@include commands/` - Includes all configuration files (nestfile, Nestfile, nest, Nest) from the directory
+- **Directory**: `@include commands/` - Includes all configuration files (nestfile, Nestfile, nest, Nest) from the directory
+
+### Include into Group
+
+You can import commands from a file directly into a specific group using the `into` keyword:
+
+```nest
+@include modules/database.nest into db
+```
+
+This will wrap all commands from `modules/database.nest` under the `db:` group.
+
+### Command Overriding and Merging
+
+When you define a command with the same name multiple times (e.g., via `@include`), Nest merges them instead of showing an error. This allows you to override or extend commands from included files.
+
+**Merging Rules:**
+
+1. **Parameters**: Replaced completely if the overriding command defines any parameters.
+2. **Directives**: Appended (e.g., `> desc:` in the override replaces the original if it's the last one).
+3. **Children**: Merged recursively.
+4. **Variables/Constants**: Merged (local overrides override previous local definitions).
+
+**Example:**
+
+`base.nest`:
+```nest
+serve:
+    > desc: "Start server"
+    > script: echo "Starting..."
+```
+
+`nestfile`:
+```nest
+@include base.nest
+
+serve:
+    > desc: "Start dev server" # Overrides description
+    # Script directive from base.nest is preserved unless overridden by another > script:
+```
+
 
 **Key Points:**
 
