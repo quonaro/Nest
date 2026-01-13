@@ -814,6 +814,26 @@ b():
 # Commands from included files are now available
 # nest docker build
 # nest database migrate</code></pre>
+      <h3>Filtered Imports</h3>
+        <p>You can import specific commands or groups from a file using the <code>from</code> keyword. This allows you to pick components selectively.</p>
+        
+        <h4>Import Group (Deep Import)</h4>
+        <p>Importing a group name includes the group and all its subcommands recursively.</p>
+        <pre v-pre><code>@include modules/utils.nest from db</code></pre>
+        
+        <h4>Import Command (Partial Import)</h4>
+        <p>Use dot notation to import a specific command from within a group.</p>
+        <pre v-pre><code># Imports only 'migrate' from the 'db' group
+@include modules/utils.nest from db.migrate</code></pre>
+
+        <h4>Multiple Selection</h4>
+        <p>Select multiple items separated by commas.</p>
+        <pre v-pre><code>@include modules/utils.nest from db.migrate, db.seed, format</code></pre>
+
+        <h4>Combine with Into</h4>
+        <p>Filter commands and place them into a new group.</p>
+        <pre v-pre><code>@include modules/utils.nest into core from db.migrate</code></pre>
+        <p>This creates <code>core -> db -> migrate</code>.</p>
       </section>
 
       <section id="overriding">
