@@ -272,6 +272,124 @@ This matches the behavior of the install scripts (`install.sh` / `install.static
 
 **Note:** If you get a "Text file busy" error, it means the binary is currently in use. Close the terminal session and run the update command again, or manually replace the binary using the instructions provided in the error message.
 
+### Standard Commands
+
+Nest provides several standard commands for managing your configuration and environment. These commands work without requiring a Nestfile (except `--list` and `--check`).
+
+#### `--std`
+
+Show help for all standard commands:
+
+```bash
+nest --std
+```
+
+This displays a quick reference of all available standard flags and commands.
+
+#### `--init`
+
+Initialize a new Nestfile in the current directory:
+
+```bash
+nest --init
+```
+
+This command:
+
+- Creates a basic `nestfile` template in the current directory
+- Prompts for confirmation if a file already exists
+- Use `--force` or `-f` to overwrite existing file without confirmation
+
+```bash
+nest --init --force  # Overwrite existing nestfile
+```
+
+#### `--list`
+
+List all available commands from your Nestfile:
+
+```bash
+nest --list
+```
+
+This command:
+
+- Requires a valid Nestfile in the current directory
+- Shows all commands with their descriptions
+- Displays nested command structure
+- Useful for quick reference of available commands
+
+**Note:** If you define a custom `list` command in your Nestfile, it will override this built-in command.
+
+#### `--check`
+
+Validate your Nestfile configuration:
+
+```bash
+nest --check
+```
+
+This command:
+
+- Validates syntax and structure of your Nestfile
+- Checks for common errors (duplicate parameters, invalid types, etc.)
+- Verifies that referenced `.env` files exist
+- Reports the configuration file path if valid
+- Exits with error code if validation fails
+
+**Note:** If you define a custom `check` command in your Nestfile, it will override this built-in command.
+
+#### `--doctor`
+
+Diagnose environment issues:
+
+```bash
+nest --doctor
+```
+
+This command checks:
+
+- Operating system and architecture
+- Required external tools (`git`, `curl`, `wget`, `tar`, `unzip`)
+- `HOME` environment variable
+- Whether `~/.local/bin` is in your `PATH`
+- Provides helpful tips for missing dependencies
+
+Use this when troubleshooting installation or execution issues.
+
+#### `--clean`
+
+Remove temporary files created by Nest:
+
+```bash
+nest --clean
+```
+
+This command removes:
+
+- Temporary update directories (`nest-update-*` in system temp)
+- Example download artifacts (`.nest_examples_temp*` in current directory)
+- Other temporary files created by Nest operations
+
+Safe to run periodically to free up disk space.
+
+#### `--uninstall`
+
+Uninstall Nest CLI:
+
+```bash
+nest --uninstall
+```
+
+This command:
+
+- Prompts for confirmation before proceeding
+- Removes the Nest binary from your system
+- Does **not** remove configuration files (Nestfiles, completion scripts, cache)
+- Requires confirmation (type `y` to proceed)
+
+**Note:** This removes only the binary. To fully clean up, also run `nest --clean` before uninstalling and manually remove `~/.cache/nest/` if desired.
+
 ### Global Flags
 
 #### `--dry-run` / `-n`
@@ -411,14 +529,32 @@ Directives control command behavior:
 - **`> script:`** - Script to execute:
   - Single line: `> script: echo "Hello"`
   - Multiline: `> script: |` (followed by indented script block)
+  - Hidden output: `> script[hide]: |` (suppresses command output)
 - **`> before:`** - Script executed before the main script (see Before/After/Fallback section)
+  - Hidden variant: `> before[hide]:`
 - **`> after:`** - Script executed after successful completion (see Before/After/Fallback section)
+  - Hidden variant: `> after[hide]:`
 - **`> fallback:`** - Script executed on failure (see Before/After/Fallback section)
+  - Hidden variant: `> fallback[hide]:`
+- **`> finaly:`** - Script executed always, regardless of success or failure (see Before/After/Fallback section)
+  - Hidden variant: `> finaly[hide]:`
 - **`> depends:`** - Command dependencies (see Command Dependencies section)
+  - Parallel execution: `> depends[parallel]: cmd1, cmd2` (runs dependencies in parallel)
 - **`> validate:`** - Parameter validation rules (see Parameter Validation section)
 - **`> if:` / `> elif:` / `> else:`** - Conditional execution (see Conditional Execution section)
 - **`> logs:json <path>` / `> logs:txt <path>`** - Log command execution (see Logging section)
 - **`> privileged`** - Require privileged access (root/admin)
+- **`> require_confirm:`** - Require user confirmation before executing
+  - Custom message: `> require_confirm: Are you sure you want to deploy?`
+  - Default message: `> require_confirm:` (uses default confirmation prompt)
+- **`> watch:`** - Watch files for changes and re-run command (see Watch Mode section)
+  - Single pattern: `> watch: src/**/*.js`
+  - Multiple patterns: `> watch: src/**/*.js, tests/**/*.js`
+
+**Directive Modifiers:**
+
+- **`[hide]`** - Suppresses output for script directives (`script[hide]`, `before[hide]`, `after[hide]`, `fallback[hide]`, `finaly[hide]`)
+- **`[parallel]`** - Runs dependencies in parallel (`depends[parallel]: cmd1, cmd2`)
 
 ### Nested Commands
 
@@ -793,45 +929,81 @@ deploy():
 - Functions cannot be executed directly - they must be called from commands or other functions
 - Functions are useful for code reuse and modularity
 
-### Before, After, and Fallback Scripts
+### Before, After, Fallback, and Finaly Scripts
 
-You can define scripts that run before, after, or as a fallback for the main script:
+You can define scripts that run before, after, as a fallback for, or always after the main script:
 
 ```nest
-deploy():
-    > desc: Deploy with before/after hooks and error handling
+deploy(version: str):
+    > desc: Deploy application
     > before: |
-        echo "Setting up deployment environment..."
-        # Pre-deployment checks
+        echo "Preparing deployment..."
+        ./check-prerequisites.sh
     > script: |
-        echo "Deploying application..."
-        # Main deployment logic
-        # If this fails, fallback will execute
+        echo "Deploying version {{version}}..."
+        ./deploy.sh {{version}}
     > after: |
-        echo "Deployment completed successfully"
-        # Post-deployment tasks (only if main script succeeds)
+        echo "Deployment successful!"
+        ./notify-team.sh "Deployed {{version}}"
     > fallback: |
-        echo "Deployment failed, rolling back..."
-        # Error handling (only if main script fails)
-        # This replaces the error output
+        echo "Deployment failed!"
+        echo "Error: {{SYSTEM_ERROR_MESSAGE}}"
+        ./rollback.sh
+    > finaly: |
+        echo "Cleaning up temporary files..."
+        rm -rf /tmp/deploy-*
 ```
 
 **Execution Order:**
 
-1. `> before:` - Executed first (always)
-2. `> script:` - Main script execution
-3. If successful: `> after:` - Executed after success
-4. If failed: `> fallback:` - Executed instead of error output
+1. **`> before:`** - Runs before the main script
+   - If it fails, the main script is not executed
+   - Use for setup, validation, or prerequisite checks
+2. **`> script:`** - The main command script
+3. **`> after:`** - Runs after the main script **only if it succeeds**
+   - Use for cleanup, notifications, or post-processing
+4. **`> fallback:`** - Runs **only if the main script fails**
+   - Replaces the error output with the fallback script's output
+   - Has access to `{{SYSTEM_ERROR_MESSAGE}}` template variable
+   - Use for error handling, rollback, or custom error messages
+5. **`> finaly:`** - Runs **always**, regardless of success or failure
+   - Executes after `> after:` (if main script succeeded) or after `> fallback:` (if main script failed)
+   - Use for cleanup operations that must always run (like `finally` in try-catch)
 
-**Key Points:**
+**Hidden Output Variants:**
 
-- All script directives (`before`, `after`, `fallback`, `script`) support multiline syntax with `|`
-- `before` always executes, even if main script fails
-- `after` only executes if main script succeeds
-- `fallback` only executes if main script fails, and replaces the error output
-- All scripts share the same environment variables and working directory
+All script lifecycle directives support the `[hide]` modifier to suppress their output:
 
-**Example with Error Handling:**
+```nest
+deploy(version: str):
+    > before[hide]: |
+        # This output won't be shown
+        ./silent-check.sh
+    > script: |
+        echo "Deploying..."  # This IS shown
+    > after[hide]: |
+        # Silent cleanup
+        ./cleanup.sh
+    > fallback[hide]: |
+        # Silent error handling
+        ./silent-rollback.sh
+    > finaly[hide]: |
+        # Silent final cleanup
+        rm -rf /tmp/*
+```
+
+**Use Cases:**
+
+- **`before:`** - Check prerequisites, validate environment, create temp directories
+- **`after:`** - Send notifications, update logs, cleanup successful deployment artifacts
+- **`fallback:`** - Rollback changes, send error alerts, provide user-friendly error messages
+- **`finaly:`** - Remove temporary files, close connections, release locks (always runs)
+
+**Special Variables:**
+
+- `{{SYSTEM_ERROR_MESSAGE}}` - Available in `> fallback:` scripts, contains the error message from the failed main script
+
+**Example with All Hooks:**
 
 ```nest
 build():
@@ -846,6 +1018,9 @@ build():
         echo "Build failed, cleaning up..."
         rm -rf dist/
         echo "Cleanup complete"
+    > finaly: |
+        echo "Build process finished"
+        # This always runs, whether build succeeded or failed
 ```
 
 ### Include Directives
@@ -878,6 +1053,64 @@ You can import commands from a file directly into a specific group using the `in
 ```
 
 This will wrap all commands from `modules/database.nest` under the `db:` group.
+
+**Example:**
+
+`modules/database.nest`:
+```nest
+migrate():
+    > desc: Run database migrations
+    > script: ./migrate.sh
+
+seed():
+    > desc: Seed database with test data
+    > script: ./seed.sh
+
+backup():
+    > desc: Backup database
+    > script: ./backup.sh
+```
+
+`nestfile`:
+```nest
+@include modules/database.nest into db
+```
+
+**Result:** Commands are now available as:
+```bash
+nest db migrate
+nest db seed
+nest db backup
+```
+
+**Multiple Includes into Same Group:**
+
+You can include multiple files into the same group:
+
+```nest
+@include modules/postgres.nest into db
+@include modules/redis.nest into db
+@include modules/mongo.nest into db
+```
+
+All commands from these files will be merged under the `db:` group.
+
+**Nested Groups:**
+
+You can also include into nested groups:
+
+```nest
+@include api/auth.nest into api:auth
+@include api/users.nest into api:users
+```
+
+This creates a structure like:
+```bash
+nest api auth login
+nest api auth logout
+nest api users list
+nest api users create
+```
 
 ### Command Overriding and Merging
 
@@ -930,6 +1163,104 @@ serve:
 # nest docker build
 # nest database migrate
 ```
+
+### Watch Mode
+
+Watch mode allows you to automatically re-run a command when files change. This is useful for development workflows where you want to rebuild, test, or restart your application on file changes.
+
+**Using the `> watch:` Directive:**
+
+```nest
+dev():
+    > desc: Start development server with auto-reload
+    > watch: src/**/*.js, src/**/*.ts
+    > script: |
+        echo "Starting dev server..."
+        npm run dev
+```
+
+When you run `nest dev`, the command will:
+1. Execute initially
+2. Watch the specified file patterns for changes
+3. Re-run the command automatically when any watched file changes
+
+**Using the `--watch` Flag:**
+
+You can also enable watch mode from the command line:
+
+```bash
+nest build --watch "src/**/*.rs"
+```
+
+This will run the `build` command and watch the specified pattern, re-running on changes.
+
+**Multiple Patterns:**
+
+You can specify multiple glob patterns:
+
+```nest
+test():
+    > desc: Run tests with auto-reload
+    > watch: src/**/*.js, tests/**/*.test.js, package.json
+    > script: npm test
+```
+
+**Combining Directive and Flag:**
+
+If both `> watch:` directive and `--watch` flag are present, the patterns are combined:
+
+```nest
+build():
+    > watch: src/**/*.rs
+    > script: cargo build
+```
+
+```bash
+nest build --watch "Cargo.toml"
+# Watches both src/**/*.rs (from directive) and Cargo.toml (from flag)
+```
+
+**Debouncing:**
+
+Nest automatically debounces file change events (200ms by default) to avoid running the command multiple times for rapid successive changes.
+
+**Common Use Cases:**
+
+```nest
+# Frontend development
+frontend():
+    > desc: Build frontend with hot reload
+    > watch: src/**/*.jsx, src/**/*.css, public/**/*
+    > script: npm run build
+
+# Backend development
+backend():
+    > desc: Restart server on code changes
+    > watch: src/**/*.go, go.mod
+    > script: |
+        pkill -f "go run"
+        go run main.go
+
+# Documentation
+docs():
+    > desc: Rebuild docs on changes
+    > watch: docs/**/*.md, docs/**/*.yaml
+    > script: mkdocs build
+
+# Tests
+test():
+    > desc: Run tests on file changes
+    > watch: src/**/*.py, tests/**/*.py
+    > script: pytest
+```
+
+**Important Notes:**
+
+- Watch mode runs indefinitely until you stop it (Ctrl+C)
+- The command is re-executed in the same environment each time
+- File patterns use glob syntax (e.g., `**/*.js` matches all JS files recursively)
+- Watch mode requires the command to complete before watching for changes
+- If the command fails, watch mode continues and will retry on next file change
 
 ### Conditional Execution
 
@@ -1087,6 +1418,7 @@ See `examples/` folder for comprehensive working examples including:
 ### Currently Implemented
 
 ✅ **Functions** - Reusable scripts with parameters and local variables
+
 ✅ **Command Structure**
 
 - Top-level commands
@@ -1097,6 +1429,7 @@ See `examples/` folder for comprehensive working examples including:
 - **Named arguments** (with `!` prefix, uses `--name` or `-n`)
 - Parameter aliases
 - Default parameter values
+- Wildcard parameters (`*`, `*name`, `*[N]`, `*name[N]`)
 
 ✅ **Directives**
 
@@ -1104,20 +1437,27 @@ See `examples/` folder for comprehensive working examples including:
 - `> cwd:` - Working directory
 - `> env:` - Environment variables (direct assignment and .env files)
 - `> script:` - Single-line and multiline scripts
-- `> before:` - Script executed before the main script (single-line or multiline)
-- `> after:` - Script executed after the main script succeeds (single-line or multiline)
-- `> fallback:` - Script executed if the main script fails (replaces error output, single-line or multiline)
+- `> script[hide]:` - Scripts with hidden output
+- `> before:` / `> before[hide]:` - Pre-execution scripts
+- `> after:` / `> after[hide]:` - Post-execution scripts (on success)
+- `> fallback:` / `> fallback[hide]:` - Error handling scripts (on failure)
+- `> finaly:` / `> finaly[hide]:` - Always-executed scripts (like finally)
 - `> depends:` - Command dependencies (executed before the command)
+- `> depends[parallel]:` - Parallel dependency execution
 - `> validate:` - Parameter validation rules (regex patterns)
 - `> if:` / `> elif:` / `> else:` - Conditional execution based on parameter values
 - `> logs:json <path>` / `> logs:txt <path>` - Log command execution to files
 - `> privileged` - Require privileged access
+- `> require_confirm:` - Require user confirmation before executing
+- `> watch:` - Watch files for changes and auto-reload
 
 ✅ **Include Directives**
 
 - `@include <file>` - Include specific file
 - `@include <pattern>` - Include files matching wildcard pattern
 - `@include <directory>/` - Include all config files from directory
+- `@include <file> into <group>` - Include commands into a specific group
+- Command merging and overriding from included files
 
 ✅ **Variables and Constants**
 
@@ -1134,6 +1474,7 @@ See `examples/` folder for comprehensive working examples including:
 - Constant substitution: `{{CONST}}`
 - Special variables: `{{now}}`, `{{user}}`
 - Template processing in scripts
+- System error message in fallback: `{{SYSTEM_ERROR_MESSAGE}}`
 
 ✅ **CLI Features**
 
@@ -1141,16 +1482,39 @@ See `examples/` folder for comprehensive working examples including:
 - Help system
 - JSON output (`--show json`)
 - AST output (`--show ast`)
-- Version info (`--version`)
+- Version info (`--version` / `-V`)
 - Custom config file path (`--config` / `-c`)
 - Dry-run mode (`--dry-run` / `-n`)
 - Verbose output (`--verbose` / `-v`)
+- Shell completion (bash, zsh, fish, PowerShell, elvish)
+
+✅ **Standard Commands**
+
+- `--std` - Show help for standard commands
+- `--init` - Initialize new Nestfile
+- `--list` - List all available commands
+- `--check` - Validate configuration
+- `--doctor` - Diagnose environment issues
+- `--clean` - Remove temporary files
+- `--uninstall` - Uninstall Nest CLI
+- `--update` - Update to latest version
+- `--example` - Download example Nestfiles
+
+✅ **Watch Mode**
+
+- File watching with glob patterns
+- Auto-reload on file changes
+- Debouncing (200ms default)
+- Combine directive and CLI flag patterns
 
 ✅ **Execution**
 
 - Script execution with environment variables
 - Working directory support
 - Environment variable loading from .env files
+- Before/After/Fallback/Finaly script hooks
+- Conditional execution based on parameters
+- Parallel dependency execution
 
 ### Future Plans
 
