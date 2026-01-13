@@ -22,6 +22,7 @@ const DIRECTIVES = [
   { name: "logs:txt", description: "Log command execution as text" },
   { name: "privileged", description: "Require privileged access (root/admin)" },
   { name: "require_confirm", description: "Require user confirmation before execution" },
+  { name: "watch", description: "Watch files for changes and auto-reload (glob patterns)" },
 ];
 
 // Meta commands
@@ -412,7 +413,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
       }
     }
 
-    // Check if we're typing a directive with modifier in brackets (e.g., "> script[")
+    // Check if we're typing a directive with modifier in brackets (e.g., "> script[" or "> depends[")
     const directiveWithBracketMatch = textBeforeCursor.match(/^(\s*>\s*)([a-zA-Z_]+)\[([a-zA-Z_]*)$/);
     if (directiveWithBracketMatch) {
       const indentBefore = directiveWithBracketMatch[1];
@@ -420,7 +421,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
       const modifierPrefix = directiveWithBracketMatch[3].toLowerCase();
       const indentSpaces = indentBefore.replace(/>\s*$/, "").replace(/>$/, "");
 
-      // Only script-like directives support [hide] modifier
+      // Script-like directives support [hide] modifier
       const scriptDirectives = ["script", "before", "after", "fallback", "finaly"];
 
       if (scriptDirectives.includes(directiveName)) {
@@ -433,6 +434,24 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
               vscode.CompletionItemKind.Property
             );
             item.documentation = `Hide output for ${directiveName} directive`;
+            item.filterText = directiveName + "[" + modifier;
+            item.insertText = modifier + "]";
+            completions.push(item);
+          }
+        }
+      }
+
+      // depends directive supports [parallel] modifier
+      if (directiveName === "depends") {
+        const modifiers = ["parallel"];
+
+        for (const modifier of modifiers) {
+          if (modifier.toLowerCase().startsWith(modifierPrefix)) {
+            const item = new vscode.CompletionItem(
+              modifier,
+              vscode.CompletionItemKind.Property
+            );
+            item.documentation = "Run dependencies in parallel";
             item.filterText = directiveName + "[" + modifier;
             item.insertText = modifier + "]";
             completions.push(item);

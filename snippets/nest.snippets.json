@@ -59,6 +59,27 @@
     ],
     "description": "Command dependencies"
   },
+  "DependsParallel": {
+    "prefix": "nest-depends-parallel",
+    "body": [
+      "> depends[parallel]: ${1:build-frontend}, ${2:build-backend}"
+    ],
+    "description": "Parallel command dependencies"
+  },
+  "Watch": {
+    "prefix": "nest-watch",
+    "body": [
+      "> watch: ${1:src/**/*.js}, ${2:src/**/*.ts}"
+    ],
+    "description": "Watch files for changes and auto-reload"
+  },
+  "RequireConfirm": {
+    "prefix": "nest-require-confirm",
+    "body": [
+      "> require_confirm: ${1:Are you sure?}"
+    ],
+    "description": "Require user confirmation before execution"
+  },
   "Validate": {
     "prefix": "nest-validate",
     "body": [
@@ -89,5 +110,3 @@
     "description": "Conditional execution (if/elif/else)"
   }
 }
-
-

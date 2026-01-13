@@ -24,10 +24,11 @@ The extension understands the main Nestfile constructs:
 
 - Commands and groups: `command(...)` / `group:` with nested commands
 - Parameters and types: `str`, `bool`, `num`, `arr`, positional and named (`!name|n`)
-- Directives: `> desc:`, `> cwd:`, `> env:`, `> script:`, `> before:`, `> after:`,
-  `> fallback:`, `> finaly:`, `> depends:`, `> validate:`, `> if:`, `> elif:`, `> else:`,
-  `> logs:json`, `> logs:txt`, `> privileged`, `> require_confirm:`
-- Meta directives: `@var`, `@const`, `@function`, `@include`
+- Directives: `> desc:`, `> cwd:`, `> env:`, `> script:`, `> script[hide]:`, `> before:`, `> before[hide]:`,
+  `> after:`, `> after[hide]:`, `> fallback:`, `> fallback[hide]:`, `> finaly:`, `> finaly[hide]:`,
+  `> depends:`, `> depends[parallel]:`, `> validate:`, `> if:`, `> elif:`, `> else:`,
+  `> logs:json`, `> logs:txt`, `> privileged`, `> require_confirm:`, `> watch:`
+- Meta directives: `@var`, `@const`, `@function`, `@include`, `@include ... into ...`
 - Templates and substitutions: `{{...}}`, `$(...)` in values and scripts
 
 For a full language reference see the main CLI README in the Nest repository.
@@ -65,7 +66,7 @@ The extension contributes snippets for:
 - Group with `default` subcommand
 - Global `@var` / `@const`
 - `@include` and `@function`
-- `> depends:`, `> validate:`, `> logs:json`, conditional `if/elif/else` block
+- `> depends:`, `> depends[parallel]:`, `> validate:`, `> logs:json`, `> watch:`, `> require_confirm:`, conditional `if/elif/else` block
 
 Type the snippet prefix (for example `nest-command`, `nest-group`, `nest-var`, `nest-include`)
 and accept the suggestion to insert a template.
