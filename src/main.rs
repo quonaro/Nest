@@ -7,14 +7,23 @@
 mod constants;
 mod nestparse;
 
-use constants::{FLAG_COMPLETE, FLAG_SHOW, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON};
-use nestparse::cli::{handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version, CliGenerator};
+use constants::{
+    CMD_CHECK, CMD_CLEAN, CMD_DOCTOR, CMD_LIST, CMD_UNINSTALL, FLAG_COMPLETE, FLAG_SHOW, FLAG_STD,
+    FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON,
+};
+use nestparse::cli::{
+    handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version,
+    CliGenerator,
+};
 use nestparse::command_handler::CommandHandler;
 use nestparse::completion::CompletionManager;
 use nestparse::file::read_file_unchecked;
 use nestparse::include::process_includes;
-use nestparse::parser::{Parser, ParseError, ParseResult};
+use nestparse::parser::{ParseError, ParseResult, Parser};
 use nestparse::path::find_config_file;
+use nestparse::standard_commands::{
+    handle_check, handle_clean, handle_doctor, handle_list, handle_uninstall,
+};
 use nestparse::validator::{print_validation_errors, validate_commands};
 use std::process;
 
@@ -36,30 +45,53 @@ use std::process;
 fn main() {
     // Check for special flags that don't need config by parsing args manually
     let args: Vec<String> = std::env::args().collect();
-    
+
     // Check for --version or -V
     if args.iter().any(|a| a == "--version" || a == "-V") {
         handle_version();
         return;
     }
-    
+
+    // Check for --std
+    if args.iter().any(|a| a == &format!("--{}", FLAG_STD)) {
+        nestparse::standard_commands::handle_std_help();
+        return;
+    }
+
     // Check for --example
     if args.iter().any(|a| a == "--example") {
         handle_example();
         return;
     }
-    
+
     // Check for --init
     if args.iter().any(|a| a == "--init") {
         let force = args.iter().any(|a| a == "--force" || a == "-f");
         handle_init(force);
         return;
     }
-    
-    // Check for update command (first argument after program name)
-    if args.len() > 1 && args[1] == "update" {
-        handle_update();
-        return;
+
+    // Check for standard lifecycle/diagnostic commands (first argument after program name)
+    if args.len() > 1 {
+        match args[1].as_str() {
+            "update" => {
+                handle_update();
+                return;
+            }
+            CMD_DOCTOR => {
+                handle_doctor();
+                return;
+            }
+            CMD_CLEAN => {
+                handle_clean();
+                return;
+            }
+            CMD_UNINSTALL => {
+                handle_uninstall();
+                return;
+            }
+            _ => {}
+        }
     }
 
     // Check for --config flag and extract config path
@@ -106,6 +138,14 @@ fn main() {
     let (parse_result, config_path) = match load_and_parse_config(config_path_arg) {
         Ok(result) => result,
         Err(e) => {
+            // User request: simplify error message for missing config
+            if config_path_arg.is_none() && e.contains("Configuration file not found") {
+                 println!("nestfile not found");
+                 println!("Run 'nest --init' to create one.");
+                 println!("Run 'nest --std' to see standard commands.");
+                 process::exit(1);
+            }
+
             nestparse::output::OutputFormatter::error(&e.to_string());
             if config_path_arg.is_none() {
                 nestparse::output::OutputFormatter::info(
@@ -120,6 +160,28 @@ fn main() {
     if let Err(validation_errors) = validate_commands(&parse_result.commands, &config_path) {
         print_validation_errors(&validation_errors, &config_path);
         process::exit(1);
+    }
+
+    // Check for standard config-dependent commands (list, check)
+    // We do this after validation so we know config is valid
+    if args.len() > 1 {
+        match args[1].as_str() {
+            CMD_CHECK => {
+                // If user defined 'check', let them run it. Otherwise run built-in check.
+                if !parse_result.commands.iter().any(|c| c.name == CMD_CHECK) {
+                    handle_check(&config_path);
+                    return;
+                }
+            }
+            CMD_LIST => {
+                // If user defined 'list', let them run it. Otherwise run built-in list.
+                if !parse_result.commands.iter().any(|c| c.name == CMD_LIST) {
+                    handle_list(&parse_result.commands);
+                    return;
+                }
+            }
+            _ => {}
+        }
     }
 
     let generator = CliGenerator::new(

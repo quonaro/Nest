@@ -62,6 +62,9 @@ pub const FLAG_VERBOSE: &str = "verbose";
 /// Flag name for generating shell completion.
 pub const FLAG_COMPLETE: &str = "complete";
 
+/// Flag name for showing standard command help.
+pub const FLAG_STD: &str = "std";
+
 /// Format option for JSON output.
 pub const FORMAT_JSON: &str = "json";
 
@@ -75,6 +78,13 @@ pub const SHORT_VERSION: char = 'V';
 
 /// Name of the default subcommand in group commands.
 pub const DEFAULT_SUBCOMMAND: &str = "default";
+
+// Standard Commands (Lifecycle & Diagnostics)
+pub const CMD_LIST: &str = "list";
+pub const CMD_CHECK: &str = "check";
+pub const CMD_DOCTOR: &str = "doctor";
+pub const CMD_CLEAN: &str = "clean";
+pub const CMD_UNINSTALL: &str = "uninstall";
 
 // Boolean Values
 
