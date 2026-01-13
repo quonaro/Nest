@@ -418,7 +418,20 @@ export function validateNestfileDocument(
         );
       }
     } else if (trimmed.startsWith("@include ")) {
-      const pathPart = trimmed.substring(9).trim();
+      let pathPart = trimmed.substring(9).trim();
+
+      // Handle 'into <group>' suffix
+      const intoMatch = pathPart.match(/^(.*?)\s+into\s+([A-Za-z0-9_]+)$/);
+      if (intoMatch) {
+        pathPart = intoMatch[1];
+      }
+
+      // Remove surrounding quotes if present
+      if ((pathPart.startsWith('"') && pathPart.endsWith('"')) ||
+        (pathPart.startsWith("'") && pathPart.endsWith("'"))) {
+        pathPart = pathPart.substring(1, pathPart.length - 1);
+      }
+
       if (!pathPart) {
         diagnostics.push(
           createDiagnostic(

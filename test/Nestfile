@@ -1,3 +1,5 @@
+@include extra.nest into extra
+
 @var APP_NAME = "nestfile-test"
 @var VERSION = "1.0.0"
 @const COMPANY = "Test Company"
@@ -7,7 +9,6 @@
     echo "=== {{APP_NAME}} v{{VERSION}} ({{COMPANY}}) ==="
     echo "Environment: {{LOCAL_ENV}}"
 
-@include extra.nest
 
 build(!target|t: str = "x86_64", !release|r: bool = false):
     > desc: Build with all core directives

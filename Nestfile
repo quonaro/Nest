@@ -1,3 +1,5 @@
+@include "./nestfile" into nesty
+
 @var APP_NAME = "vscode-nestfile-support"
 @var ENV = "development"
 
