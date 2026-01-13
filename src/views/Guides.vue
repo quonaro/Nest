@@ -862,6 +862,80 @@ serve:
     # Script directive from base.nest is preserved unless overridden by another > script:</code></pre>
       </section>
 
+      <section id="watch-mode">
+        <h2>Watch Mode</h2>
+        <p>Watch mode allows you to automatically re-run a command when files change. This is useful for development workflows where you want to rebuild, test, or restart your application on file changes.</p>
+
+        <h3>Using the <code>> watch:</code> Directive</h3>
+        <pre v-pre><code>dev():
+    > desc: Start development server with auto-reload
+    > watch: src/**/*.js, src/**/*.ts
+    > script: |
+        echo "Starting dev server..."
+        npm run dev</code></pre>
+        <p>When you run <code>nest dev</code>, the command will execute initially, watch the specified file patterns, and re-run automatically when any watched file changes.</p>
+
+        <h3>Using the <code>--watch</code> Flag</h3>
+        <p>You can also enable watch mode from the command line:</p>
+        <pre v-pre><code>$ nest build --watch "src/**/*.rs"</code></pre>
+
+        <h3>Multiple Patterns</h3>
+        <pre v-pre><code>test():
+    > desc: Run tests with auto-reload
+    > watch: src/**/*.js, tests/**/*.test.js, package.json
+    > script: npm test</code></pre>
+
+        <h3>Common Use Cases</h3>
+        <pre v-pre><code># Frontend development
+frontend():
+    > desc: Build frontend with hot reload
+    > watch: src/**/*.jsx, src/**/*.css
+    > script: npm run build
+
+# Backend development
+backend():
+    > desc: Restart server on code changes
+    > watch: src/**/*.go, go.mod
+    > script: go run main.go
+
+# Tests
+test():
+    > desc: Run tests on file changes
+    > watch: src/**/*.py, tests/**/*.py
+    > script: pytest</code></pre>
+      </section>
+
+      <section id="parallel-dependencies">
+        <h2>Parallel Dependencies</h2>
+        <p>By default, dependencies run sequentially. You can run them in parallel using the <code>[parallel]</code> modifier:</p>
+
+        <h3>Syntax</h3>
+        <pre v-pre><code>deploy():
+    > desc: Deploy with parallel dependencies
+    > depends[parallel]: build-frontend, build-backend, run-tests
+    > script: ./deploy.sh</code></pre>
+
+        <h3>Sequential vs Parallel</h3>
+        <h4>Sequential (default)</h4>
+        <pre v-pre><code>deploy():
+    > depends: clean, build, test
+    > script: ./deploy.sh
+# Executes: clean -> build -> test -> deploy</code></pre>
+
+        <h4>Parallel</h4>
+        <pre v-pre><code>deploy():
+    > depends[parallel]: build-frontend, build-backend, build-api
+    > script: ./deploy.sh
+# Executes: build-frontend, build-backend, build-api (all at once) -> deploy</code></pre>
+
+        <h3>Use Cases</h3>
+        <ul>
+          <li>Building multiple independent components simultaneously</li>
+          <li>Running multiple test suites in parallel</li>
+          <li>Any tasks that don't depend on each other</li>
+        </ul>
+      </section>
+
       <section id="conditional">
         <h2>Conditional Execution</h2>
         <p>Conditional directives allow you to execute different scripts based on parameter values.</p>
