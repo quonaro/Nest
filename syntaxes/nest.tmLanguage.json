@@ -221,7 +221,7 @@
                     }
                 },
                 {
-                    "match": "^(\\s*)(@include)\\s+(.+)$",
+                    "match": "^(\\s*)(@include)\\s+(.+?)(?:\\s+(into)\\s+([a-zA-Z0-9_]+))?$",
                     "captures": {
                         "2": {
                             "name": "keyword.other.include.nestfile"
@@ -236,6 +236,12 @@
                                     "include": "#env-vars"
                                 }
                             ]
+                        },
+                        "4": {
+                            "name": "keyword.other.into.nestfile"
+                        },
+                        "5": {
+                            "name": "entity.name.section.group.nestfile"
                         }
                     }
                 }
