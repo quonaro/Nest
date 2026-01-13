@@ -119,7 +119,10 @@ pub enum Directive {
     Privileged(bool),
     /// Dependencies - commands that must be executed before this command
     /// Each dependency can have arguments (e.g., "build(target=\"x86_64\")")
-    Depends(Vec<Dependency>),
+    /// Dependencies - commands that must be executed before this command
+    /// Each dependency can have arguments (e.g., "build(target=\"x86_64\")")
+    /// Second element is true if dependencies should run in parallel
+    Depends(Vec<Dependency>, bool),
     /// Validation rules for parameters
     /// Format: "param_name matches /regex/" or "param_name matches /regex/ flags"
     Validate(String),
@@ -138,6 +141,9 @@ pub enum Directive {
     /// Require user confirmation before executing the command
     /// String contains the confirmation message (optional, uses default if empty)
     RequireConfirm(String),
+    /// Watch directive - list of file patterns to watch for changes
+    /// String contains comma-separated glob patterns
+    Watch(Vec<String>),
 }
 
 /// Represents a variable that can be redefined.

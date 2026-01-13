@@ -39,7 +39,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # File paths
-CARGO_TOML="Cargo.toml"
+CARGO_TOML="crates/nest-cli/Cargo.toml"
 INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="nest"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
@@ -228,9 +228,32 @@ if [ ! -f "$RELEASE_BINARY" ]; then
     exit 1
 fi
 
-mv "$RELEASE_BINARY" "$BINARY_PATH"
-chmod +x "$BINARY_PATH"
+if command -v install >/dev/null 2>&1; then
+    install -m 755 "$RELEASE_BINARY" "$BINARY_PATH"
+else
+    # Fallback if install is missing (rare)
+    cp -f "$RELEASE_BINARY" "$BINARY_PATH"
+    chmod +x "$BINARY_PATH"
+fi
 echo "   ${CHECK} Binary installed to ${BOLD}${BINARY_PATH}${RESET}"
+
+NESTUI_BINARY_NAME="nestui"
+RELEASE_NESTUI="${BUILD_TARGET_DIR}/${NESTUI_BINARY_NAME}"
+NESTUI_BINARY_PATH="${INSTALL_DIR}/${NESTUI_BINARY_NAME}"
+
+if [ -f "$RELEASE_NESTUI" ]; then
+    echo ""
+    echo "${INFO} ${BOLD}Installing nestui binary...${RESET}"
+    if command -v install >/dev/null 2>&1; then
+        install -m 755 "$RELEASE_NESTUI" "$NESTUI_BINARY_PATH"
+    else
+        cp -f "$RELEASE_NESTUI" "$NESTUI_BINARY_PATH"
+        chmod +x "$NESTUI_BINARY_PATH"
+    fi
+    echo "   ${CHECK} Nest UI installed to ${BOLD}${NESTUI_BINARY_PATH}${RESET}"
+else
+    echo "   ${YELLOW}Warning: nestui binary not found at ${RELEASE_NESTUI}${RESET}"
+fi
 
 # Increment version for next build (if not skipped)
 if [ "$SKIP_INCREMENT" = false ]; then

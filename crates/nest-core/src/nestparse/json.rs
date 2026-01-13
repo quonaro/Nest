@@ -69,7 +69,11 @@ pub enum JsonDirective {
     Env(String),
     /// Dependencies directive
     #[serde(rename = "depends")]
-    Depends(Vec<JsonDependency>),
+    Depends { 
+        deps: Vec<JsonDependency>,
+        #[serde(skip_serializing_if = "std::ops::Not::not")] 
+        parallel: bool 
+    },
     /// Before script directive
     #[serde(rename = "before")]
     Before(String),
@@ -106,6 +110,9 @@ pub enum JsonDirective {
     /// Require confirmation directive
     #[serde(rename = "require_confirm")]
     RequireConfirm(String),
+    /// Watch directive
+    #[serde(rename = "watch")]
+    Watch(Vec<String>),
 }
 
 /// JSON representation of a Command.
@@ -162,12 +169,12 @@ impl From<&Directive> for JsonDirective {
             Directive::Desc(s) => JsonDirective::Desc(s.clone()),
             Directive::Cwd(s) => JsonDirective::Cwd(s.clone()),
             Directive::Env(s) => JsonDirective::Env(s.clone()),
-            Directive::Depends(deps) => {
+            Directive::Depends(deps, parallel) => {
                 let json_deps: Vec<JsonDependency> = deps.iter().map(|dep| JsonDependency {
                     command_path: dep.command_path.clone(),
                     args: dep.args.clone(),
                 }).collect();
-                JsonDirective::Depends(json_deps)
+                JsonDirective::Depends { deps: json_deps, parallel: *parallel }
             },
             Directive::Before(s) => JsonDirective::Before(s.clone()),
             Directive::BeforeHide(s) => JsonDirective::Before(s.clone()),
@@ -189,6 +196,7 @@ impl From<&Directive> for JsonDirective {
             Directive::Elif(condition) => JsonDirective::Elif(condition.clone()),
             Directive::Else => JsonDirective::Else,
             Directive::RequireConfirm(message) => JsonDirective::RequireConfirm(message.clone()),
+            Directive::Watch(patterns) => JsonDirective::Watch(patterns.clone()),
         }
     }
 }

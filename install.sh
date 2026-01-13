@@ -526,6 +526,14 @@ echo "${INFO} ${BOLD}Installing binary...${RESET}"
 $SUDO mv "${BINARY_NAME}" "${BINARY_PATH}"
 $SUDO chmod +x "${BINARY_PATH}"
 echo "   ${CHECK} Binary installed to ${BINARY_PATH}"
+
+if [ -f "nestui" ]; then
+    NESTUI_PATH="${INSTALL_DIR}/nestui"
+    $SUDO mv "nestui" "${NESTUI_PATH}"
+    $SUDO chmod +x "${NESTUI_PATH}"
+    echo "   ${CHECK} Nest UI installed to ${NESTUI_PATH}"
+fi
+
 if [ "$VERSION" != "latest" ]; then
     echo "   ${CHECK} Installed version: ${BOLD}${VERSION}${RESET}"
 fi

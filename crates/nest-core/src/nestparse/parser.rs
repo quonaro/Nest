@@ -669,8 +669,11 @@ impl Parser {
                 if let Some(bracket_start) = directive_name_with_modifiers.find('[') {
                     let name = directive_name_with_modifiers[..bracket_start].trim();
                     let modifier = &directive_name_with_modifiers[bracket_start..];
-                    let hide = modifier == "[hide]";
-                    (name, hide)
+                    if modifier == "[hide]" {
+                        (name, true)
+                    } else {
+                        (directive_name_with_modifiers, false)
+                    }
                 } else {
                     (directive_name_with_modifiers, false)
                 };
@@ -680,10 +683,37 @@ impl Parser {
                 "cwd" => Ok((Directive::Cwd(directive_value.to_string()), false)),
                 "env" => Ok((Directive::Env(directive_value.to_string()), false)),
                 "depends" => {
-                    // Parse comma-separated list of dependencies
-                    // Each dependency can have arguments: "build(target=\"x86_64\")"
+                    // Check if it's parallel (depends[parallel])
+                    // The directive_name (e.g. "depends[parallel]") logic is handled earlier
+                    // checking for modifiers. Wait, previous logic was:
+                    // let (directive_name, hide_output) = ... check [hide]
+                    // I need to check for [parallel] too.
+                    
+                    // Actually, the modifier logic in `parse_directive` only checks for `[hide]`.
+                    // I should modify `parse_directive` logic to check for specific modifiers per directive,
+                    // or just handle "depends" specifically.
+                    
+                    // Since `parse_directive` splits generic modifier... 
+                    // Let's look at how I can hack this cleanly.
+                    // The `directive_name` passed to match is stripped of modifier? 
+                    // No, `parse_directive` logic only splits `[hide]`.
+                    // If I write `depends[parallel]`, `directive_name_with_modifiers` is `depends[parallel]`.
+                    // If `parse_directive` logic didn't match `[hide]`, `directive_name` is `depends[parallel]`.
+                    
+                    // So I can match "depends[parallel]" here.
+                    
                     let deps = self.parse_dependencies(directive_value)?;
-                    Ok((Directive::Depends(deps), false))
+                    Ok((Directive::Depends(deps, false), false))
+                }
+                "depends[parallel]" => {
+                    let deps = self.parse_dependencies(directive_value)?;
+                    Ok((Directive::Depends(deps, true), false))
+                }
+                "watch" => {
+                    // Parse comma-separated list of glob patterns
+                    // handle quoted strings "pattern1", "pattern2" or simple pattern1, pattern2
+                    let patterns = self.parse_string_list(directive_value)?;
+                    Ok((Directive::Watch(patterns), false))
                 }
                 "privileged" => {
                     // Parse boolean value: true, false, or empty (defaults to true)
@@ -1551,5 +1581,59 @@ impl Parser {
         else {
             Ok(trimmed.to_string())
         }
+    }
+
+    /// Parses a comma-separated list of strings, handling quotes.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The string containing comma-separated items
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of strings.
+    fn parse_string_list(&self, value: &str) -> Result<Vec<String>, ParseError> {
+        let mut items = Vec::new();
+        let mut current_item = String::new();
+        let mut in_quote = false;
+        let mut quote_char = '\0';
+        
+        for ch in value.chars() {
+            match ch {
+                '"' | '\'' => {
+                    if in_quote {
+                        if ch == quote_char {
+                            in_quote = false;
+                        } else {
+                            current_item.push(ch);
+                        }
+                    } else {
+                        in_quote = true;
+                        quote_char = ch;
+                    }
+                }
+                ',' => {
+                    if in_quote {
+                        current_item.push(ch);
+                    } else {
+                        let trimmed = current_item.trim();
+                        if !trimmed.is_empty() {
+                            items.push(trimmed.to_string());
+                        }
+                        current_item.clear();
+                    }
+                }
+                _ => {
+                    current_item.push(ch);
+                }
+            }
+        }
+        
+        let trimmed = current_item.trim();
+        if !trimmed.is_empty() {
+            items.push(trimmed.to_string());
+        }
+        
+        Ok(items)
     }
 }

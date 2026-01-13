@@ -85,18 +85,19 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
             Directive::Env(s) => {
                 result.push_str(&format!("{}> env: {}\n", inner_indent_str, s));
             }
-            Directive::Depends(deps) => {
+            Directive::Depends(deps, parallel) => {
                 let deps_str: Vec<String> = deps.iter().map(|dep| {
                     if dep.args.is_empty() {
                         dep.command_path.clone()
                     } else {
                         let args_str: Vec<String> = dep.args.iter()
-                            .map(|(k, v)| format!("{}=\"{}\"", k, v)) // Assuming string values for simplicity, revisit if complex types needed
+                            .map(|(k, v)| format!("{}=\"{}\"", k, v))
                             .collect();
                         format!("{}({})", dep.command_path, args_str.join(", "))
                     }
                 }).collect();
-                result.push_str(&format!("{}> depends: {}\n", inner_indent_str, deps_str.join(", ")));
+                let suffix = if *parallel { "[parallel]" } else { "" };
+                result.push_str(&format!("{}> depends{}: {}\n", inner_indent_str, suffix, deps_str.join(", ")));
             }
             Directive::Privileged(val) => {
                 result.push_str(&format!("{}> privileged: {}\n", inner_indent_str, val));
@@ -134,6 +135,10 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
             Directive::FallbackHide(s) => format_script_directive(&mut result, &inner_indent_str, "fallback[hide]", s),
             Directive::Finaly(s) => format_script_directive(&mut result, &inner_indent_str, "finaly", s),
             Directive::FinalyHide(s) => format_script_directive(&mut result, &inner_indent_str, "finaly[hide]", s),
+            Directive::Watch(inputs) => {
+                let formatted: Vec<String> = inputs.iter().map(|s| format!("\"{}\"", s)).collect();
+                result.push_str(&format!("{}> watch: {}\n", inner_indent_str, formatted.join(", ")));
+            }
         }
     }
 

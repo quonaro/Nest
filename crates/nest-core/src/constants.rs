@@ -65,6 +65,13 @@ pub const FLAG_COMPLETE: &str = "complete";
 /// Flag name for showing standard command help.
 pub const FLAG_STD: &str = "std";
 
+pub const FLAG_LIST: &str = "list";
+pub const FLAG_CHECK: &str = "check";
+pub const FLAG_DOCTOR: &str = "doctor";
+pub const FLAG_CLEAN: &str = "clean";
+pub const FLAG_UNINSTALL: &str = "uninstall";
+pub const FLAG_INIT: &str = "init";
+
 /// Format option for JSON output.
 pub const FORMAT_JSON: &str = "json";
 

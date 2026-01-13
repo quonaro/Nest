@@ -9,6 +9,7 @@ use super::parser::Parser;
 use super::codegen;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::io::Read;
 
 /// Errors that can occur during include processing.
 #[derive(Debug)]
@@ -205,6 +206,11 @@ fn resolve_and_load_include(
         return load_pattern_files(include_path, base_dir, visited, filter);
     }
 
+    // Check for remote URL
+    if path_str.starts_with("http://") || path_str.starts_with("https://") {
+        return load_remote_file(&path_str, visited, filter);
+    }
+
     // Check if it's a directory (ends with /)
     if path_str.ends_with('/') || path_str.ends_with('\\') {
         // Directory include: app3/
@@ -272,6 +278,93 @@ fn resolve_and_load_include(
         "File not found: {}",
         file_path.display()
     )))
+}
+
+/// Loads content from a remote URL.
+fn load_remote_file(
+    url: &str,
+    visited: &mut std::collections::HashSet<PathBuf>,
+    filter: Option<&[&str]>,
+) -> Result<Option<String>, IncludeError> {
+    // Use the URL as the "canonical path" for cycle detection
+    // We treat the URL string as a dummy PathBuf
+    let url_path = PathBuf::from(url);
+    
+    if visited.contains(&url_path) {
+        return Err(IncludeError::CircularInclude(url.to_string()));
+    }
+
+    // Fetch the content
+    let content = match ureq::get(url).call() {
+        Ok(response) => {
+            if response.status() != 200 {
+                return Err(IncludeError::IoError(format!(
+                    "Failed to fetch remote include {}: status {}", 
+                    url, 
+                    response.status()
+                )));
+            }
+            let mut body = String::new();
+            response.into_body().as_reader().read_to_string(&mut body)
+                .map_err(|e| IncludeError::IoError(format!("Failed to read remote content: {}", e)))?;
+            body
+        },
+        Err(e) => return Err(IncludeError::IoError(format!("Failed to fetch remote include {}: {}", url, e))),
+    };
+
+    // Recursively process includes in the included file
+    // Note: Relative includes in a remote file will fail because we can't resolve them easily
+    // unless we track the base URL. For now, we assume remote files only have absolute includes or no includes.
+    // If we want to support relative includes in remote files, we need to pass a "Base URI" instead of PathBuf.
+    // Given the current architecture uses PathBuf, let's pass a dummy path but maybe warn about relative includes?
+    // Actually, process_includes takes a Path. If we pass the URL as Path, resolving relative paths will likely fail 
+    // or produce weird paths. 
+    // Ideally, we shouldn't allow relative includes in remote files unless we properly resolve URLs.
+    // For simplicity: treat remote url as a "file" in current dir? No, that breaks relative paths.
+    // Let's just process includes but use a dummy base path that indicates it's remote.
+    
+    // We can't really support relative includes inside remote files without a significant refactor 
+    // to separate Filesystem vs URL resolution. 
+    // For now, let's just process it with the current directory as base, which means relative includes 
+    // will look in the local file system. This is probably "safe" but maybe not what user expects.
+    // Let's rely on absolute includes or remote includes inside remote files.
+    
+    // Actually, let's just reuse the current logic, but mark visited.
+    // We use a dummy path for "base_path" so process_includes doesn't crash?
+    // process_includes uses canonicalize() on base_path. Attempting to canonicalize a URL or non-existent path will fail.
+    
+    // HACK: To avoid refactoring everything, let's skip recursive include processing for remote files for now,
+    // OR we can create a temporary file? No, that's messy.
+    // Let's check process_includes implementation again.
+    // It canonicalizes base_path.
+    
+    // If we simply return the content without recursive processing, then `@include` inside remote file won't work.
+    // This is acceptable for a first version.
+    
+    // If a filter is provided, parse and filter the commands
+    let final_content = if let Some(filter_paths) = filter {
+        let mut parser = Parser::new(&content);
+        let parse_result = parser.parse()
+            .map_err(|e| IncludeError::InvalidPath(format!("Error parsing remote included file for filtering: {:?}", e)))?;
+        
+        let filtered_commands = filter_commands(parse_result.commands, filter_paths)
+            .map_err(|e| IncludeError::InvalidPath(e))?;
+
+        let mut filtered_content = String::new();
+        for cmd in filtered_commands {
+            filtered_content.push_str(&codegen::to_nestfile_string(&cmd, 0));
+            filtered_content.push('\n');
+        }
+        filtered_content
+    } else {
+        content
+    };
+
+    let mut result = String::new();
+    result.push_str(&format!("# @source: {}\n", url));
+    result.push_str(&final_content);
+
+    Ok(Some(result))
 }
 
 /// Loads content from a single file.

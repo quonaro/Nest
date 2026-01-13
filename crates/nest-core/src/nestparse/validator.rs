@@ -326,7 +326,7 @@ fn validate_command_recursive(
         match directive {
             Directive::Script(_) | Directive::ScriptHide(_) => has_script = true,
             Directive::Desc(_) => {}
-            Directive::Depends(_) => {}
+            Directive::Depends(_, _) => {}
             Directive::Before(_) | Directive::BeforeHide(_) => {}
             Directive::After(_) | Directive::AfterHide(_) => {}
             Directive::Fallback(_) | Directive::FallbackHide(_) => {}
@@ -345,8 +345,9 @@ fn validate_command_recursive(
             }
             Directive::Logs(_, _) => {}
             Directive::If(_) => {}
-            Directive::Elif(_) => {}
-            Directive::Else => {}
+            Directive::Elif(_) => {},
+            Directive::Else => {},
+            Directive::Watch(_) => {},
         }
     }
 

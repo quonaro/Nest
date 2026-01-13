@@ -30,7 +30,7 @@ pub fn print_command(command: &Command, indent: usize) {
             Directive::Env(s) => {
                 println!("{}    > env: {}", indent_str, s);
             }
-            Directive::Depends(deps) => {
+            Directive::Depends(deps, parallel) => {
                 let deps_str: Vec<String> = deps.iter().map(|dep| {
                     if dep.args.is_empty() {
                         dep.command_path.clone()
@@ -41,7 +41,8 @@ pub fn print_command(command: &Command, indent: usize) {
                         format!("{}({})", dep.command_path, args_str.join(", "))
                     }
                 }).collect();
-                println!("{}    > depends: {}", indent_str, deps_str.join(", "));
+                let suffix = if *parallel { " [parallel]" } else { "" };
+                println!("{}    > depends{}: {}", indent_str, suffix, deps_str.join(", "));
             }
             Directive::Before(s) | Directive::BeforeHide(s) => {
                 let directive_name = if matches!(directive, Directive::BeforeHide(_)) {
@@ -142,6 +143,10 @@ pub fn print_command(command: &Command, indent: usize) {
                 } else {
                     println!("{}    > require_confirm: {}", indent_str, message);
                 }
+            }
+            Directive::Watch(inputs) => {
+                let formatted: Vec<String> = inputs.iter().map(|s| format!("\"{}\"", s)).collect();
+                println!("{}    > watch: {}", indent_str, formatted.join(", "));
             }
         }
     }

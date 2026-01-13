@@ -1,0 +1,22 @@
+
+task_a():
+    > script: |
+        echo "Task A started"
+        sleep 2
+        echo "Task A finished"
+
+task_b():
+    > script: |
+        echo "Task B started"
+        sleep 2
+        echo "Task B finished"
+
+parallel_run():
+    > desc: Run tasks in parallel
+    > depends[parallel]: task_a, task_b
+    > script: echo "Tasks A and B finished"
+
+serial_run():
+    > desc: Run tasks serially
+    > depends: task_a, task_b
+    > script: echo "Tasks A and B finished"

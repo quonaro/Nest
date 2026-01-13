@@ -19,19 +19,17 @@ use std::process;
 pub fn handle_std_help() {
     println!("{}", APP_DESCRIPTION);
     println!();
-    println!("Standard Commands (Available without nestfile):");
-    println!("  {:<12} {}", "list", "List available commands in current nestfile");
-    println!("  {:<12} {}", "check", "Validate configuration file");
-    println!("  {:<12} {}", "doctor", "Diagnose environment issues");
-    println!("  {:<12} {}", "clean", "Remove temporary files");
-    println!("  {:<12} {}", "uninstall", "Uninstall Nest CLI");
-    println!("  {:<12} {}", "update", "Update Nest CLI to the latest version");
-    println!();
-    println!("Flags:");
-    println!("  {:<12} {}", "--init", "Initialize a new nestfile");
-    println!("  {:<12} {}", "--example", "Download example nestfiles");
-    println!("  {:<12} {}", "--version", "Show version");
-    println!("  {:<12} {}", "--std", "Show this help message");
+    println!("Standard Flags (Available without nestfile):");
+    println!("  {:<19} {}", "--list", "List available commands in current nestfile");
+    println!("  {:<19} {}", "--check", "Validate configuration file");
+    println!("  {:<19} {}", "--doctor", "Diagnose environment issues");
+    println!("  {:<19} {}", "--clean", "Remove temporary files");
+    println!("  {:<19} {}", "--uninstall", "Uninstall Nest CLI");
+    println!("  {:<19} {}", "--update", "Update Nest CLI to the latest version");
+    println!("  {:<19} {}", "--init", "Initialize a new nestfile");
+    println!("  {:<19} {}", "--example", "Download example nestfiles");
+    println!("  {:<19} {}", "--version", "Show version");
+    println!("  {:<19} {}", "--std", "Show this help message");
 }
 
 /// Handles the `check` command.

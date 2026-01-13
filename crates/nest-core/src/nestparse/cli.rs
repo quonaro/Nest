@@ -519,14 +519,14 @@ impl CliGenerator {
         })
     }
 
-    fn get_depends_directive(directives: &[Directive]) -> Vec<super::ast::Dependency> {
+    fn get_depends_directive(directives: &[Directive]) -> (Vec<super::ast::Dependency>, bool) {
         directives
             .iter()
             .find_map(|d| match d {
-                Directive::Depends(deps) => Some(deps.clone()),
+                Directive::Depends(deps, parallel) => Some((deps.clone(), *parallel)),
                 _ => None,
             })
-            .unwrap_or_default()
+            .unwrap_or((Vec::new(), false))
     }
 
     fn get_privileged_directive(directives: &[Directive]) -> bool {
@@ -2198,7 +2198,10 @@ impl CliGenerator {
         dry_run: bool,
         verbose: bool,
         visited: &mut std::collections::HashSet<Vec<String>>,
+        parallel: bool,
     ) -> Result<(), String> {
+        // Resolve all dependency paths first
+        let mut tasks = Vec::new();
         for dep in depends {
             // Parse dependency path
             // Format: "command" (relative to current command's parent)
@@ -2224,8 +2227,7 @@ impl CliGenerator {
                 }
             };
 
-            // Check for cycles: if this dependency path is already in the current call stack,
-            // we have a circular dependency and must abort.
+            // Check for cycles
             if visited.contains(&dep_path) {
                 return Err(format!(
                     "Circular dependency detected: {} -> {}",
@@ -2233,31 +2235,76 @@ impl CliGenerator {
                     dep_path.join(" ")
                 ));
             }
+            
+            tasks.push((dep, dep_path));
+        }
 
-            // Find and execute dependency
-            if let Some(dep_command) = self.find_command(&dep_path) {
-                // Execute dependency recursively (with its own dependencies and provided arguments).
-                // execute_command_with_deps is responsible for managing the `visited` set
-                // (marking the current command as visited and unmarking it after execution).
-                // Dependencies don't inherit parent args - they use their own provided args.
-                let empty_parent_args = HashMap::new();
-                self.execute_command_with_deps(
-                    dep_command,
-                    &dep.args,
-                    Some(&dep_path),
-                    dry_run,
-                    verbose,
-                    visited,
-                    &empty_parent_args,
-                )?;
-            } else {
-                return Err(format!(
-                    "Dependency not found: {} (required by {})",
-                    dep_path.join(" "),
-                    current_path.join(" ")
-                ));
+        if parallel {
+            use std::thread;
+            use std::sync::{Arc, Mutex};
+            
+            let errors = Arc::new(Mutex::new(Vec::new()));
+            
+            thread::scope(|s| {
+                for (dep, dep_path) in tasks {
+                    let mut thread_visited = visited.clone();
+                    let errors_clone = Arc::clone(&errors);
+                    
+                    s.spawn(move || {
+                        if let Some(dep_command) = self.find_command(&dep_path) {
+                            let empty_parent_args = HashMap::new();
+                            if let Err(e) = self.execute_command_with_deps(
+                                dep_command,
+                                &dep.args,
+                                Some(&dep_path),
+                                dry_run,
+                                verbose,
+                                &mut thread_visited,
+                                &empty_parent_args,
+                            ) {
+                                let mut errs = errors_clone.lock().unwrap();
+                                errs.push(format!("Dependency '{}' failed: {}", dep.command_path, e));
+                            }
+                        } else {
+                            let mut errs = errors_clone.lock().unwrap();
+                            errs.push(format!(
+                                "Dependency not found: {} (required by {})",
+                                dep_path.join(" "),
+                                current_path.join(" ")
+                            ));
+                        }
+                    });
+                }
+            });
+            
+            let errors = errors.lock().unwrap();
+            if !errors.is_empty() {
+                return Err(errors.join("\n"));
+            }
+        } else {
+            // Serial execution
+            for (dep, dep_path) in tasks {
+                if let Some(dep_command) = self.find_command(&dep_path) {
+                    let empty_parent_args = HashMap::new();
+                    self.execute_command_with_deps(
+                        dep_command,
+                        &dep.args,
+                        Some(&dep_path),
+                        dry_run,
+                        verbose,
+                        visited,
+                        &empty_parent_args,
+                    )?;
+                } else {
+                    return Err(format!(
+                        "Dependency not found: {} (required by {})",
+                        dep_path.join(" "),
+                        current_path.join(" ")
+                    ));
+                }
             }
         }
+        
         Ok(())
     }
 
@@ -2293,7 +2340,7 @@ impl CliGenerator {
         // be implemented separately from dependency tracking.
 
         // Execute dependencies first
-        let depends = Self::get_depends_directive(&command.directives);
+        let (depends, parallel) = Self::get_depends_directive(&command.directives);
         if !depends.is_empty() {
             if verbose {
                 use super::output::OutputFormatter;
@@ -2312,13 +2359,15 @@ impl CliGenerator {
                         }
                     })
                     .collect();
+                let parallel_msg = if parallel { " (parallel)" } else { "" };
                 OutputFormatter::info(&format!(
-                    "Executing dependencies for {}: {}",
+                    "Executing dependencies for {}{}: {}",
                     command_path_unwrapped.join(" "),
+                    parallel_msg,
                     deps_str.join(", ")
                 ));
             }
-            self.execute_dependencies(&depends, command_path_unwrapped, dry_run, verbose, visited)?;
+            self.execute_dependencies(&depends, command_path_unwrapped, dry_run, verbose, visited, parallel)?;
         }
 
         // Validate parameters (if validation directives are present)
