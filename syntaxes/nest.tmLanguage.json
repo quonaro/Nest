@@ -221,13 +221,47 @@
                     }
                 },
                 {
-                    "match": "^(\\s*)(@include)\\s+(.+?)(?:\\s+(into)\\s+([a-zA-Z0-9_]+))?$",
-                    "captures": {
+                    "begin": "^(\\s*)(@include)\\s+",
+                    "end": "$",
+                    "beginCaptures": {
                         "2": {
                             "name": "keyword.other.include.nestfile"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "match": "\\b(into)\\s+([a-zA-Z0-9_]+)",
+                            "captures": {
+                                "1": {
+                                    "name": "keyword.other.into.nestfile"
+                                },
+                                "2": {
+                                    "name": "entity.name.section.group.nestfile"
+                                }
+                            }
                         },
-                        "3": {
+                        {
+                            "match": "\\b(from)\\s+([a-zA-Z0-9_.,\\s]+)",
+                            "captures": {
+                                "1": {
+                                    "name": "keyword.other.from.nestfile"
+                                },
+                                "2": {
+                                    "name": "variable.parameter.nestfile",
+                                    "patterns": [
+                                        {
+                                            "match": ","
+                                        },
+                                        {
+                                            "match": "\\."
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        {
                             "name": "string.unquoted.nestfile",
+                            "match": "[^\\s]+",
                             "patterns": [
                                 {
                                     "include": "#templates"
@@ -236,14 +270,8 @@
                                     "include": "#env-vars"
                                 }
                             ]
-                        },
-                        "4": {
-                            "name": "keyword.other.into.nestfile"
-                        },
-                        "5": {
-                            "name": "entity.name.section.group.nestfile"
                         }
-                    }
+                    ]
                 }
             ]
         },

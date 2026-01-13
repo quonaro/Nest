@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 import { validateNestfileDocument, NestfileCommand } from "./validator";
 
 // Valid directives for autocomplete
@@ -393,7 +395,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
         } else if (meta.name === "@function") {
           item.insertText = new vscode.SnippetString("@function ${1:name}(${2:param}: ${3:str}):\n    ${4:// body}");
         } else if (meta.name === "@include") {
-          item.insertText = new vscode.SnippetString("@include ${1:path/to/file.nest}");
+          item.insertText = new vscode.SnippetString("@include ${1:path/to/file.nest} from ${2:command}");
         }
 
         completions.push(item);
@@ -440,6 +442,72 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
 
       if (completions.length > 0) {
         return completions;
+      }
+    }
+
+    // Check if we're typing after @include for "into" or "from"
+    const includeMatch = textBeforeCursor.match(/^(\s*)@include\s+[^@]+?(\s.*?)$/);
+    if (includeMatch && !currentCommand) {
+      const afterPath = includeMatch[2];
+      const keywords = [];
+
+      if (!afterPath.includes(" into ")) {
+        keywords.push({ name: "into", desc: "Import into a specific group" });
+      }
+      if (!afterPath.includes(" from ")) {
+        keywords.push({ name: "from", desc: "Import specific commands or groups" });
+      }
+
+      for (const kw of keywords) {
+        const item = new vscode.CompletionItem(kw.name, vscode.CompletionItemKind.Keyword);
+        item.documentation = kw.desc;
+        item.insertText = kw.name + " ";
+        completions.push(item);
+      }
+
+      if (completions.length > 0) return completions;
+    }
+
+    // Check if we're typing AFTER "from" in @include
+    const fromMatch = textBeforeCursor.match(/^(\s*)@include\s+(.+?)(?:\s+into\s+[a-zA-Z0-9_]+)?\s+from\s+(.*)$/);
+    if (fromMatch && !currentCommand) {
+      let filePathStr = fromMatch[2].trim();
+
+      // Remove quotes if present
+      if ((filePathStr.startsWith('"') && filePathStr.endsWith('"')) ||
+        (filePathStr.startsWith("'") && filePathStr.endsWith("'"))) {
+        filePathStr = filePathStr.substring(1, filePathStr.length - 1);
+      }
+
+      // Suggest commands from that file
+      try {
+        const currentDir = path.dirname(document.uri.fsPath);
+        const absolutePath = path.isAbsolute(filePathStr)
+          ? filePathStr
+          : path.resolve(currentDir, filePathStr);
+
+        if (fs.existsSync(absolutePath)) {
+          // Read and parse
+          const content = fs.readFileSync(absolutePath, 'utf-8');
+          const parsed = validateNestfileDocument(content, { returnAst: true });
+          // extractCommandNames gives us "cmd", "group", "group sub"
+          const commands = extractCommandNames(parsed.commands);
+
+          for (const cmd of commands) {
+            // Convert spaces to dots: "group sub" -> "group.sub"
+            const dotNotation = cmd.replace(/\s+/g, ".");
+
+            const item = new vscode.CompletionItem(dotNotation, vscode.CompletionItemKind.Reference);
+            item.documentation = `Import from ${filePathStr}`;
+            item.sortText = "0" + dotNotation; // Priority
+
+            completions.push(item);
+          }
+
+          if (completions.length > 0) return completions;
+        }
+      } catch (e) {
+        console.error("Error reading included file:", e);
       }
     }
 
@@ -545,6 +613,26 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
           completions.push(item);
         }
       }
+    }
+
+    // Check if we're typing a template variable {{
+    const templateMatch = textBeforeCursor.match(/\{\{([a-zA-Z0-9_]*)$/);
+    if (templateMatch) {
+      const builtins = [
+        { name: "now", desc: "Current timestamp (RFC3339)" },
+        { name: "user", desc: "Current user name" },
+        { name: "env", desc: "Environment variables map" },
+        { name: "cwd", desc: "Current working directory" }
+      ];
+
+      for (const builtin of builtins) {
+        const item = new vscode.CompletionItem(builtin.name, vscode.CompletionItemKind.Constant);
+        item.documentation = builtin.desc;
+        item.insertText = builtin.name;
+        // Trigger suggestion list
+        completions.push(item);
+      }
+      return completions;
     }
 
     return completions.length > 0 ? completions : undefined;

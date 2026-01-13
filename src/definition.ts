@@ -138,7 +138,20 @@ export class NestfileDefinitionProvider implements vscode.DefinitionProvider {
 
     // Check if we're on an @include line
     if (trimmed.startsWith("@include ")) {
-      const includePart = trimmed.substring(9).trim();
+      // Regex to capture the path part: @include PATH [into ...] [from ...]
+      const match = trimmed.match(/^@include\s+(.+?)(?:\s+into\s+[a-zA-Z0-9_]+)?(?:\s+from\s+.*)?$/);
+      if (!match) {
+        return null;
+      }
+
+      let includePart = match[1].trim();
+
+      // Remove quotes if present
+      if ((includePart.startsWith('"') && includePart.endsWith('"')) ||
+        (includePart.startsWith("'") && includePart.endsWith("'"))) {
+        includePart = includePart.substring(1, includePart.length - 1);
+      }
+
       if (!includePart) {
         return null;
       }

@@ -420,10 +420,16 @@ export function validateNestfileDocument(
     } else if (trimmed.startsWith("@include ")) {
       let pathPart = trimmed.substring(9).trim();
 
+      // Handle 'from ...' suffix first (it usually comes last)
+      const fromIndex = pathPart.indexOf(" from ");
+      if (fromIndex !== -1) {
+        pathPart = pathPart.substring(0, fromIndex).trim();
+      }
+
       // Handle 'into <group>' suffix
-      const intoMatch = pathPart.match(/^(.*?)\s+into\s+([A-Za-z0-9_]+)$/);
-      if (intoMatch) {
-        pathPart = intoMatch[1];
+      const intoIndex = pathPart.indexOf(" into ");
+      if (intoIndex !== -1) {
+        pathPart = pathPart.substring(0, intoIndex).trim();
       }
 
       // Remove surrounding quotes if present
@@ -789,7 +795,7 @@ function validateUndefinedVariables(
   lines: string[]
 ) {
   // 1. Extract all defined variables
-  const definedVars = new Set<string>();
+  const definedVars = new Set<string>(["now", "user", "env", "cwd"]); // Built-in variables whitelist
 
   // From @var and @const
   for (const line of lines) {
