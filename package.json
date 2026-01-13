@@ -2,7 +2,7 @@
   "name": "vscode-nestfile-support",
   "displayName": "Nestfile Language Support",
   "description": "Language support for Nestfile/Nest task runner configuration files: syntax highlighting, validation, autocompletion, hover information, go to definition, find references, code actions, and formatting.",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "publisher": "quonaro",
   "icon": "icons/icon.png",
   "engines": {
