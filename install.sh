@@ -199,14 +199,127 @@ if [ "$INTERACTIVE" = "1" ] && [ -z "$NEST_NONINTERACTIVE" ]; then
         printf "${INFO} Do you want to install a specific version? [y/N] "
         read -r REPLY < "$INPUT_SOURCE"
         if echo "$REPLY" | grep -iq "^y"; then
-            printf "${INFO} Enter version: "
-            read -r V_INPUT < "$INPUT_SOURCE"
-            if [ -n "$V_INPUT" ]; then
-                VERSION="$V_INPUT"
-                echo "   ${ARROW} Targeting version ${BOLD}${VERSION}${RESET}"
+            echo "${INFO} Fetching recent versions..."
+            if command -v curl > /dev/null 2>&1; then
+                # Fetch tags from GitHub API
+                # Retrieve up to 100 recent versions per page
+                TAGS=$(curl -s "https://api.github.com/repos/${REPO}/releases?per_page=100" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+                
+                if [ -n "$TAGS" ]; then
+                    echo "${INFO} Available versions:"
+                    
+                    # Pagination logic
+                    TOTAL_LINES=$(echo "$TAGS" | wc -l)
+                    CURRENT_LINE=1
+                    PAGE_SIZE=5
+                    
+                    while true; do
+                        END_LINE=$((CURRENT_LINE + PAGE_SIZE - 1))
+                        
+                        # Display current page
+                        echo "$TAGS" | sed -n "${CURRENT_LINE},${END_LINE}p" | while read -r line; do
+                            echo "   - ${BOLD}$line${RESET}"
+                        done
+                        
+                        REMAINING=$((TOTAL_LINES - END_LINE))
+                        
+                        echo ""
+                        if [ "$REMAINING" -gt 0 ]; then
+                            printf "${INFO} Enter version (or press 'm' to see more): "
+                        else
+                             printf "${INFO} Enter version: "
+                        fi
+                        
+                        read -r V_INPUT < "$INPUT_SOURCE"
+                        
+                        if [ "$V_INPUT" = "m" ] && [ "$REMAINING" -gt 0 ]; then
+                            CURRENT_LINE=$((END_LINE + 1))
+                            continue
+                        elif [ -n "$V_INPUT" ]; then
+                            CLEAN_VERSION="${V_INPUT#v}"
+                            VERSION="$CLEAN_VERSION"
+                            echo "   ${ARROW} You selected: ${BOLD}v${VERSION}${RESET}"
+                            break
+                        else
+                             # If empty input, keep asking or treat as cancel?
+                             # Better to loop if empty or maybe strictly require input?
+                             # Logic above: if -n V_INPUT check was used.
+                             # If user just hits enter, loop again or do nothing?
+                             # If empty, let's just re-prompt essentially by continuing loop logic but without advancing page?
+                             # Actually if empty, staying on same page is confusing if we reprint.
+                             # Let's assume empty input = cancel/skip? No, user said "Enter version".
+                             # Re-prompting is best.
+                             echo "${WARN} Please enter a version."
+                             # Don't advance page
+                        fi
+                    done
+                else
+                    echo "${WARN} Could not fetch versions (network or API limit). You can still type a version manually."
+                    printf "${INFO} Enter version: "
+                    read -r V_INPUT < "$INPUT_SOURCE"
+                    if [ -n "$V_INPUT" ]; then
+                        CLEAN_VERSION="${V_INPUT#v}"
+                        VERSION="$CLEAN_VERSION"
+                        echo "   ${ARROW} You selected: ${BOLD}v${VERSION}${RESET}"
+                    fi
+                fi
+            else
+                echo "${WARN} curl not found, cannot list versions. Please type manually."
+                printf "${INFO} Enter version: "
+                read -r V_INPUT < "$INPUT_SOURCE"
+                if [ -n "$V_INPUT" ]; then
+                    CLEAN_VERSION="${V_INPUT#v}"
+                    VERSION="$CLEAN_VERSION"
+                    echo "   ${ARROW} You selected: ${BOLD}v${VERSION}${RESET}"
+                fi
             fi
         fi
     fi
+
+    # Install Path Prompt
+    echo ""
+    echo "${INFO} ${BOLD}Choose installation location:${RESET}"
+    echo "   1) User   (${HOME}/.local/bin) [Default]"
+    
+    # Determine system path based on OS
+    if [ "$PLATFORM" = "macos" ]; then
+        SYSTEM_PATH="/usr/local/bin"
+    else
+        SYSTEM_PATH="/usr/local/bin" # Standard for Linux too usually, but sometimes /usr/bin is preferred by distros. Sticking to /usr/local/bin as safe default.
+    fi
+    # Just to be sure about "standard paths", /usr/local/bin is generally safer than /usr/bin for user installed stuff.
+    
+    echo "   2) System (${SYSTEM_PATH})"
+    echo "   3) Custom"
+    
+    printf "${INFO} Enter selection [1]: "
+    read -r REPLY < "$INPUT_SOURCE"
+    
+    case "$REPLY" in
+        2)
+            INSTALL_DIR="${SYSTEM_PATH}"
+            INSTALL_SCOPE="system"
+            ;;
+        3)
+            printf "${INFO} Enter custom path: "
+            read -r CUSTOM_PATH < "$INPUT_SOURCE"
+            # Expand tilde if present
+            CUSTOM_PATH="${CUSTOM_PATH/#\~/$HOME}"
+            if [ -z "$CUSTOM_PATH" ]; then
+                 echo "${WARN} No path entered, defaulting to User location.${RESET}"
+                 INSTALL_DIR="${HOME}/.local/bin"
+                 INSTALL_SCOPE="user"
+            else
+                 INSTALL_DIR="$CUSTOM_PATH"
+                 INSTALL_SCOPE="custom"
+            fi
+            ;;
+        *)
+            INSTALL_DIR="${HOME}/.local/bin"
+            INSTALL_SCOPE="user"
+            ;;
+    esac
+    echo "   ${ARROW} Installing to ${BOLD}${INSTALL_DIR}${RESET}"
 fi
 
 # Resolve Platform Archive Name
@@ -226,20 +339,49 @@ if [ "${PLATFORM}" = "linux" ] && [ "${ARCHITECTURE}" = "x86_64" ]; then
     esac
 fi
 
-# Install Scope
-case "${INSTALL_SCOPE}" in
-    global|system)
-        INSTALL_DIR="/usr/local/bin"
-        ;;
-    user|"")
-        INSTALL_DIR="${HOME}/.local/bin"
-        ;;
-    *)
-        echo "${WARN} Unknown NEST_INSTALL_SCOPE='${INSTALL_SCOPE}', falling back to user scope${RESET}" >&2
-        INSTALL_DIR="${HOME}/.local/bin"
-        INSTALL_SCOPE="user"
-        ;;
-esac
+# Set defaults if not set interactively (for non-interactive mode)
+if [ -z "$INSTALL_DIR" ]; then
+    case "${INSTALL_SCOPE}" in
+        global|system)
+            INSTALL_DIR="/usr/local/bin"
+            ;;
+        user|"")
+            INSTALL_DIR="${HOME}/.local/bin"
+            ;;
+        *)
+            # Scope might be unset or weird, existing logic fallbacks
+             echo "${WARN} Unknown NEST_INSTALL_SCOPE='${INSTALL_SCOPE}', falling back to user scope${RESET}" >&2
+             INSTALL_DIR="${HOME}/.local/bin"
+             INSTALL_SCOPE="user"
+            ;;
+    esac
+fi
+
+# Check write permissions and configure sudo if needed
+SUDO=""
+if [ -d "$INSTALL_DIR" ]; then
+    if [ ! -w "$INSTALL_DIR" ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+            echo "${INFO} ${BOLD}Note: Installation to ${INSTALL_DIR} requires sudo privileges.${RESET}"
+        else
+            echo "${CROSS} ${BOLD}${RED}Error: ${INSTALL_DIR} is not writable and sudo is not available.${RESET}" >&2
+            exit 1
+        fi
+    fi
+else
+     # Directory doesn't exist, check parent permissions
+     PARENT_DIR=$(dirname "$INSTALL_DIR")
+     if [ -d "$PARENT_DIR" ] && [ ! -w "$PARENT_DIR" ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+            echo "${INFO} ${BOLD}Note: Creating ${INSTALL_DIR} requires sudo privileges.${RESET}"
+        else
+            echo "${CROSS} ${BOLD}${RED}Error: Cannot create ${INSTALL_DIR} (permission denied) and sudo is not available.${RESET}" >&2
+            exit 1
+        fi
+     fi
+fi
 
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
@@ -271,7 +413,7 @@ echo ""
 
 # Create install directory if it doesn't exist
 echo "${INFO} ${BOLD}Preparing installation...${RESET}"
-mkdir -p "${INSTALL_DIR}"
+$SUDO mkdir -p "${INSTALL_DIR}"
 echo "   ${CHECK} Created install directory"
 
 # Download binary
@@ -381,8 +523,8 @@ fi
 
 # Install binary
 echo "${INFO} ${BOLD}Installing binary...${RESET}"
-mv "${BINARY_NAME}" "${BINARY_PATH}"
-chmod +x "${BINARY_PATH}"
+$SUDO mv "${BINARY_NAME}" "${BINARY_PATH}"
+$SUDO chmod +x "${BINARY_PATH}"
 echo "   ${CHECK} Binary installed to ${BINARY_PATH}"
 if [ "$VERSION" != "latest" ]; then
     echo "   ${CHECK} Installed version: ${BOLD}${VERSION}${RESET}"
