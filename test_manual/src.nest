@@ -1,0 +1,20 @@
+
+# Deep nested structure for testing
+root_cmd:
+    > script: echo "root"
+
+group1:
+    > desc: Group 1 Description
+    sub1:
+        > script: echo "sub1"
+    sub2:
+        > script: echo "sub2"
+    nested_group:
+        deep_cmd:
+            > script: echo "deep"
+        other_deep:
+            > script: echo "other"
+
+constants_group:
+    @const MY_CONST = "value"
+    > script: echo "constants"

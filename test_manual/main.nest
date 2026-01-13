@@ -1,0 +1,15 @@
+
+# 1. Simple command import
+@include src.nest from root_cmd
+
+# 2. Deep group import (should include all children)
+@include src.nest into imported_deep from group1
+
+# 3. Partial import (only sub1)
+@include src.nest into imported_partial from group1.sub1
+
+# 4. Nested partial import (only deep_cmd)
+@include src.nest into imported_nested from group1.nested_group.deep_cmd
+
+# 5. Multiple selection
+@include src.nest into imported_multi from group1.sub1, group1.sub2

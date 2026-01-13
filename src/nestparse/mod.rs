@@ -9,6 +9,7 @@
 pub mod args;
 pub mod ast;
 pub mod cli;
+pub mod codegen;
 pub mod command_handler;
 pub mod completion;
 pub mod condition;
