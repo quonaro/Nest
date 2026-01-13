@@ -4,6 +4,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use nest_core::nestparse::ast::Command;
+use nest_core::nestparse::validator::{print_validation_errors, validate_commands};
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
@@ -12,7 +13,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame, Terminal,
 };
-use std::{error::Error, io, path::Path};
+use std::{error::Error, io, path::Path, process};
 
 enum InputMode {
     Normal,
@@ -456,19 +457,75 @@ impl App {
 fn main() -> Result<(), Box<dyn Error>> {
     // 1. Load Nestfile
     // Logic similar to nest-cli/main.rs but simplified for now
-    let current_dir = std::env::current_dir()?;
-    let nestfile_path = find_nestfile(&current_dir).ok_or("Nestfile not found")?;
+    let current_dir = std::env::current_dir().map_err(|e| format!("Could not get current directory: {}", e))?;
+    let nestfile_path = match find_nestfile(&current_dir) {
+        Some(path) => path,
+        None => {
+            println!("nestfile not found");
+            println!("Run 'nest --init' to create one.");
+            process::exit(1);
+        }
+    };
     
-    let content = nest_core::nestparse::file::read_file_unchecked(&nestfile_path)?;
-    // Process includes logic is needed if we want full support...
-    // But process_includes is in nestparse::include
+    let content = match nest_core::nestparse::file::read_file_unchecked(&nestfile_path) {
+        Ok(c) => c,
+        Err(e) => {
+            nest_core::nestparse::output::OutputFormatter::error(&format!("Error reading file: {}", e));
+            process::exit(1);
+        }
+    };
+    
+    // Process includes logic
     let mut visited = std::collections::HashSet::new();
-    let processed_content = nest_core::nestparse::include::process_includes(&content, &nestfile_path, &mut visited)
-        .map_err(|e| format!("Error processing includes: {}", e))?;
+    let processed_content = match nest_core::nestparse::include::process_includes(&content, &nestfile_path, &mut visited) {
+        Ok(c) => c,
+        Err(e) => {
+            nest_core::nestparse::output::OutputFormatter::error(&format!("Error processing includes: {}", e));
+            process::exit(1);
+        }
+    };
 
-    let mut parser = nest_core::nestparse::parser::Parser::new(&processed_content);
-    let parse_result = parser.parse().map_err(|e| format!("Parse error: {:?}", e))?;
+    // Prepend root source marker
+    let mut full_content = String::new();
+    if let Ok(canonical_path) = nestfile_path.canonicalize() {
+        full_content.push_str(&format!("# @source: {}\n", canonical_path.display()));
+    } else {
+        full_content.push_str(&format!("# @source: {}\n", nestfile_path.display()));
+    }
+    full_content.push_str(&processed_content);
+
+    let mut parser = nest_core::nestparse::parser::Parser::new(&full_content);
+    let mut parse_result = match parser.parse() {
+        Ok(res) => res,
+        Err(e) => {
+            let msg = match e {
+                nest_core::nestparse::parser::ParseError::UnexpectedEndOfFile(line) => {
+                    format!("Parse error at line {}: Unexpected end of file.", line)
+                }
+                nest_core::nestparse::parser::ParseError::InvalidSyntax(msg, line) => {
+                    format!("Parse error at line {}: {}", line, msg)
+                }
+                nest_core::nestparse::parser::ParseError::InvalidIndent(line) => {
+                    format!("Parse error at line {}: Invalid indentation.", line)
+                }
+            };
+            nest_core::nestparse::output::OutputFormatter::error(&msg);
+            process::exit(1);
+        }
+    };
+
+    // Merge duplicate commands (same as CLI)
+    parse_result.commands = nest_core::nestparse::merger::merge_commands(parse_result.commands);
+
+    // Validate configuration using standard nest-core validator
+    if let Err(validation_errors) = validate_commands(&parse_result.commands, &nestfile_path) {
+        print_validation_errors(&validation_errors, &nestfile_path);
+        process::exit(1);
+    }
     
+    // Populate source file path recursively
+    resolve_command_sources(&mut parse_result.commands, &full_content, &nestfile_path);
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -496,6 +553,57 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn resolve_command_sources(commands: &mut Vec<Command>, content: &str, initial_path: &Path) {
+    let mut line_map = Vec::new();
+    let mut current_path = initial_path.to_path_buf();
+    
+    // 1. Build map of line index -> source file
+    for line in content.lines() {
+        if line.starts_with("# @source: ") {
+            let path_str = line[11..].trim();
+            current_path = std::path::PathBuf::from(path_str);
+        }
+        line_map.push(current_path.clone());
+    }
+    
+    // 2. Resolve recursively
+    let indexed_lines: Vec<(usize, &str)> = content.lines().enumerate().collect();
+    resolve_scope(commands, &indexed_lines, &line_map);
+}
+
+fn resolve_scope(
+    commands: &mut Vec<Command>, 
+    lines: &[(usize, &str)], 
+    line_map: &[std::path::PathBuf]
+) {
+    for cmd in commands {
+        // Find definition line
+        for (idx, (line_num, line)) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+            
+            // Check for name match at start of line
+            if trimmed.starts_with(&cmd.name) {
+                let remainder = &trimmed[cmd.name.len()..];
+                // Check valid endings: ":", "(...", " :"
+                if remainder.trim_start().starts_with(':') || remainder.starts_with('(') {
+                    // Found it!
+                    if let Some(path) = line_map.get(*line_num) {
+                        cmd.source_file = Some(path.clone());
+                    }
+                    
+                    // Recurse children with lines AFTER definition
+                    if !cmd.children.is_empty() {
+                         let next_lines = &lines[idx+1..]; 
+                         resolve_scope(&mut cmd.children, next_lines, line_map);
+                    }
+                    break; // Found this command, move to next sibling
+                }
+            }
+        }
+    }
 }
 
 fn find_nestfile(dir: &Path) -> Option<std::path::PathBuf> {

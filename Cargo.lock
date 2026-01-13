@@ -677,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "nest"
-version = "3.0.5"
+version = "3.0.13"
 dependencies = [
  "clap",
  "clap_complete",

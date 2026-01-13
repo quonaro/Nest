@@ -159,9 +159,14 @@ pub fn process_includes(
                     result.push('\n');
                 }
             } else {
-                // Regular include, just append content
-                result.push_str(&included_content);
-                result.push('\n');
+                // Process includes in the included content
+                let processed_inc = process_includes(&included_content, &include_path, visited)?;
+                
+                // Add marker for start of include
+                result.push_str(&format!("# @source: {}\n", include_path.display()));
+                result.push_str(&processed_inc);
+                // Add marker for restoring current context
+                result.push_str(&format!("# @source: {}\n", normalized_base.display()));
             }
         } else {
             // Regular line, add it as-is
