@@ -792,12 +792,17 @@ b():
 
         <h3>Key Points</h3>
         <ul>
-          <li>before executes before the main script</li>
-          <li>after executes only if main script succeeds</li>
-          <li>fallback executes only if main script fails and replaces error output</li>
-          <li>finally always executes regardless of success or failure</li>
-          <li>multiple directives of the same type are executed in order</li>
+          <li>Include directives are processed before parsing</li>
+          <li>Included commands are merged into the main configuration</li>
+          <li>Circular includes are detected and will cause an error</li>
+          <li>Included files can use variables, constants, and functions defined in the main file</li>
+          <li>Relative paths are resolved relative to the file containing the <code>@include</code> directive</li>
         </ul>
+
+        <h3>Include into Group</h3>
+        <p>You can import commands from a file directly into a specific group using the <code>into</code> keyword:</p>
+        <pre v-pre><code>@include modules/database.nest into db</code></pre>
+        <p>This will wrap all commands from <code>modules/database.nest</code> under the <code>db:</code> group.</p>
 
         <h3>Example</h3>
         <pre v-pre><code># Main nestfile
@@ -809,6 +814,32 @@ b():
 # Commands from included files are now available
 # nest docker build
 # nest database migrate</code></pre>
+      </section>
+
+      <section id="overriding">
+        <h2>Command Overriding and Merging</h2>
+        <p>When you define a command with the same name multiple times (e.g., via <code>@include</code>), Nest merges them instead of showing an error. This allows you to override or extend commands from included files.</p>
+
+        <h3>Merging Rules</h3>
+        <ol>
+          <li><strong>Parameters</strong>: Replaced completely if the overriding command defines any parameters.</li>
+          <li><strong>Directives</strong>: Appended (e.g., <code>&gt; desc:</code> in the override replaces the original if it's the last one).</li>
+          <li><strong>Children</strong>: Merged recursively.</li>
+          <li><strong>Variables/Constants</strong>: Merged (local overrides override previous local definitions).</li>
+        </ol>
+
+        <h3>Example</h3>
+        <p><strong>base.nest</strong>:</p>
+        <pre v-pre><code>serve:
+    > desc: "Start server"
+    > script: echo "Starting..."</code></pre>
+
+        <p><strong>nestfile</strong>:</p>
+        <pre v-pre><code>@include base.nest
+
+serve:
+    > desc: "Start dev server" # Overrides description
+    # Script directive from base.nest is preserved unless overridden by another > script:</code></pre>
       </section>
 
       <section id="conditional">
