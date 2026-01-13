@@ -18,6 +18,7 @@ enum InputMode {
     Normal,
     Editing,
     Search,
+    EditingArg,
 }
 
 #[derive(PartialEq)]
@@ -45,6 +46,7 @@ struct App {
     flat_commands: Vec<(String, Command)>, // Cache for Flat View
     breadcrumbs: Vec<String>, // Function/Command names path
     selection_history: Vec<usize>, // To restore selection when going up
+    args_map: std::collections::HashMap<String, String>,
     
     // Feature States
     show_source: bool,
@@ -78,6 +80,7 @@ impl App {
             flat_commands: Vec::new(),
             breadcrumbs: Vec::new(),
             selection_history: Vec::new(),
+            args_map: std::collections::HashMap::new(),
             show_source: false,
             source_code: None,
             search_query: String::new(),
@@ -275,6 +278,63 @@ impl App {
             .unwrap_or_default()
     }
 
+    fn update_input_buffer(&mut self) {
+        if let Some(cmd) = self.get_selected_command() {
+             let mut full_cmd = if self.view_mode != ViewMode::History {
+                 self.breadcrumbs.join(" ")
+             } else {
+                 // In History mode, we might want to respect the history command string base?
+                 // But for now, let's treat it as rebuilding from the resolved command.
+                 // Actually, if we are in History mode, get_selected_command resolves the command struct.
+                 // We should probably reconstruct the path from the resolved command if possible,
+                 // or just use the history string? 
+                 // Issue: History string has args. args_map might be empty initially.
+                 // Simple approach: Always rebuild from scratch using breadcrumbs if available? 
+                 // But History command might not match current breadcrumbs.
+                 // Let's assume breadcrumbs are correct for Tree/Flat. 
+                 // For History, we might need a way to get the full path of the resolved command.
+                 // Since we don't store parent pointers, we can't easily walk up.
+                 // Fallback: Use cmd.name.
+                 cmd.name.clone()
+             };
+             
+             if self.view_mode != ViewMode::History {
+                 if !full_cmd.is_empty() { full_cmd.push(' '); }
+                 full_cmd.push_str(&cmd.name);
+             }
+
+             // Append arguments from args_map
+             for param in &cmd.parameters {
+                 if let Some(val) = self.args_map.get(&param.name) {
+                     // Check if bool flag
+                     if param.param_type == "bool" {
+                         if val == "true" {
+                             full_cmd.push(' ');
+                             if param.is_named {
+                                 full_cmd.push_str("--");
+                                 full_cmd.push_str(&param.name);
+                             }
+                         }
+                     } else {
+                         // String/Num/etc
+                         if !val.is_empty() {
+                             full_cmd.push(' ');
+                             if param.is_named {
+                                 full_cmd.push_str("--");
+                                 full_cmd.push_str(&param.name);
+                                 full_cmd.push(' ');
+                                 full_cmd.push_str(val);
+                             } else {
+                                 full_cmd.push_str(val);
+                             }
+                         }
+                     }
+                 }
+             }
+             self.input_buffer = full_cmd;
+        }
+    }
+
     fn toggle_view(&mut self) {
         match self.view_mode {
             ViewMode::Tree => self.view_mode = ViewMode::Flat,
@@ -312,6 +372,7 @@ impl App {
             None => 0,
         };
         self.state.select(Some(i));
+        self.args_map.clear();
     }
 
     fn previous(&mut self) {
@@ -337,6 +398,7 @@ impl App {
             None => 0,
         };
         self.state.select(Some(i));
+        self.args_map.clear();
     }
 
     fn update_search(&mut self) {
@@ -522,6 +584,7 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                          if app.arg_state.selected().is_none() && !app.current_args().is_empty() {
                                               app.arg_state.select(Some(0));
                                          }
+                                         app.update_input_buffer();
                                     }
                                     Focus::ArgumentList => app.focus = Focus::CommandList,
                                 }
@@ -533,8 +596,10 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                              app.breadcrumbs.push(cmd.name.clone());
                                              app.selection_history.push(app.state.selected().unwrap_or(0));
                                              app.state.select(Some(0));
+                                             app.args_map.clear();
                                         } else {
                                              app.focus = Focus::ArgumentList;
+                                             app.update_input_buffer();
                                         }
                                     }
                                 } else {
@@ -552,6 +617,7 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                                 } else {
                                                     app.state.select(Some(0));
                                                 }
+                                                app.args_map.clear();
                                             }
                                         }
                                     }
@@ -649,13 +715,12 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                                  app.selection_history.push(app.state.selected().unwrap_or(0));
                                                  app.state.select(Some(0));
                                              } else {
-                                                 let mut full_cmd = app.breadcrumbs.join(" ");
-                                                 if !full_cmd.is_empty() { full_cmd.push(' '); }
-                                                 full_cmd.push_str(&cmd.name);
-                                                 
-                                                 app.add_history(full_cmd.clone());
-                                                 execute_shell_command(terminal, &full_cmd)?;
-                                             }
+                                                app.update_input_buffer();
+                                                let full_cmd = app.input_buffer.clone();
+                                                
+                                                app.add_history(full_cmd.clone());
+                                                execute_shell_command(terminal, &full_cmd)?;
+                                            }
                                          }
                                     }
                                     Focus::History => {
@@ -668,36 +733,22 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                         }
                                     }
                                     Focus::ArgumentList => {
-                                        // Append selected argument to input buffer
+                                        // Interactive Argument Form
                                         let args = app.current_args();
                                         if let Some(idx) = app.arg_state.selected() {
                                             if let Some(arg) = args.get(idx) {
-                                                if app.input_buffer.is_empty() {
-                                                     if let Some(cmd) = app.get_selected_command() {
-                                                        let mut full_cmd = app.breadcrumbs.join(" ");
-                                                        if !full_cmd.is_empty() { full_cmd.push(' '); }
-                                                        full_cmd.push_str(&cmd.name);
-                                                        app.input_buffer = full_cmd;
-                                                     }
-                                                }
-                                                
-                                                app.input_buffer.push(' ');
-                                                if arg.is_named {
-                                                    app.input_buffer.push_str("--");
-                                                    app.input_buffer.push_str(&arg.name);
+                                                // Check for boolean flag
+                                                if arg.param_type == "bool" {
+                                                    let current_val = app.args_map.get(&arg.name).map(|s| s.as_str()).unwrap_or("false");
+                                                    let new_val = if current_val == "true" { "false" } else { "true" };
+                                                    app.args_map.insert(arg.name.clone(), new_val.to_string());
+                                                    app.update_input_buffer();
                                                 } else {
-                                                    match &arg.kind {
-                                                        nest_core::nestparse::ast::ParamKind::Wildcard { name, .. } => {
-                                                            app.input_buffer.push_str(name.as_deref().unwrap_or("*"));
-                                                        }
-                                                        nest_core::nestparse::ast::ParamKind::Normal => {
-                                                             app.input_buffer.push('<');
-                                                             app.input_buffer.push_str(&arg.name);
-                                                             app.input_buffer.push('>');
-                                                        }
-                                                    }
+                                                    // String/Number - enter editing mode
+                                                    let current_val = app.args_map.get(&arg.name).cloned().unwrap_or_default();
+                                                    app.input_buffer = current_val;
+                                                    app.mode = InputMode::EditingArg;
                                                 }
-                                                app.mode = InputMode::Editing;
                                             }
                                         }
                                     }
@@ -710,6 +761,7 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                 app.mode = InputMode::Normal;
                                 app.view_mode = ViewMode::Flat; 
                                 app.focus = Focus::CommandList;
+                                app.args_map.clear();
                             }
                             KeyCode::Esc => {
                                 app.mode = InputMode::Normal;
@@ -735,6 +787,30 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                             }
                             KeyCode::Esc => {
                                 app.mode = InputMode::Normal;
+                            }
+                            KeyCode::Char(c) => {
+                                app.input_buffer.push(c);
+                            }
+                            KeyCode::Backspace => {
+                                app.input_buffer.pop();
+                            }
+                            _ => {}
+                        },
+                        InputMode::EditingArg => match key.code {
+                            KeyCode::Enter => {
+                                // Save value
+                                if let Some(idx) = app.arg_state.selected() {
+                                    let args = app.current_args();
+                                    if let Some(arg) = args.get(idx) {
+                                        app.args_map.insert(arg.name.clone(), app.input_buffer.clone());
+                                    }
+                                }
+                                app.mode = InputMode::Normal;
+                                app.update_input_buffer();
+                            }
+                            KeyCode::Esc => {
+                                app.mode = InputMode::Normal;
+                                app.update_input_buffer(); // Restore command preview
                             }
                             KeyCode::Char(c) => {
                                 app.input_buffer.push(c);
@@ -769,7 +845,10 @@ fn ui(f: &mut Frame, app: &mut App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),
-            Constraint::Length(if let InputMode::Editing = app.mode { 3 } else { 1 }), // Footer space
+            Constraint::Length(match app.mode {
+                InputMode::Editing | InputMode::EditingArg => 3,
+                _ => 1,
+            }), // Footer space
         ])
         .split(f.area());
 
@@ -977,28 +1056,37 @@ fn ui(f: &mut Frame, app: &mut App) {
             let current_args = app.current_args();
             let arg_items: Vec<ListItem> = current_args.iter().map(|param| {
             let mut s = String::new();
-            if param.is_named {
+            
+            // Check current value
+            let val = app.args_map.get(&param.name).map(|s| s.as_str());
+
+            if param.param_type == "bool" {
+                let is_checked = val == Some("true");
+                s.push_str(if is_checked { "[x] " } else { "[ ] " });
                 s.push_str("--");
                 s.push_str(&param.name);
-                if let Some(alias) = &param.alias {
-                    s.push_str(&format!(", -{}", alias));
-                }
             } else {
-                match &param.kind {
-                        nest_core::nestparse::ast::ParamKind::Wildcard { name, .. } => {
-                            s.push_str("<");
-                            s.push_str(name.as_deref().unwrap_or("*"));
-                            s.push_str("...>");
-                        }
-                        nest_core::nestparse::ast::ParamKind::Normal => {
-                            s.push_str(&format!("<{}>", param.name));
-                        }
+                if param.is_named {
+                    s.push_str("--");
+                    s.push_str(&param.name);
+                } else {
+                    s.push('<');
+                    s.push_str(&param.name);
+                    s.push('>');
+                }
+                
+                if let Some(v) = val {
+                    if !v.is_empty() {
+                         s.push_str(": ");
+                         s.push_str(v);
+                    }
                 }
             }
-            s.push_str(&format!(" ({})", param.param_type));
-            if let Some(def) = &param.default {
-                    s.push_str(&format!(" = {:?}", def));
+            // Type hint
+            if param.param_type != "bool" {
+                s.push_str(&format!(" ({})", param.param_type));
             }
+
             ListItem::new(Line::from(s))
             }).collect();
 
@@ -1023,6 +1111,16 @@ fn ui(f: &mut Frame, app: &mut App) {
             let input = Paragraph::new(app.input_buffer.as_str())
                 .style(Style::default().fg(Color::Yellow))
                 .block(Block::default().borders(Borders::ALL).title("Edit Command"));
+            f.render_widget(input, chunks[1]);
+            f.set_cursor_position(ratatui::layout::Position {
+                x: chunks[1].x + app.input_buffer.len() as u16 + 1,
+                y: chunks[1].y + 1,
+            });
+        }
+        InputMode::EditingArg => {
+            let input = Paragraph::new(app.input_buffer.as_str())
+                .style(Style::default().fg(Color::Magenta))
+                .block(Block::default().borders(Borders::ALL).title("Edit Argument Value"));
             f.render_widget(input, chunks[1]);
             f.set_cursor_position(ratatui::layout::Position {
                 x: chunks[1].x + app.input_buffer.len() as u16 + 1,
