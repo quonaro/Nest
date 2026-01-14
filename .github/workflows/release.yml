@@ -103,14 +103,23 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           BINARY_PATH="target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
+          NESTUI_PATH="target/${{ matrix.target }}/release/nestui"
+          
           if [ ! -f "$BINARY_PATH" ]; then
             echo "Error: Binary not found at $BINARY_PATH"
             exit 1
           fi
+          
           if [ "${{ matrix.arch }}" == "aarch64" ] && [ "${{ matrix.platform_name }}" == "linux" ]; then
             aarch64-linux-gnu-strip "$BINARY_PATH"
+            if [ -f "$NESTUI_PATH" ]; then
+                aarch64-linux-gnu-strip "$NESTUI_PATH"
+            fi
           else
             strip "$BINARY_PATH"
+            if [ -f "$NESTUI_PATH" ]; then
+                strip "$NESTUI_PATH"
+            fi
           fi
 
       - name: Create archive (Unix)
@@ -140,7 +149,15 @@ jobs:
           cd target/${{ matrix.target }}/release
           ARCHIVE_FULL_PATH="${WORKING_DIR}/${ARCHIVE_NAME}"
           echo "Creating archive at: ${ARCHIVE_FULL_PATH}"
-          tar czf "${ARCHIVE_FULL_PATH}" ${{ matrix.binary_name }}
+          
+          # Check if nestui exists
+          if [ -f "nestui" ]; then
+            echo "Found nestui, including in archive"
+            tar czf "${ARCHIVE_FULL_PATH}" ${{ matrix.binary_name }} nestui
+          else
+            echo "Warning: nestui not found, archiving only ${{ matrix.binary_name }}"
+            tar czf "${ARCHIVE_FULL_PATH}" ${{ matrix.binary_name }}
+          fi
           if [ $? -ne 0 ]; then
             echo "Error: tar command failed"
             exit 1
@@ -192,7 +209,15 @@ jobs:
           Push-Location $BINARY_DIR
           try {
             # Create archive from binary directory
-            Compress-Archive -Path $BINARY_FILE -DestinationPath $ARCHIVE_FULL_PATH -Force
+            $FILES_TO_ARCHIVE = @($BINARY_FILE)
+            if (Test-Path "nestui.exe") {
+                Write-Host "Found nestui.exe, including in archive"
+                $FILES_TO_ARCHIVE += "nestui.exe"
+            } else {
+                Write-Host "Warning: nestui.exe not found"
+            }
+            
+            Compress-Archive -Path $FILES_TO_ARCHIVE -DestinationPath $ARCHIVE_FULL_PATH -Force
             if (-not $?) {
               Write-Error "Error: Compress-Archive failed"
               exit 1
