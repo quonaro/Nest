@@ -5,7 +5,6 @@
 # BASIC COMMANDS
 # ============================================================================
 
-@include examples/database.nest
 
 hello():
     > desc: Print a greeting message

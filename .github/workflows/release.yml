@@ -66,6 +66,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
+          echo "CC_x86_64_unknown_linux_musl=musl-gcc" >> $GITHUB_ENV
 
       - name: Install cross-compilation tools (Linux aarch64)
         if: matrix.platform_name == 'linux' && matrix.arch == 'aarch64'
