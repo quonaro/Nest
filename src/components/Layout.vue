@@ -144,9 +144,12 @@ const getActiveSectionFromScroll = () => {
     currentHash.value = activeSection
     hash.value = activeSection
     // Update URL without scrolling and without triggering hashchange
+    // Update URL without scrolling and without triggering hashchange
     if (window.history.replaceState) {
       const currentPath = route.path
-      window.history.replaceState(null, '', activeSection ? `${currentPath}#${activeSection}` : currentPath)
+      const baseUrl = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL.slice(0, -1) : import.meta.env.BASE_URL
+      const fullPath = `${baseUrl}${currentPath}`
+      window.history.replaceState(null, '', activeSection ? `${fullPath}#${activeSection}` : fullPath)
     }
   }
 }
@@ -207,10 +210,10 @@ onMounted(() => {
   
   // Handle initial hash after content loads
   const handleInitialHash = () => {
-    const hash = window.location.hash || route.hash
-    if (hash) {
+    const initialHash = window.location.hash || route.hash
+    if (initialHash) {
       setTimeout(() => {
-        const element = document.querySelector(hash)
+        const element = document.querySelector(initialHash)
         if (element) {
           const headerOffset = 80
           const elementPosition = (element as HTMLElement).offsetTop
@@ -342,7 +345,9 @@ const performScroll = (sectionId: string) => {
       
       // Update URL hash without triggering hashchange
       const currentPath = route.path
-      window.history.pushState(null, '', `${currentPath}#${sectionId}`)
+      const baseUrl = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL.slice(0, -1) : import.meta.env.BASE_URL
+      const fullPath = `${baseUrl}${currentPath}`
+      window.history.pushState(null, '', `${fullPath}#${sectionId}`)
       currentHash.value = sectionId
       hash.value = sectionId
     } else if (attempts < maxAttempts) {
