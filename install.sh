@@ -47,6 +47,7 @@ VERSION="latest"
 LIBC_FLAVOR="glibc"
 INSTALL_SCOPE="user"
 INTERACTIVE=0
+INSTALL_TUI=1
 
 # Check if running interactively
 if [ -t 0 ]; then
@@ -273,6 +274,20 @@ if [ "$INTERACTIVE" = "1" ] && [ -z "$NEST_NONINTERACTIVE" ]; then
                     echo "   ${ARROW} You selected: ${BOLD}v${VERSION}${RESET}"
                 fi
             fi
+        fi
+    fi
+
+    # TUI Installation Prompt
+    if [ "$INTERACTIVE" = "1" ] && [ -z "$NEST_NONINTERACTIVE" ]; then
+        echo ""
+        printf "${INFO} Do you want to install the Nest TUI (nestui)? [Y/n] "
+        read -r REPLY < "$INPUT_SOURCE"
+        if echo "$REPLY" | grep -iq "^n"; then
+            INSTALL_TUI=0
+            echo "   ${ARROW} Skipping TUI installation"
+        else
+            INSTALL_TUI=1
+            echo "   ${ARROW} Installing TUI"
         fi
     fi
 
@@ -527,7 +542,7 @@ $SUDO mv "${BINARY_NAME}" "${BINARY_PATH}"
 $SUDO chmod +x "${BINARY_PATH}"
 echo "   ${CHECK} Binary installed to ${BINARY_PATH}"
 
-if [ -f "nestui" ]; then
+if [ "$INSTALL_TUI" = "1" ] && [ -f "nestui" ]; then
     NESTUI_PATH="${INSTALL_DIR}/nestui"
     $SUDO mv "nestui" "${NESTUI_PATH}"
     $SUDO chmod +x "${NESTUI_PATH}"

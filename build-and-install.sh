@@ -39,7 +39,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # File paths
-CARGO_TOML="crates/nest-cli/Cargo.toml"
+CARGO_TOML="Cargo.toml"
 INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="nest"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
@@ -141,14 +141,29 @@ increment_version() {
 # Function to update version in Cargo.toml
 update_cargo_version() {
     local version="$1"
-    # Use sed to update version in Cargo.toml
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS uses BSD sed
-        sed -i '' "s/^version = \".*\"/version = \"${version}\"/" "$CARGO_TOML"
-    else
-        # Linux uses GNU sed
-        sed -i "s/^version = \".*\"/version = \"${version}\"/" "$CARGO_TOML"
+    local files=("$CARGO_TOML")
+    
+    # Add all crate Cargo.toml files
+    if [ -d "crates" ]; then
+        for crate_toml in crates/*/Cargo.toml; do
+            if [ -f "$crate_toml" ]; then
+                files+=("$crate_toml")
+            fi
+        done
     fi
+
+    echo "   ${INFO} Updating version in: ${files[*]}"
+
+    for file in "${files[@]}"; do
+        # Use sed to update version in Cargo.toml
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS uses BSD sed
+            sed -i '' "s/^version = \".*\"/version = \"${version}\"/" "$file"
+        else
+            # Linux uses GNU sed
+            sed -i "s/^version = \".*\"/version = \"${version}\"/" "$file"
+        fi
+    done
 }
 
 
