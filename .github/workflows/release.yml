@@ -62,7 +62,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install musl tools (Linux x86_64 static)
-        if: matrix.platform_name == 'linux' && matrix.arch == 'x86_64' && contains(matrix.target, 'musl')
+        if: (matrix.platform_name == 'linux' || matrix.platform_name == 'linux-musl') && matrix.arch == 'x86_64' && contains(matrix.target, 'musl')
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
