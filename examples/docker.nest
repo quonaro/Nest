@@ -9,7 +9,7 @@ docker:
         env: DOCKER_BUILDKIT=1
         script: |
             echo "Building Docker image with tag {{tag}}"
-            echo "App: {{APP_NAME}} v{{VERSION}}"
+            echo "App: {{APP_NAME}} v{{tag}}"
             # docker build -t {{APP_NAME}}:{{tag}} .
 
     run(!port|p: num = 8080):

@@ -27,6 +27,7 @@ pub mod path;
 pub mod template;
 pub mod type_validator;
 pub mod validator;
+pub mod merge;
 pub mod merger;
 pub mod watcher;
 
