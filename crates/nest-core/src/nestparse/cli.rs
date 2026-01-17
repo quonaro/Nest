@@ -54,6 +54,8 @@ pub struct CliGenerator {
     functions: Vec<Function>,
     /// Pre-allocated static strings for default command parameters
     default_param_ids: std::collections::HashMap<String, &'static str>,
+    /// Callback for reporting child process PIDs (for signal handling)
+    pid_callback: Option<Box<dyn Fn(u32) + Send + Sync>>,
 }
 
 impl CliGenerator {
@@ -74,6 +76,7 @@ impl CliGenerator {
         variables: Vec<Variable>,
         constants: Vec<Constant>,
         functions: Vec<Function>,
+        pid_callback: Option<Box<dyn Fn(u32) + Send + Sync>>,
     ) -> Self {
         let default_param_ids = Self::preallocate_default_param_ids(&commands);
         Self {
@@ -82,6 +85,7 @@ impl CliGenerator {
             constants,
             functions,
             default_param_ids,
+            pid_callback,
         }
     }
 
@@ -1182,6 +1186,7 @@ impl CliGenerator {
                         args,
                         verbose,
                         hide_output,
+                        self.pid_callback.as_deref(),
                     )?;
                     current_shell_block.clear();
                 }
@@ -1203,7 +1208,7 @@ impl CliGenerator {
                     );
                     // Execute immediately - store in variable to ensure it lives long enough
                     let cmd = processed_command;
-                    Self::execute_shell_script(&cmd, env_vars, cwd, args, verbose, hide_output)?;
+                    Self::execute_shell_script(&cmd, env_vars, cwd, args, verbose, hide_output, self.pid_callback.as_deref())?;
                 }
                 continue;
             }
@@ -1220,6 +1225,7 @@ impl CliGenerator {
                         args,
                         verbose,
                         hide_output,
+                        self.pid_callback.as_deref(),
                     )?;
                     current_shell_block.clear();
                 }
@@ -1390,6 +1396,7 @@ impl CliGenerator {
                     args,
                     verbose,
                     hide_output,
+                    self.pid_callback.as_deref(),
                 )?;
             }
         }
@@ -1443,6 +1450,7 @@ impl CliGenerator {
         args: &HashMap<String, String>,
         _verbose: bool,
         hide_output: bool,
+        pid_callback: Option<&(dyn Fn(u32) + Send + Sync)>,
     ) -> Result<(), String> {
         // Detect shell from shebang and remove it
         let (shell, script_without_shebang) = Self::detect_shell_and_remove_shebang(script);
@@ -1454,6 +1462,7 @@ impl CliGenerator {
             args,
             _verbose,
             hide_output,
+            pid_callback,
         )
     }
 
@@ -1466,8 +1475,11 @@ impl CliGenerator {
         args: &HashMap<String, String>,
         _verbose: bool,
         hide_output: bool,
+        pid_callback: Option<&(dyn Fn(u32) + Send + Sync)>,
     ) -> Result<(), String> {
         use std::process::{Command as ProcessCommand, Stdio};
+        #[cfg(unix)]
+        use std::os::unix::process::CommandExt;
 
         // Trim only leading/trailing whitespace to avoid issues, but preserve internal structure
         let script_to_execute = script.trim();
@@ -1483,6 +1495,9 @@ impl CliGenerator {
         if let Some(cwd_path) = cwd {
             cmd.current_dir(cwd_path);
         }
+
+        #[cfg(unix)]
+        cmd.process_group(0);
 
         // Set environment variables
         for (key, value) in env_vars {
@@ -1504,9 +1519,17 @@ impl CliGenerator {
             cmd.stderr(Stdio::inherit());
         }
 
-        let status = cmd
-            .status()
+        let mut child = cmd
+            .spawn()
             .map_err(|e| format!("Failed to start script execution: {}", e))?;
+
+        if let Some(cb) = pid_callback {
+            cb(child.id());
+        }
+
+        let status = child
+            .wait()
+            .map_err(|e| format!("Failed to wait for script execution: {}", e))?;
 
         if !status.success() {
             let exit_code = status.code().unwrap_or(-1);
@@ -1985,6 +2008,7 @@ impl CliGenerator {
                         args,
                         verbose,
                         hide_output,
+                        self.pid_callback.as_deref(),
                     )?;
                     current_shell_block.clear();
                 }
@@ -2019,6 +2043,7 @@ impl CliGenerator {
                         args,
                         verbose,
                         hide_output,
+                        self.pid_callback.as_deref(),
                     )?;
                     current_shell_block.clear();
                 }
@@ -2045,6 +2070,7 @@ impl CliGenerator {
                         args,
                         verbose,
                         hide_output,
+                        self.pid_callback.as_deref(),
                     )?;
                 }
                 continue;
@@ -2062,6 +2088,7 @@ impl CliGenerator {
                         args,
                         verbose,
                         hide_output,
+                        self.pid_callback.as_deref(),
                     )?;
                     current_shell_block.clear();
                 }
@@ -2128,7 +2155,7 @@ impl CliGenerator {
         // Execute any remaining shell commands
         if !current_shell_block.is_empty() {
             let shell_script = current_shell_block.join("\n");
-            Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose, hide_output)?;
+            Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose, hide_output, self.pid_callback.as_deref())?;
         }
 
         // Function completed without @return - return None

@@ -25,9 +25,32 @@ use nest_core::nestparse::standard_commands::{
 };
 use nest_core::nestparse::validator::{print_validation_errors, validate_commands};
 use std::process;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+static CHILD_PID: AtomicU32 = AtomicU32::new(0);
 
 /// Main entry point of the application.
 fn main() {
+    // Register signal handler for cleanup
+    let _ = ctrlc::set_handler(move || {
+        let pid = CHILD_PID.load(Ordering::SeqCst);
+        if pid != 0 {
+            // Try to kill the child process
+            #[cfg(unix)]
+                let _ = std::process::Command::new("kill")
+                    .arg("-TERM")
+                    .arg(format!("-{}", pid))
+                    .output();
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(&["/F", "/PID", &pid.to_string()])
+                    .output();
+            }
+        }
+        std::process::exit(130);
+    });
+
     // Check for special flags that don't need config by parsing args manually
     let args: Vec<String> = std::env::args().collect();
 
@@ -158,6 +181,9 @@ fn main() {
         parse_result.variables.clone(),
         parse_result.constants.clone(),
         parse_result.functions.clone(),
+        Some(Box::new(|pid: u32| {
+            CHILD_PID.store(pid, Ordering::SeqCst);
+        })),
     );
     let mut cli = match generator.build_cli() {
         Ok(cli) => cli,

@@ -8,6 +8,8 @@ use super::ast::Command;
 use std::collections::HashMap;
 use std::process::{Command as ProcessCommand, Stdio};
 use std::env;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 /// Executes shell scripts for commands.
 ///
@@ -99,6 +101,7 @@ impl CommandExecutor {
         dry_run: bool,
         verbose: bool,
         privileged: bool,
+        pid_callback: Option<&dyn Fn(u32)>,
     ) -> Result<(), String> {
         // Check privileged access BEFORE execution
         if privileged && !dry_run {
@@ -130,6 +133,9 @@ impl CommandExecutor {
             cmd.current_dir(cwd_path);
         }
 
+        #[cfg(unix)]
+        cmd.process_group(0);
+
         // Set environment variables from directives
         for (key, value) in env_vars {
             cmd.env(key, value);
@@ -145,9 +151,17 @@ impl CommandExecutor {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        let output = cmd
-            .output()
+        let child = cmd
+            .spawn()
             .map_err(|e| format!("Failed to start script execution: {}", e))?;
+
+        if let Some(callback) = pid_callback {
+            callback(child.id());
+        }
+
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("Failed to wait for script execution: {}", e))?;
 
         if !output.status.success() {
             let exit_code = output.status.code().unwrap_or(-1);
