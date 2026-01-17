@@ -6,13 +6,13 @@
             "include": "#comments"
         },
         {
-            "include": "#command"
+            "include": "#meta"
         },
         {
             "include": "#directives"
         },
         {
-            "include": "#meta"
+            "include": "#command"
         },
         {
             "include": "#templates"
@@ -30,41 +30,100 @@
         "command": {
             "patterns": [
                 {
-                    "match": "^(\\s*)([A-Za-z0-9_]+)\\s*(\\(([^)]*)\\))?\\s*:\\s*$",
+                    "begin": "^(\\s*)([A-Za-z0-9_]+)\\s*(\\()",
+                    "end": "(\\))\\s*:\\s*$",
+                    "beginCaptures": {
+                        "2": {
+                            "name": "entity.name.function.nestfile"
+                        },
+                        "3": {
+                            "name": "punctuation.definition.parameters.begin.nestfile"
+                        }
+                    },
+                    "endCaptures": {
+                        "1": {
+                            "name": "punctuation.definition.parameters.end.nestfile"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#parameters"
+                        }
+                    ]
+                },
+                {
+                    "match": "^(\\s*)([A-Za-z0-9_]+)\\s*:\\s*$",
                     "captures": {
                         "2": {
-                            "name": "variable.other.constant.nestfile"
-                        },
-                        "4": {
-                            "patterns": [
-                                {
-                                    "include": "#templates"
-                                },
-                                {
-                                    "include": "#env-vars"
-                                }
-                            ]
+                            "name": "entity.name.function.nestfile"
                         }
                     }
+                }
+            ]
+        },
+        "parameters": {
+            "patterns": [
+                {
+                    "include": "#templates"
+                },
+                {
+                    "match": "\\b(str|bool|num|arr)\\b",
+                    "name": "storage.type.nestfile"
+                },
+                {
+                    "match": "\\b(true|false)\\b",
+                    "name": "constant.language.boolean.nestfile"
+                },
+                {
+                    "match": "\\!",
+                    "name": "keyword.operator.logical.nestfile"
+                },
+                {
+                    "match": "\\|",
+                    "name": "punctuation.separator.alias.nestfile"
+                },
+                {
+                    "match": ":",
+                    "name": "punctuation.separator.type.nestfile"
+                },
+                {
+                    "match": "=",
+                    "name": "keyword.operator.assignment.nestfile"
+                },
+                {
+                    "match": ",",
+                    "name": "punctuation.separator.parameter.nestfile"
+                },
+                {
+                    "match": "\\*",
+                    "name": "keyword.operator.rest.nestfile"
+                },
+                {
+                    "match": "\"",
+                    "name": "string.quoted.double.nestfile"
+                },
+                {
+                    "match": "\\b[a-zA-Z0-9_]+\\b",
+                    "name": "variable.parameter.nestfile"
                 }
             ]
         },
         "directives": {
             "patterns": [
                 {
-                    "begin": "^(\\s*>\\s*)([a-zA-Z_][a-zA-Z0-9_]*)\\s*(:)\\s*(\\|)\\s*$",
-                    "end": "^(?=\\s*(?:>|[A-Za-z0-9_]+\\s*\\([^)]*\\)?\\s*:|$))",
+                    "begin": "^(\\s*)(script|before|after|fallback|finally)((?:\\.[a-zA-Z0-9_]+)*)\\s*(:)\\s*(\\|).*$",
+                    "end": "^(?=\\s*[^\\s:#()]+\\s*(?:\\([^)]*\\))?\\s*:)",
                     "beginCaptures": {
-                        "1": {
-                            "name": "punctuation.definition.directive.nestfile"
-                        },
                         "2": {
-                            "name": "keyword.other.directive.nestfile"
+                            "name": "keyword.control.directive.nestfile"
                         },
                         "3": {
-                            "name": "punctuation.separator.key-value.nestfile"
+                            "name": "storage.modifier.directive.nestfile"
                         },
                         "4": {
+                            "name": "punctuation.separator.key-value.nestfile"
+                        },
+                        "5": {
                             "name": "punctuation.definition.multiline.nestfile"
                         }
                     },
@@ -75,18 +134,55 @@
                     ]
                 },
                 {
-                    "match": "^(\\s*>\\s*)([a-zA-Z_][a-zA-Z0-9_]*(?:\\[[^\\]]*\\])?)(\\s*:\\s*)(.*)$",
+                    "match": "^(\\s*)(validate)(\\s*:\\s*)([a-zA-Z0-9_]+)\\s+(matches)\\s+(/.+/)$",
                     "captures": {
-                        "1": {
-                            "name": "punctuation.definition.directive.nestfile"
-                        },
                         "2": {
-                            "name": "keyword.other.directive.nestfile"
+                            "name": "keyword.control.directive.nestfile"
                         },
                         "3": {
                             "name": "punctuation.separator.key-value.nestfile"
                         },
                         "4": {
+                            "name": "variable.parameter.nestfile"
+                        },
+                        "5": {
+                            "name": "keyword.operator.comparison.nestfile"
+                        },
+                        "6": {
+                            "name": "string.regexp.nestfile"
+                        }
+                    }
+                },
+                {
+                    "begin": "^(\\s*)(depends)(\\s*:\\s*)",
+                    "end": "$",
+                    "beginCaptures": {
+                        "2": {
+                            "name": "keyword.control.directive.nestfile"
+                        },
+                        "3": {
+                            "name": "punctuation.separator.key-value.nestfile"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#depends-list"
+                        }
+                    ]
+                },
+                {
+                    "match": "^(\\s*)(desc|cwd|env|script|before|after|fallback|finally|depends|validate|logs|privileged|require_confirm|watch)((?:\\.[a-zA-Z0-9_]+)*)(\\s*:\\s*)(.*)$",
+                    "captures": {
+                        "2": {
+                            "name": "keyword.control.directive.nestfile"
+                        },
+                        "3": {
+                            "name": "storage.modifier.directive.nestfile"
+                        },
+                        "4": {
+                            "name": "punctuation.separator.key-value.nestfile"
+                        },
+                        "5": {
                             "name": "string.unquoted.nestfile",
                             "patterns": [
                                 {
@@ -96,6 +192,14 @@
                                     "include": "#env-vars"
                                 }
                             ]
+                        }
+                    }
+                },
+                {
+                    "match": "^(\\s*)(privileged)\\s*$",
+                    "captures": {
+                        "2": {
+                            "name": "keyword.control.directive.nestfile"
                         }
                     }
                 }
@@ -108,6 +212,10 @@
                     "captures": {
                         "1": {
                             "patterns": [
+                                {
+                                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+                                    "name": "entity.name.function.nestfile"
+                                },
                                 {
                                     "include": "#templates"
                                 },
@@ -185,13 +293,13 @@
         "meta": {
             "patterns": [
                 {
-                    "match": "^(\\s*)(@var|@const)\\s+([A-Za-z0-9_]+)\\s*(=)\\s*(.+)$",
+                    "match": "^(\\s*)(var|const|env)\\s+([A-Za-z0-9_]+)\\s*(=)\\s*(.+)$",
                     "captures": {
                         "2": {
-                            "name": "keyword.other.variable.nestfile"
+                            "name": "storage.type.variable.nestfile"
                         },
                         "3": {
-                            "name": "variable.other.nestfile"
+                            "name": "variable.other.assignment.nestfile"
                         },
                         "4": {
                             "name": "keyword.operator.assignment.nestfile"
@@ -210,10 +318,21 @@
                     }
                 },
                 {
-                    "match": "^(\\s*)(@function)\\s+([A-Za-z0-9_]+)\\s*(\\([^)]*\\))?\\s*:\\s*$",
+                    "match": "^(\\s*)(var|const|env)\\s+([A-Za-z0-9_]+)\\s*$",
                     "captures": {
                         "2": {
-                            "name": "keyword.other.function.nestfile"
+                            "name": "storage.type.variable.nestfile"
+                        },
+                        "3": {
+                            "name": "variable.other.assignment.nestfile"
+                        }
+                    }
+                },
+                {
+                    "match": "^(\\s*)(function)\\s+([A-Za-z0-9_]+)\\s*(\\([^)]*\\))?\\s*:\\s*$",
+                    "captures": {
+                        "2": {
+                            "name": "storage.type.function.nestfile"
                         },
                         "3": {
                             "name": "entity.name.function.nestfile"
@@ -221,67 +340,56 @@
                     }
                 },
                 {
-                    "begin": "^(\\s*)(@include)\\s+",
+                    "begin": "^(\\s*)(import)\\s+(.*)",
                     "end": "$",
                     "beginCaptures": {
                         "2": {
-                            "name": "keyword.other.include.nestfile"
-                        }
-                    },
-                    "patterns": [
-                        {
-                            "match": "\\b(into)\\s+([a-zA-Z0-9_]+)",
-                            "captures": {
-                                "1": {
-                                    "name": "keyword.other.into.nestfile"
-                                },
-                                "2": {
-                                    "name": "entity.name.section.group.nestfile"
-                                }
-                            }
+                            "name": "keyword.control.import.nestfile"
                         },
-                        {
-                            "match": "\\b(from)\\s+([a-zA-Z0-9_.,\\s]+)",
-                            "captures": {
-                                "1": {
-                                    "name": "keyword.other.from.nestfile"
-                                },
-                                "2": {
-                                    "name": "variable.parameter.nestfile",
-                                    "patterns": [
-                                        {
-                                            "match": ","
-                                        },
-                                        {
-                                            "match": "\\."
-                                        }
-                                    ]
-                                }
-                            }
-                        },
-                        {
-                            "name": "string.unquoted.nestfile",
-                            "match": "[^\\s]+",
+                        "3": {
                             "patterns": [
                                 {
-                                    "include": "#templates"
+                                    "match": "\\b(into)\\b",
+                                    "name": "keyword.control.into.nestfile"
                                 },
                                 {
-                                    "include": "#env-vars"
+                                    "match": "\\b(from)\\b",
+                                    "name": "keyword.control.from.nestfile"
+                                },
+                                {
+                                    "match": "\\*",
+                                    "name": "constant.language.wildcard.nestfile"
+                                },
+                                {
+                                    "match": "([a-zA-Z0-9_./-]+)",
+                                    "name": "string.unquoted.filename.nestfile"
                                 }
                             ]
                         }
-                    ]
+                    }
                 }
             ]
         },
         "templates": {
             "patterns": [
                 {
-                    "name": "entity.name.type.variable.nestfile",
-                    "match": "{{[^}]+}}"
+                    "name": "meta.embedded.line.nestfile",
+                    "begin": "(\\{\\{)\\s*",
+                    "end": "\\s*(\\}\\})",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "punctuation.definition.template-expression.begin.nestfile"
+                        }
+                    },
+                    "endCaptures": {
+                        "1": {
+                            "name": "punctuation.definition.template-expression.end.nestfile"
+                        }
+                    },
+                    "contentName": "variable.parameter.nestfile"
                 },
                 {
+                    "name": "variable.other.shell-substitution.nestfile",
                     "match": "\\$\\([^)]*\\)"
                 }
             ]
@@ -289,8 +397,72 @@
         "env-vars": {
             "patterns": [
                 {
-                    "name": "variable.parameter.environment.nestfile",
+                    "name": "variable.other.environment.nestfile",
                     "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+                }
+            ]
+        },
+        "depends-list": {
+            "patterns": [
+                {
+                    "include": "#depends-call"
+                },
+                {
+                    "match": "\\b[a-zA-Z0-9_]+\\b",
+                    "name": "entity.name.function.nestfile"
+                },
+                {
+                    "match": ",",
+                    "name": "punctuation.separator.delimiter.nestfile"
+                }
+            ]
+        },
+        "depends-call": {
+            "begin": "([a-zA-Z0-9_]+)\\s*(\\()",
+            "end": "\\)",
+            "beginCaptures": {
+                "1": {
+                    "name": "entity.name.function.nestfile"
+                },
+                "2": {
+                    "name": "punctuation.definition.parameters.begin.nestfile"
+                }
+            },
+            "endCaptures": {
+                "0": {
+                    "name": "punctuation.definition.parameters.end.nestfile"
+                }
+            },
+            "patterns": [
+                {
+                    "match": "\\b([a-zA-Z0-9_]+)\\s*(=)",
+                    "captures": {
+                        "1": {
+                            "name": "variable.parameter.nestfile"
+                        },
+                        "2": {
+                            "name": "keyword.operator.assignment.nestfile"
+                        }
+                    }
+                },
+                {
+                    "include": "#templates"
+                },
+                {
+                    "match": "\"",
+                    "name": "string.quoted.double.nestfile"
+                },
+                {
+                    "match": "\\b(true|false)\\b",
+                    "name": "constant.language.boolean.nestfile"
+                },
+                {
+                    "match": "\\b[0-9]+\\b",
+                    "name": "constant.numeric.nestfile"
+                },
+                {
+                    "match": ",",
+                    "name": "punctuation.separator.parameter.nestfile"
                 }
             ]
         }

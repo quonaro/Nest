@@ -106,79 +106,33 @@ export function validateNestfileDocument(
 
     const indent = getIndent(rawLine);
 
-    // Command or group definition
-    const commandMatch = trimmed.match(
-      /^([A-Za-z0-9_]+)\s*(\((.*)\))?\s*:\s*$/
-    );
-    if (commandMatch) {
-      const name = commandMatch[1];
-      const paramsStr = commandMatch[3] ?? "";
+    // Check for directives (must be checked before commands if they conflict, but directives are reserved)
+    // We check if the line starts with a known directive name
+    const directiveNameMatch = trimmed.match(/^([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)?)/);
+    let isDirective = false;
 
-      const parameters: NestfileParameter[] = [];
-      if (paramsStr.trim().length > 0) {
-        const paramParts = splitTopLevel(paramsStr, ",");
-        for (const part of paramParts) {
-          const parsed = parseParameter(part.trim(), lineNumber, rawLine);
-          if (parsed) {
-            parameters.push(parsed);
-          } else {
-            diagnostics.push(
-              createDiagnostic(
-                lineNumber,
-                0,
-                rawLine.length,
-                `Invalid parameter syntax "${part.trim()}"`,
-                vscode.DiagnosticSeverity.Error
-              )
-            );
-          }
-        }
+    if (directiveNameMatch) {
+      let name = directiveNameMatch[1];
+      // Split by dot to check base name
+      const dotIndex = name.indexOf(".");
+      const directiveBase = dotIndex !== -1 ? name.substring(0, dotIndex) : name;
+
+      if (VALID_DIRECTIVES.has(directiveBase)) {
+        isDirective = true;
       }
-
-      const cmd: NestfileCommand = {
-        name,
-        line: lineNumber,
-        parameters,
-        directives: [],
-        children: [],
-      };
-
-      // Attach to parent based on indent
-      const parent = currentParent(indent);
-      if (parent) {
-        parent.children.push(cmd);
-      } else {
-        commands.push(cmd);
-      }
-
-      // Pop stack items with indent >= current
-      while (stack.length && stack[stack.length - 1].indent >= indent) {
-        stack.pop();
-      }
-      stack.push({ indent, command: cmd });
-
-      // Parameter-level validation
-      validateParameters(cmd, diagnostics, lineNumber, rawLine);
-      continue;
     }
 
-    // Directives
-    if (trimmed.startsWith(">")) {
-      const directiveLine = trimmed.substring(1).trim();
-      const colonIndex = directiveLine.indexOf(":");
-
-      let name = directiveLine;
+    if (isDirective) {
+      const colonIndex = trimmed.indexOf(":");
+      let name = "";
       let value = "";
 
       if (colonIndex !== -1) {
-        name = directiveLine.substring(0, colonIndex).trim();
-        value = directiveLine.substring(colonIndex + 1).trim();
-      }
-
-      // Strip modifiers, e.g. script[hide]
-      const modifierIndex = name.indexOf("[");
-      if (modifierIndex !== -1) {
-        name = name.substring(0, modifierIndex).trim();
+        name = trimmed.substring(0, colonIndex).trim();
+        value = trimmed.substring(colonIndex + 1).trim();
+      } else {
+        // Should not happen if regex matched but good for safety
+        name = trimmed.trim();
       }
 
       const parent = currentParent(indent);
@@ -195,35 +149,15 @@ export function validateNestfileDocument(
       } else {
         parent.directives.push({
           name,
-          raw: directiveLine,
+          raw: trimmed,
           line: lineNumber,
         });
       }
 
-      // Unknown directive
-      const directiveBase = name.startsWith("logs")
-        ? "logs"
-        : name;
-      if (!VALID_DIRECTIVES.has(directiveBase)) {
-        // Find the position of the directive name after ">"
-        const directiveMatch = trimmed.match(/^>\s*([a-zA-Z_]+(?:\[[^\]]+\])?)/);
-        const directiveStart = directiveMatch
-          ? rawLine.indexOf(directiveMatch[1])
-          : rawLine.indexOf(name);
-        const directiveEnd = directiveStart >= 0 ? directiveStart + name.length : rawLine.length;
-
-        diagnostics.push(
-          createDiagnostic(
-            lineNumber,
-            Math.max(0, directiveStart),
-            directiveEnd,
-            `Unknown directive "${name}"`,
-            vscode.DiagnosticSeverity.Error
-          )
-        );
-      }
-
       // env format check
+      const dotIndex = name.indexOf(".");
+      const directiveBase = dotIndex !== -1 ? name.substring(0, dotIndex) : name;
+
       if (directiveBase === "env" && value) {
         const trimmedValue = value.trim();
 
@@ -269,15 +203,24 @@ export function validateNestfileDocument(
 
       // logs format check
       if (directiveBase === "logs") {
-        const parts = value.split(/\s+/);
-        if (parts.length < 2 || (parts[0] !== "json" && parts[0] !== "txt")) {
+        if (name !== "logs.json" && name !== "logs.txt") {
           diagnostics.push(
             createDiagnostic(
               lineNumber,
               0,
               rawLine.length,
-              'Invalid logs directive. Expected "logs:json <path>" or "logs:txt <path>".',
-              vscode.DiagnosticSeverity.Warning
+              'Invalid logs directive. Expected "logs.json <path>" or "logs.txt <path>".',
+              vscode.DiagnosticSeverity.Error
+            )
+          );
+        } else if (!value) {
+          diagnostics.push(
+            createDiagnostic(
+              lineNumber,
+              0,
+              rawLine.length,
+              'Invalid logs directive. Path is required.',
+              vscode.DiagnosticSeverity.Error
             )
           );
         }
@@ -354,20 +297,24 @@ export function validateNestfileDocument(
             // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
             if (nextIndentSpaces >= expectedIndentSpaces &&
               nextTrimmed &&
-              !nextTrimmed.startsWith("#") &&
-              !nextTrimmed.startsWith(">")) {
-              const colonIndex = rawLine.indexOf(":");
-              const directiveEnd = colonIndex >= 0 ? colonIndex + 1 : rawLine.length;
+              !nextTrimmed.startsWith("#")) {
 
-              diagnostics.push(
-                createDiagnostic(
-                  lineNumber,
-                  colonIndex >= 0 ? colonIndex : rawLine.length - 1,
-                  directiveEnd,
-                  `Multiline script detected but missing '|' after '${directiveBase}:'. Add '|' for multiline scripts or put script content on the same line.`,
-                  vscode.DiagnosticSeverity.Error
-                )
-              );
+              // Simple check if it's not another directive or command
+              const isOtherDirective = VALID_DIRECTIVES.has(nextTrimmed.split(':')[0].split('.')[0]);
+              if (!isOtherDirective) {
+                const colonIndex = rawLine.indexOf(":");
+                const directiveEnd = colonIndex >= 0 ? colonIndex + 1 : rawLine.length;
+
+                diagnostics.push(
+                  createDiagnostic(
+                    lineNumber,
+                    colonIndex >= 0 ? colonIndex : rawLine.length - 1,
+                    directiveEnd,
+                    `Multiline script detected but missing '|' after '${directiveBase}:'. Add '|' for multiline scripts or put script content on the same line.`,
+                    vscode.DiagnosticSeverity.Error
+                  )
+                );
+              }
             }
           }
         }
@@ -376,132 +323,139 @@ export function validateNestfileDocument(
       continue;
     }
 
-    // @var / @const / @function / @include syntax sanity checks
-    if (trimmed.startsWith("@var ")) {
+    // Command or group definition
+    const commandMatch = trimmed.match(
+      /^([A-Za-z0-9_]+)\s*(\((.*)\))?\s*:\s*$/
+    );
+    if (commandMatch) {
+      const name = commandMatch[1];
+      const paramsStr = commandMatch[3] ?? "";
+
+      const parameters: NestfileParameter[] = [];
+      if (paramsStr.trim().length > 0) {
+        const paramParts = splitTopLevel(paramsStr, ",");
+        for (const part of paramParts) {
+          const parsed = parseParameter(part.trim(), lineNumber, rawLine);
+          if (parsed) {
+            parameters.push(parsed);
+          } else {
+            diagnostics.push(
+              createDiagnostic(
+                lineNumber,
+                0,
+                rawLine.length,
+                `Invalid parameter syntax "${part.trim()}"`,
+                vscode.DiagnosticSeverity.Error
+              )
+            );
+          }
+        }
+      }
+
+      const cmd: NestfileCommand = {
+        name,
+        line: lineNumber,
+        parameters,
+        directives: [],
+        children: [],
+      };
+
+      // Attach to parent based on indent
+      const parent = currentParent(indent);
+      if (parent) {
+        parent.children.push(cmd);
+      } else {
+        commands.push(cmd);
+      }
+
+      // Pop stack items with indent >= current
+      while (stack.length && stack[stack.length - 1].indent >= indent) {
+        stack.pop();
+      }
+      stack.push({ indent, command: cmd });
+
+      // Parameter-level validation
+      validateParameters(cmd, diagnostics, lineNumber, rawLine);
+      continue;
+    }
+
+    // var / const / function / import syntax sanity checks
+    if (trimmed.startsWith("var ")) {
       if (!trimmed.includes("=")) {
         diagnostics.push(
           createDiagnostic(
             lineNumber,
             0,
             rawLine.length,
-            "Invalid @var definition. Expected format: @var NAME = value.",
+            "Invalid var definition. Expected format: var NAME = value.",
             vscode.DiagnosticSeverity.Error
           )
         );
       }
-    } else if (trimmed.startsWith("@const ")) {
+    } else if (trimmed.startsWith("const ")) {
       if (!trimmed.includes("=")) {
         diagnostics.push(
           createDiagnostic(
             lineNumber,
             0,
             rawLine.length,
-            "Invalid @const definition. Expected format: @const NAME = value.",
+            "Invalid const definition. Expected format: const NAME = value.",
             vscode.DiagnosticSeverity.Error
           )
         );
       }
-    } else if (trimmed.startsWith("@function ")) {
-      if (!trimmed.endsWith(":")) {
+    } else if (trimmed.startsWith("function ")) {
+      if (!trimmed.includes(":")) {
         diagnostics.push(
           createDiagnostic(
             lineNumber,
             0,
             rawLine.length,
-            "Invalid @function definition. Expected trailing ':'.",
+            "Invalid function definition. Expected format: function name(params):",
             vscode.DiagnosticSeverity.Error
           )
         );
       }
-    } else if (trimmed.startsWith("@include ")) {
-      let pathPart = trimmed.substring(9).trim();
-
-      // Handle 'from ...' suffix first (it usually comes last)
-      const fromIndex = pathPart.indexOf(" from ");
-      if (fromIndex !== -1) {
-        pathPart = pathPart.substring(0, fromIndex).trim();
-      }
-
-      // Handle 'into <group>' suffix
-      const intoIndex = pathPart.indexOf(" into ");
-      if (intoIndex !== -1) {
-        pathPart = pathPart.substring(0, intoIndex).trim();
-      }
-
-      // Remove surrounding quotes if present
-      if ((pathPart.startsWith('"') && pathPart.endsWith('"')) ||
-        (pathPart.startsWith("'") && pathPart.endsWith("'"))) {
-        pathPart = pathPart.substring(1, pathPart.length - 1);
-      }
-
-      if (!pathPart) {
+    } else if (trimmed.startsWith("import ")) {
+      const parts = trimmed.split(/\s+/);
+      // import * from FILE into GROUP
+      // import FILE
+      if (parts.length < 2) {
         diagnostics.push(
           createDiagnostic(
             lineNumber,
             0,
             rawLine.length,
-            "Empty @include path.",
-            vscode.DiagnosticSeverity.Error
+            "Invalid import. Expected format: import <file> or import * from <file> into <group>",
+            vscode.DiagnosticSeverity.Warning
           )
         );
-      } else if (documentUri) {
-        // Check if included file exists
-        try {
-          const baseDir = path.dirname(documentUri.fsPath);
-          let includePath: string;
-
-          if (path.isAbsolute(pathPart)) {
-            includePath = pathPart;
-          } else {
-            includePath = path.resolve(baseDir, pathPart);
+      } else if (trimmed.includes(" from ")) {
+        if (!trimmed.includes(" into ") && !trimmed.includes("*")) {
+          // Maybe specific imports, but let's check basic structure
+        }
+      } else {
+        // Simple import FILE
+        const importPath = parts[1];
+        if (documentUri && importPath) {
+          const dir = path.dirname(documentUri.fsPath);
+          const absolutePath = path.resolve(dir, importPath);
+          if (!fs.existsSync(absolutePath)) {
+            diagnostics.push(
+              createDiagnostic(
+                lineNumber,
+                trimmed.indexOf(importPath),
+                trimmed.indexOf(importPath) + importPath.length,
+                `Imported file not found: ${importPath}`,
+                vscode.DiagnosticSeverity.Warning
+              )
+            );
           }
-
-          // Handle wildcards and directories (check if base path exists)
-          if (pathPart.includes("*") || pathPart.endsWith("/") || pathPart.endsWith("\\")) {
-            // For wildcards and directories, check if the directory exists
-            const dirPath = pathPart.includes("*")
-              ? path.dirname(includePath)
-              : includePath.endsWith("/") || includePath.endsWith("\\")
-                ? includePath.slice(0, -1)
-                : includePath;
-
-            if (!fs.existsSync(dirPath)) {
-              const pathStart = rawLine.indexOf(pathPart);
-              const pathEnd = pathStart >= 0 ? pathStart + pathPart.length : rawLine.length;
-
-              diagnostics.push(
-                createDiagnostic(
-                  lineNumber,
-                  Math.max(0, pathStart),
-                  pathEnd,
-                  `Include path not found: ${pathPart}`,
-                  vscode.DiagnosticSeverity.Warning
-                )
-              );
-            }
-          } else {
-            // Check if file exists
-            if (!fs.existsSync(includePath)) {
-              const pathStart = rawLine.indexOf(pathPart);
-              const pathEnd = pathStart >= 0 ? pathStart + pathPart.length : rawLine.length;
-
-              diagnostics.push(
-                createDiagnostic(
-                  lineNumber,
-                  Math.max(0, pathStart),
-                  pathEnd,
-                  `Include file not found: ${pathPart}`,
-                  vscode.DiagnosticSeverity.Warning
-                )
-              );
-            }
-          }
-        } catch (error) {
-          // Silently ignore file system errors during validation
         }
       }
     }
   }
+
 
   // Final pass to check for undefined variables in the entire document
   validateUndefinedVariables(text, diagnostics, lines);
@@ -714,7 +668,7 @@ function validateCommandTree(
   lines: string[]
 ) {
   const hasScript = cmd.directives.some(
-    (d) => d.name === "script" || d.name === "script[hide]"
+    (d) => d.name === "script" || d.name.startsWith("script.") || d.name === "script[hide]"
   );
 
   if (!hasScript && cmd.children.length === 0) {
@@ -793,11 +747,12 @@ function validateUndefinedVariables(
   // 1. Extract all defined variables
   const definedVars = new Set<string>(["now", "user", "env", "cwd"]); // Built-in variables whitelist
 
-  // From @var and @const
+  // From @var and @const (now var and const)
   for (const line of lines) {
-    const varMatch = line.match(/^\s*@(var|const)\s+([A-Za-z0-9_]+)\s*=/);
+    // Modified to match standard var/const without @
+    const varMatch = line.match(/^\s*(?:var|const)\s+([A-Za-z0-9_]+)\s*=/);
     if (varMatch) {
-      definedVars.add(varMatch[2]);
+      definedVars.add(varMatch[1]);
     }
   }
 

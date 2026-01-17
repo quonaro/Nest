@@ -1,19 +1,19 @@
-@var EXTRA_FLAG = "enabled"
+var EXTRA_FLAG = "enabled"
 
-hooks():
-    > desc: Command using before/after/fallback/finaly only
-    > before: |
+hooks:
+    desc: Command using before/after/fallback/finally only
+    before: |
         echo "[before] Hooks running (EXTRA_FLAG={{EXTRA_FLAG}})"
-    > script: |
+    script: |
         echo "[script] Main hook logic"
         # Uncomment the next line to simulate failure
         # exit 1
-    > after: |
+    after: |
         echo "[after] Hooks finished successfully"
-    > fallback: |
+    fallback: |
         echo "[fallback] Hooks failed"
-    > finaly: |
-        echo "[finaly] Hooks done (always)"
+    finally: |
+        echo "[finally] Hooks done (always)"
 
 
 

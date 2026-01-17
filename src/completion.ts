@@ -25,10 +25,10 @@ const DIRECTIVES = [
 
 // Meta commands
 const META_COMMANDS = [
-  { name: "@var", description: "Define a global variable" },
-  { name: "@const", description: "Define a global constant" },
-  { name: "@function", description: "Define a reusable function" },
-  { name: "@include", description: "Include another Nestfile configuration" },
+  { name: "var", description: "Define a global variable" },
+  { name: "const", description: "Define a global constant" },
+  { name: "function", description: "Define a reusable function" },
+  { name: "import", description: "Include another Nestfile configuration" },
 ];
 
 // Parameter types for autocomplete
@@ -66,8 +66,8 @@ function extractVariables(text: string): string[] {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Match @var NAME = ... or @const NAME = ...
-    const varMatch = trimmed.match(/^@(?:var|const)\s+([A-Za-z0-9_]+)\s*=/);
+    // Match var NAME = ... or const NAME = ...
+    const varMatch = trimmed.match(/^(?:var|const)\s+([A-Za-z0-9_]+)\s*=/);
     if (varMatch) {
       variables.push(varMatch[1]);
     }
@@ -328,44 +328,44 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
       const contentAfterIndent = textBeforeCursor.substring(lineIndent);
       const contentAfterIndentTrimmed = contentAfterIndent.trim();
 
-      // Offer directives when line doesn't start with ">" (handled by directiveMatch below)
-      // Always offer on empty line or when user explicitly invokes completion
-      if (!contentAfterIndentTrimmed.startsWith(">")) {
-        const indentSpaces = " ".repeat(lineIndent);
-        const typedText = contentAfterIndentTrimmed.toLowerCase();
+      // Offer directives when inside a command
+      // Check if what's typed so far looks like it could be a directive
+      const indentSpaces = " ".repeat(lineIndent);
+      const typedText = contentAfterIndentTrimmed.toLowerCase();
 
-        // Always offer directives inside command - VS Code will filter by what user typed
+      // Filter logic is handled by VS Code, but we only offer if it looks like start of a directive
+      if (!typedText || /^[a-z]/.test(typedText)) {
         for (const directive of DIRECTIVES) {
 
           const item = new vscode.CompletionItem(
-            "> " + directive.name,
+            directive.name,
             vscode.CompletionItemKind.Property
           );
           item.documentation = directive.description;
-          item.sortText = "1" + directive.name; // Sort before other completions
-          item.filterText = "> " + directive.name; // For better filtering
+          item.sortText = "0" + directive.name; // Sort high
+          item.filterText = directive.name;
 
           // Add appropriate snippet with proper indentation
           if (directive.name === "script") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> script: |\n" + indentSpaces + "    ${1:echo \"Hello\"}");
+            item.insertText = new vscode.SnippetString("script: |\n" + indentSpaces + "    ${1:echo \"Hello\"}");
           } else if (directive.name === "depends") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> depends: ${1:command1}, ${2:command2}");
+            item.insertText = new vscode.SnippetString("depends: ${1:command1}, ${2:command2}");
           } else if (directive.name.startsWith("logs:")) {
             item.insertText = new vscode.SnippetString(
-              indentSpaces + "> " + (directive.name === "logs:json"
+              (directive.name === "logs:json"
                 ? "logs:json ${1:./logs/{{now}}.json}"
                 : "logs:txt ${1:./logs/{{now}}.txt}")
             );
           } else if (directive.name === "env") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> env: ${1:KEY}=${2:value}");
+            item.insertText = new vscode.SnippetString("env: ${1:KEY}=${2:value}");
           } else if (directive.name === "validate") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> validate: ${1:param} matches /${2:regex}/");
+            item.insertText = new vscode.SnippetString("validate: ${1:param} matches /${2:regex}/");
           } else if (directive.name === "cwd") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> cwd: ${1:./path}");
+            item.insertText = new vscode.SnippetString("cwd: ${1:./path}");
           } else if (directive.name === "privileged" || directive.name === "require_confirm") {
-            item.insertText = indentSpaces + "> " + directive.name;
+            item.insertText = directive.name;
           } else {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> " + directive.name + ": ${1:value}");
+            item.insertText = new vscode.SnippetString(directive.name + ": ${1:value}");
           }
 
           completions.push(item);
@@ -385,14 +385,14 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
         const item = new vscode.CompletionItem(meta.name, vscode.CompletionItemKind.Keyword);
         item.documentation = meta.description;
 
-        if (meta.name === "@var") {
-          item.insertText = new vscode.SnippetString("@var ${1:NAME} = \"${2:value}\"");
-        } else if (meta.name === "@const") {
-          item.insertText = new vscode.SnippetString("@const ${1:NAME} = \"${2:value}\"");
-        } else if (meta.name === "@function") {
-          item.insertText = new vscode.SnippetString("@function ${1:name}(${2:param}: ${3:str}):\n    ${4:// body}");
-        } else if (meta.name === "@include") {
-          item.insertText = new vscode.SnippetString("@include ${1:path/to/file.nest} from ${2:command}");
+        if (meta.name === "var") {
+          item.insertText = new vscode.SnippetString("var ${1:NAME} = \"${2:value}\"");
+        } else if (meta.name === "const") {
+          item.insertText = new vscode.SnippetString("const ${1:NAME} = \"${2:value}\"");
+        } else if (meta.name === "function") {
+          item.insertText = new vscode.SnippetString("function ${1:name}(${2:param}: ${3:str}):\n    ${4:// body}");
+        } else if (meta.name === "import") {
+          item.insertText = new vscode.SnippetString("import ${1:path/to/file.nest} from ${2:command}");
         }
 
         completions.push(item);
@@ -409,13 +409,13 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
       }
     }
 
-    // Check if we're typing a directive with modifier in brackets (e.g., "> script[" or "> depends[")
-    const directiveWithBracketMatch = textBeforeCursor.match(/^(\s*>\s*)([a-zA-Z_]+)\[([a-zA-Z_]*)$/);
+    // Check if we're typing a directive with modifier in brackets (e.g., "script[" or "depends[")
+    const directiveWithBracketMatch = textBeforeCursor.match(/^(\s*)([a-zA-Z_]+)\[([a-zA-Z_]*)$/);
     if (directiveWithBracketMatch) {
       const indentBefore = directiveWithBracketMatch[1];
       const directiveName = directiveWithBracketMatch[2].toLowerCase();
       const modifierPrefix = directiveWithBracketMatch[3].toLowerCase();
-      const indentSpaces = indentBefore.replace(/>\s*$/, "").replace(/>$/, "");
+      const indentSpaces = indentBefore;
 
       // Script-like directives support [hide] modifier
       const scriptDirectives = ["script", "before", "after", "fallback", "finaly"];
@@ -460,8 +460,8 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
       }
     }
 
-    // Check if we're typing after @include for "into" or "from"
-    const includeMatch = textBeforeCursor.match(/^(\s*)@include\s+[^@]+?(\s.*?)$/);
+    // Check if we're typing after import for "into" or "from"
+    const includeMatch = textBeforeCursor.match(/^(\s*)import\s+[^@]+?(\s.*?)$/);
     if (includeMatch && !currentCommand) {
       const afterPath = includeMatch[2];
       const keywords = [];
@@ -483,8 +483,8 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
       if (completions.length > 0) return completions;
     }
 
-    // Check if we're typing AFTER "from" in @include
-    const fromMatch = textBeforeCursor.match(/^(\s*)@include\s+(.+?)(?:\s+into\s+[a-zA-Z0-9_]+)?\s+from\s+(.*)$/);
+    // Check if we're typing AFTER "from" in import
+    const fromMatch = textBeforeCursor.match(/^(\s*)import\s+(.+?)(?:\s+into\s+[a-zA-Z0-9_]+)?\s+from\s+(.*)$/);
     if (fromMatch && !currentCommand) {
       let filePathStr = fromMatch[2].trim();
 
@@ -526,12 +526,13 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
       }
     }
 
-    // Check if we're typing a directive (after "> " or ">")
-    const directiveMatch = textBeforeCursor.match(/^(\s*>\s*)([a-zA-Z_:-]*)$/);
+    // Check if we're typing a directive (no prefix needed)
+    // We match any word at the start of indentation
+    const directiveMatch = textBeforeCursor.match(/^(\s*)([a-zA-Z_:-]*)$/);
     if (directiveMatch) {
       const indentBefore = directiveMatch[1];
       const prefix = directiveMatch[2].toLowerCase();
-      const indentSpaces = indentBefore.replace(/>\s*$/, "").replace(/>$/, "");
+      const indentSpaces = indentBefore;
 
       for (const directive of DIRECTIVES) {
         // Match exact directive name or prefix
@@ -542,29 +543,30 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
             vscode.CompletionItemKind.Property
           );
           item.documentation = directive.description;
-          item.filterText = "> " + directive.name;
+          item.documentation = directive.description;
+          item.filterText = directive.name;
 
           // Add appropriate snippet based on directive type with proper indentation
           if (directive.name === "script") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> script: |\n" + indentSpaces + "    ${1:echo \"Hello\"}");
+            item.insertText = new vscode.SnippetString("script: |\n" + indentSpaces + "    ${1:echo \"Hello\"}");
           } else if (directive.name === "depends") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> depends: ${1:command1}, ${2:command2}");
+            item.insertText = new vscode.SnippetString("depends: ${1:command1}, ${2:command2}");
           } else if (directive.name.startsWith("logs:")) {
             item.insertText = new vscode.SnippetString(
-              indentSpaces + "> " + (directive.name === "logs:json"
+              (directive.name === "logs:json"
                 ? "logs:json ${1:./logs/{{now}}.json}"
                 : "logs:txt ${1:./logs/{{now}}.txt}")
             );
           } else if (directive.name === "env") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> env: ${1:KEY}=${2:value}");
+            item.insertText = new vscode.SnippetString("env: ${1:KEY}=${2:value}");
           } else if (directive.name === "validate") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> validate: ${1:param} matches /${2:regex}/");
+            item.insertText = new vscode.SnippetString("validate: ${1:param} matches /${2:regex}/");
           } else if (directive.name === "cwd") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> cwd: ${1:./path}");
+            item.insertText = new vscode.SnippetString("cwd: ${1:./path}");
           } else if (directive.name === "privileged" || directive.name === "require_confirm") {
-            item.insertText = indentSpaces + "> " + directive.name;
+            item.insertText = directive.name;
           } else {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> " + directive.name + ": ${1:value}");
+            item.insertText = new vscode.SnippetString(directive.name + ": ${1:value}");
           }
 
           completions.push(item);
@@ -573,7 +575,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
     }
 
     // Check if we're typing after "depends:" - suggest command names
-    const dependsMatch = textBeforeCursor.match(/^(\s*>\s*depends:\s*)(.*)$/);
+    const dependsMatch = textBeforeCursor.match(/^(\s*depends:\s*)(.*)$/);
     if (dependsMatch) {
       const commands = validateNestfileDocument(fullText, { returnAst: true }, document.uri).commands;
       const commandNames = extractCommandNames(commands);
@@ -590,7 +592,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
     }
 
     // Check if we're typing after "env:" - suggest .env files
-    const envMatch = textBeforeCursor.match(/^(\s*>\s*env:\s*)(.*)$/);
+    const envMatch = textBeforeCursor.match(/^(\s*env:\s*)(.*)$/);
     if (envMatch) {
       const typedValue = envMatch[2].trim();
 

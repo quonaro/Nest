@@ -58,7 +58,7 @@ export class NestfileCodeLensProvider implements vscode.CodeLensProvider {
       runLens.command = {
         title: "▶ Run Command",
         command: "nestfile.runCommand",
-        arguments: [cmd.name]
+        arguments: [cmd.name, document.uri.fsPath]
       };
       codeLenses.push(runLens);
 

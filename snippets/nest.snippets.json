@@ -2,9 +2,9 @@
   "Command": {
     "prefix": "nest-command",
     "body": [
-      "${1:command_name}(${2:param}: ${3:str} = ${4:\"default\"}):",
-      "    > desc: ${5:Description}",
-      "    > script: |",
+      "${1:command_name}(${2:param}: ${3:str} = ${4:default}):",
+      "    desc: ${5:Description}",
+      "    script: |",
       "        ${6:echo \"Running {{${2}}}\"}"
     ],
     "description": "Nest command with parameter, description and script"
@@ -13,11 +13,11 @@
     "prefix": "nest-group",
     "body": [
       "${1:group}:",
-      "    > desc: ${2:Group description}",
+      "    desc: ${2:Group description}",
       "",
       "    default(!${3:flag}|${4:f}: bool = false):",
-      "        > desc: ${5:Default group command}",
-      "        > script: |",
+      "        desc: ${5:Default group command}",
+      "        script: |",
       "            ${6:echo \"Default\"}"
     ],
     "description": "Nest group with default subcommand"
@@ -25,29 +25,29 @@
   "Variable": {
     "prefix": "nest-var",
     "body": [
-      "@var ${1:NAME} = \"${2:value}\""
+      "var ${1:NAME} = ${2:value}"
     ],
     "description": "Global variable"
   },
   "Constant": {
     "prefix": "nest-const",
     "body": [
-      "@const ${1:NAME} = \"${2:value}\""
+      "const ${1:NAME} = ${2:value}"
     ],
     "description": "Global constant"
   },
   "Include": {
     "prefix": "nest-include",
     "body": [
-      "@include ${1:path/to/file.nest}"
+      "import ${1:path/to/file.nest}"
     ],
     "description": "Include another Nestfile configuration"
   },
   "Function": {
     "prefix": "nest-function",
     "body": [
-      "@function ${1:name}(${2:param}: ${3:str}):",
-      "    @var ${4:LOCAL_VAR} = \"${5:value}\"",
+      "function ${1:name}(${2:param}: ${3:str}):",
+      "    var ${4:LOCAL_VAR} = ${5:value}",
       "    ${6:echo \"Body\"}"
     ],
     "description": "Reusable Nest function"
@@ -55,42 +55,42 @@
   "Depends": {
     "prefix": "nest-depends",
     "body": [
-      "> depends: ${1:build}, ${2:test}"
+      "depends: ${1:build}, ${2:test}"
     ],
     "description": "Command dependencies"
   },
   "DependsParallel": {
     "prefix": "nest-depends-parallel",
     "body": [
-      "> depends[parallel]: ${1:build-frontend}, ${2:build-backend}"
+      "depends.parallel: ${1:build-frontend}, ${2:build-backend}"
     ],
     "description": "Parallel command dependencies"
   },
   "Watch": {
     "prefix": "nest-watch",
     "body": [
-      "> watch: ${1:src/**/*.js}, ${2:src/**/*.ts}"
+      "watch: ${1:src/**/*.js}, ${2:src/**/*.ts}"
     ],
     "description": "Watch files for changes and auto-reload"
   },
   "RequireConfirm": {
     "prefix": "nest-require-confirm",
     "body": [
-      "> require_confirm: ${1:Are you sure?}"
+      "require_confirm: ${1:Are you sure?}"
     ],
     "description": "Require user confirmation before execution"
   },
   "Validate": {
     "prefix": "nest-validate",
     "body": [
-      "> validate: ${1:param} matches /${2:regex}/"
+      "validate: ${1:param} matches /${2:regex}/"
     ],
     "description": "Parameter validation"
   },
   "Logs": {
     "prefix": "nest-logs",
     "body": [
-      "> logs:json ${1:./logs/{{now}}.json}"
+      "logs:json ${1:./logs/{{now}}.json}"
     ],
     "description": "Logging directive"
   }

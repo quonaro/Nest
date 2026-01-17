@@ -30,8 +30,8 @@ function extractVariables(text: string): Map<string, { value: string; isConst: b
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Match @var NAME = ... or @const NAME = ...
-    const varMatch = line.match(/^\s*@(var|const)\s+([A-Za-z0-9_]+)\s*=\s*(.+)$/);
+    // Match var NAME = ... or const NAME = ...
+    const varMatch = line.match(/^\s*(var|const)\s+([A-Za-z0-9_]+)\s*=\s*(.+)$/);
     if (varMatch) {
       const isConst = varMatch[1] === "const";
       const name = varMatch[2];
@@ -225,44 +225,44 @@ export class NestfileHoverProvider implements vscode.HoverProvider {
 
     // Check if we're hovering over a directive
     const trimmed = lineText.trim();
-    if (trimmed.startsWith(">")) {
-      const directiveLine = trimmed.substring(1).trim();
-      const colonIndex = directiveLine.indexOf(":");
+    const colonIndex = trimmed.indexOf(":");
+    let name = "";
 
-      if (colonIndex !== -1) {
-        let name = directiveLine.substring(0, colonIndex).trim();
+    if (colonIndex !== -1) {
+      name = trimmed.substring(0, colonIndex).trim();
+    } else {
+      name = trimmed;
+    }
 
-        // Strip modifiers, e.g. script[hide]
-        const modifierIndex = name.indexOf("[");
-        if (modifierIndex !== -1) {
-          name = name.substring(0, modifierIndex).trim();
-        }
+    // Strip modifiers, e.g. script[hide]
+    const modifierIndex = name.indexOf("[");
+    if (modifierIndex !== -1) {
+      name = name.substring(0, modifierIndex).trim();
+    }
 
-        // Handle logs:json and logs:txt
-        const directiveBase = name.startsWith("logs")
-          ? "logs"
-          : name;
+    // Handle logs:json and logs:txt
+    const directiveBase = name.startsWith("logs")
+      ? "logs"
+      : name;
 
-        const directive = DIRECTIVES.find(d =>
-          d.name === directiveBase ||
-          (directiveBase === "logs" && (name === "logs:json" || name === "logs:txt"))
-        );
+    const directive = DIRECTIVES.find(d =>
+      d.name === directiveBase ||
+      (directiveBase === "logs" && (name === "logs:json" || name === "logs:txt"))
+    );
 
-        if (directive) {
-          const displayName = directiveBase === "logs" && (name === "logs:json" || name === "logs:txt")
-            ? name
-            : directive.name;
+    if (directive) {
+      const displayName = directiveBase === "logs" && (name === "logs:json" || name === "logs:txt")
+        ? name
+        : directive.name;
 
-          const markdown = new vscode.MarkdownString();
-          markdown.appendMarkdown(`**Directive:** \`> ${displayName}:\`\n\n`);
-          markdown.appendMarkdown(directive.description);
-          return new vscode.Hover(markdown);
-        }
-      }
+      const markdown = new vscode.MarkdownString();
+      markdown.appendMarkdown(`**Directive:** \`${displayName}:\`\n\n`);
+      markdown.appendMarkdown(directive.description);
+      return new vscode.Hover(markdown);
     }
 
     // Check if we're hovering over a command name in depends:
-    const dependsMatch = lineText.match(/^(\s*>\s*depends:\s*)(.*)$/);
+    const dependsMatch = lineText.match(/^(\s*depends:\s*)(.*)$/);
     if (dependsMatch) {
       const dependsValue = dependsMatch[2];
       const cursorInDepends = position.character >= lineText.indexOf(dependsValue);

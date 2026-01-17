@@ -1,0 +1,86 @@
+import hooks from extra.nes3t into extra
+
+var APP_NAME = "nestfile-test"
+var VERSION = "1.0.0"
+const COMPANY = "Test Company"
+
+function print_header(env: str):
+    var LOCAL_ENV = "{{env}}"
+    echo "=== {{APP_NAME}} v{{VERSION}} ({{COMPANY}}) ==="
+    echo "Environment: {{LOCAL_ENV}}"
+
+
+build(!target|t: str = "x86_64", !release|r: bool = false):
+    desc: Build with all core directives
+    env: NODE_ENV=production
+    env: .env
+    validate: target matches /^[a-zA-Z0-9_-]+$/
+    depends: clean, preflight(target="x86_64", release=true)
+    logs.json: ./logs/build-{{now}}.json
+    require_confirm: Are you sure you want to build?
+    
+    before: |
+        echo "[before] Starting build..."
+        print_header(env="build")
+    
+    script: |
+        if [ "{{release}}" = "true" ]; then
+            echo "Building release $dasdsad for {{target}}"
+            mkdir -p ./release
+            echo "release" > ./release/flag
+        elif [ "{{target}}" = "debug" ]; then
+            echo "Building debug for {{target}}"
+        else
+            echo "Building default target {{target}}"
+        fi
+        
+    after: |
+        echo "[after] Build finished successfully."
+    fallback: |
+        echo "[fallback] Build failed, cleaning up..."
+        rm -rf ./build/tmp
+    finally: |
+        echo "[finally] Build command finished (success or failure)."
+
+clean:
+    var HI = "Hello, World!"
+    desc: Clean build artifacts
+    logs.txt: ./logs/clean.log
+    script: |
+        echo {{HI}}
+        echo "Cleaning build directory..."
+        rm -rf ./build
+
+preflight(*args):
+    desc: Preflight checks using wildcard args
+    privileged
+    script: |
+        echo "Preflight with wildcard args: {{*args}}"
+
+deploy(env: str, !force|f: bool = false, *rest):
+    desc: Deploy using multiple directives and wildcard args
+    env: NODE_ENV={{env}}
+    env: DEPLOYER={{force}}
+    logs.json: ./logs/deploy-{{env}}-{{now}}.json
+    depends: build(target="x86_64", release=true)
+    
+    script: |
+        if [ "{{env}}" = "production" ] && [ "{{force}}" = "true" ]; then
+            echo "FORCED deploy to PRODUCTION"
+            echo "Extra args: {{*rest}}"
+        elif [ "{{env}}" = "production" ]; then
+            echo "Deploy to PRODUCTION (no force)"
+        elif [ "{{env}}" = "staging" ]; then
+            echo "Deploy to STAGING"
+        else
+            echo "Deploy to DEVELOPMENT"
+        fi
+
+logs_demo:
+    desc: Demonstrate both JSON and text logging
+    logs.json: ./logs/logs-demo-{{now}}.json
+    logs.txt: ./logs/logs-demo.txt
+    script: |
+        echo "This command writes logs in two formats."
+
+

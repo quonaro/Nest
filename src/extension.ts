@@ -116,10 +116,12 @@ export function activate(context: vscode.ExtensionContext) {
 
   const runCommand = vscode.commands.registerCommand(
     "nestfile.runCommand",
-    (commandName: string) => {
+    (commandName: string, configPath?: string) => {
       const terminal = vscode.window.terminals.find(t => t.name === "Nest") || vscode.window.createTerminal("Nest");
       terminal.show();
-      terminal.sendText(`nest ${commandName}`);
+
+      const configFlag = configPath ? ` --config "${configPath}"` : "";
+      terminal.sendText(`nest${configFlag} ${commandName}`);
     }
   );
 

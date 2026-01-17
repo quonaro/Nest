@@ -1,24 +1,24 @@
-@include "./nestfile" into nesty
+import ./nestfile into nesty
 
-@var APP_NAME = "vscode-nestfile-support"
-@var ENV = "development"
+var APP_NAME = vscode-nestfile-support
+var ENV = development
 
-build():
-    > desc: Build VS Code extension
-    > script: |
+build:
+    desc: Build VS Code extension
+    script: |
         npm run compile
 
-watch():
-    > desc: Watch and rebuild on changes
-    > script: |
+watch:
+    desc: Watch and rebuild on changes
+    script: |
         npm run watch
 
 dev:
-    > desc: Development helpers
+    desc: Development helpers
 
-    default():
-        > desc: Open README
-        > script: |
+    default:
+        desc: Open README
+        script: |
             echo "Open README.md in VS Code for details"
 
 

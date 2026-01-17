@@ -10,7 +10,7 @@ Features:
 - Inline validation (diagnostics) for common mistakes
 - Autocompletion for directives, commands, variables, parameters, and template variables
 - Hover information for directives, variables, and commands
-- Go to Definition (F12) for variables, commands, and @include files
+- Go to Definition (F12) for variables, commands, and import files
 - Find References (Shift+F12) for variables and commands
 - Quick Fixes (Code Actions) for common errors
 - Document formatting
@@ -24,11 +24,11 @@ The extension understands the main Nestfile constructs:
 
 - Commands and groups: `command(...)` / `group:` with nested commands
 - Parameters and types: `str`, `bool`, `num`, `arr`, positional and named (`!name|n`)
-- Directives: `> desc:`, `> cwd:`, `> env:`, `> script:`, `> script[hide]:`, `> before:`, `> before[hide]:`,
-  `> after:`, `> after[hide]:`, `> fallback:`, `> fallback[hide]:`, `> finaly:`, `> finaly[hide]:`,
-  `> depends:`, `> depends[parallel]:`, `> validate:`,
-  `> logs:json`, `> logs:txt`, `> privileged`, `> require_confirm:`, `> watch:`
-- Meta directives: `@var`, `@const`, `@function`, `@include`, `@include ... into ...`
+- Directives: `desc:`, `cwd:`, `env:`, `script:`, `script.hide:`, `before:`, `before.hide:`,
+  `after:`, `after.hide:`, `fallback:`, `fallback.hide:`, `finally:`, `finally.hide:`,
+  `depends:`, `depends.parallel:`, `validate:`,
+  `logs:json`, `logs:txt`, `privileged`, `require_confirm:`, `watch:`
+- Meta directives: `var`, `const`, `function`, `import`, `import ... into ...`
 - Templates and substitutions: `{{...}}`, `$(...)` in values and scripts
 
 For a full language reference see the [official documentation](https://quonaro.github.io/Nest).
@@ -40,13 +40,13 @@ The extension runs a lightweight text validator for files with language `nestfil
 - Duplicate parameter names in a single command
 - Invalid parameter types (anything except `str`, `bool`, `num`, `arr`)
 - Suspicious aliases (empty, length > 1, or conflicting with reserved short options)
-- Commands without `> script` and without children (warning)
-- Group commands with both children and `> script` (informational)
-- Unknown directives (`> something:` that does not exist in the Nest syntax)
-- Invalid `> logs:` format (expects `logs:json <path>` or `logs:txt <path>`)
-- Invalid `> env:` format (expects `KEY=VALUE` or `.env` file path)
-- Missing `@include` files (warning if included file doesn't exist)
-- Obvious syntax issues in `@var`, `@const`, `@function`, `@include`
+- Commands without `script` and without children (warning)
+- Group commands with both children and `script` (informational)
+- Unknown directives (`something:` that does not exist in the Nest syntax)
+- Invalid `logs:` format (expects `logs:json <path>` or `logs:txt <path>`)
+- Invalid `env:` format (expects `KEY=VALUE` or `.env` file path)
+- Missing `import` files (warning if included file doesn't exist)
+- Obvious syntax issues in `var`, `const`, `function`, `import`
 - Likely unclosed `$(...)` substitutions in directive values
 
 You can also trigger validation manually via the command palette:
@@ -64,23 +64,23 @@ The extension contributes snippets for:
 
 - Command with parameters and script
 - Group with `default` subcommand
-- Global `@var` / `@const`
-- `@include` and `@function`
-- `> depends:`, `> depends[parallel]:`, `> validate:`, `> logs:json`, `> watch:`, `> require_confirm:`
+- Global `var` / `const`
+- `import` and `function`
+- `depends:`, `depends.parallel:`, `validate:`, `logs:json`, `watch:`, `require_confirm:`
 
-Type the snippet prefix (for example `nest-command`, `nest-group`, `nest-var`, `nest-include`)
+Type the snippet prefix (for example `nest-command`, `nest-group`, `nest-var`, `nest-import`)
 and accept the suggestion to insert a template.
 
 ### Language Features
 
 #### Autocompletion
 
-- **Directives**: Type `>` to get suggestions for all available directives
-- **Meta commands**: Type `@` to get suggestions for `@var`, `@const`, `@function`, `@include`
+- **Directives**: Get suggestions for all available directives
+- **Meta commands**: Get suggestions for `var`, `const`, `function`, `import`
 - **Template variables**: Type `{{` to get suggestions for variables and command parameters
 - **Command names**: Get suggestions when typing in `depends:` directives
 - **Parameter types**: Get suggestions for `str`, `bool`, `num`, `arr` types
-- **Environment files**: Get `.env` file suggestions when typing `> env:`
+- **Environment files**: Get `.env` file suggestions when typing `env:`
 
 #### Hover Information
 
@@ -93,14 +93,14 @@ and accept the suggestion to insert a template.
 - **Go to Definition (F12)**: 
   - Jump to variable definition from `{{VAR}}`
   - Jump to command definition from `depends: command`
-  - Open included files from `@include path.nest`
+  - Open included files from `import path.nest`
 - **Find References (Shift+F12)**: Find all usages of variables and commands
 - **Outline (Ctrl+Shift+O)**: Navigate document structure - see all commands, variables, and functions
 
 #### Quick Fixes
 
 - Fix invalid parameter types (suggest correct type)
-- Add missing `> script:` directive
+- Add missing `script:` directive
 - Fix typos in directive names (suggest correct directive)
 
 #### Formatting
@@ -182,7 +182,7 @@ This will apply custom icons to:
      - `/home/user/git/nest/cli/examples/testing.nest`
      - `/home/user/git/nest/cli/examples/nestfile`
    - Check that:
-     - Syntax highlighting works for commands, directives, `@var/@const/@function/@include`,
+     - Syntax highlighting works for commands, directives, `var/const/function/import`,
        templates `{{...}}`, and substitutions `$(...)`.
      - Diagnostics appear for obvious issues (try introducing an invalid type or
        duplicate parameter).
