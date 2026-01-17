@@ -418,28 +418,17 @@ export function validateNestfileDocument(
       }
     } else if (trimmed.startsWith("import ")) {
       const parts = trimmed.split(/\s+/);
-      // import * from FILE into GROUP
-      // import FILE
-      if (parts.length < 2) {
-        diagnostics.push(
-          createDiagnostic(
-            lineNumber,
-            0,
-            rawLine.length,
-            "Invalid import. Expected format: import <file> or import * from <file> into <group>",
-            vscode.DiagnosticSeverity.Warning
-          )
-        );
-      } else if (trimmed.includes(" from ")) {
-        if (!trimmed.includes(" into ") && !trimmed.includes("*")) {
-          // Maybe specific imports, but let's check basic structure
-        }
-      } else {
-        // Simple import FILE
-        const importPath = parts[1];
+      // Regex for "import SYMBOL from FILE [into GROUP]"
+      const fromMatch = trimmed.match(/^import\s+(\S+)\s+from\s+(\S+)(?:\s+into\s+(\S+))?$/);
+
+      if (fromMatch) {
+        const symbol = fromMatch[1];
+        const importPath = fromMatch[2];
+
         if (documentUri && importPath) {
           const dir = path.dirname(documentUri.fsPath);
           const absolutePath = path.resolve(dir, importPath);
+
           if (!fs.existsSync(absolutePath)) {
             diagnostics.push(
               createDiagnostic(
@@ -447,10 +436,76 @@ export function validateNestfileDocument(
                 trimmed.indexOf(importPath),
                 trimmed.indexOf(importPath) + importPath.length,
                 `Imported file not found: ${importPath}`,
-                vscode.DiagnosticSeverity.Warning
+                vscode.DiagnosticSeverity.Error
               )
             );
+          } else if (fs.statSync(absolutePath).isFile()) {
+            // File exists, check for symbol if it's not a wildcard
+            if (symbol !== "*") {
+              try {
+                const content = fs.readFileSync(absolutePath, "utf-8");
+                const importedLines = content.split(/\r?\n/);
+                let symbolFound = false;
+
+                // Simple scan for top-level commands: ^NAME(...)?:
+                const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const cmdRegex = new RegExp(`^${escapedSymbol}\\s*(\\(.*\\))?\\s*:\\s*$`);
+
+                for (const l of importedLines) {
+                  if (cmdRegex.test(l)) {
+                    symbolFound = true;
+                    break;
+                  }
+                }
+
+                if (!symbolFound) {
+                  diagnostics.push(
+                    createDiagnostic(
+                      lineNumber,
+                      trimmed.indexOf(symbol),
+                      trimmed.indexOf(symbol) + symbol.length,
+                      `Symbol "${symbol}" not found in ${importPath}`,
+                      vscode.DiagnosticSeverity.Error
+                    )
+                  );
+                }
+              } catch (e) {
+                // Ignore read errors
+              }
+            }
           }
+        }
+      } else {
+        // Fallback for "import FILE" syntax
+        // import FILE
+        if (parts.length === 2 && !trimmed.includes(" from ")) {
+          const importPath = parts[1];
+          if (documentUri && importPath) {
+            const dir = path.dirname(documentUri.fsPath);
+            const absolutePath = path.resolve(dir, importPath);
+            if (!fs.existsSync(absolutePath)) {
+              diagnostics.push(
+                createDiagnostic(
+                  lineNumber,
+                  trimmed.indexOf(importPath),
+                  trimmed.indexOf(importPath) + importPath.length,
+                  `Imported file not found: ${importPath}`,
+                  vscode.DiagnosticSeverity.Error
+                )
+              );
+            }
+          }
+        } else {
+          // Invalid format
+          diagnostics.push(
+            createDiagnostic(
+              lineNumber,
+              0,
+              rawLine.length,
+              "Invalid import. Expected format: import <file> or import <symbol> from <file> [into <group>]",
+              vscode.DiagnosticSeverity.Warning
+            )
+          );
         }
       }
     }

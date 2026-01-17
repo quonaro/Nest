@@ -216,6 +216,58 @@ export class NestfileDefinitionProvider implements vscode.DefinitionProvider {
       }
     }
 
+    // Check if we're on an import line
+    if (trimmed.startsWith("import ")) {
+      // Regex forms:
+      // 1. import FILE
+      // 2. import SYMBOL from FILE into GROUP
+      // 3. import * from FILE into GROUP
+
+      let importPath = "";
+
+      if (trimmed.includes(" from ")) {
+        const fromMatch = trimmed.match(/ from\s+(.+?)(?:\s+into\s+|$)/);
+        if (fromMatch) {
+          importPath = fromMatch[1].trim();
+        }
+      } else {
+        // import FILE
+        importPath = trimmed.substring(7).trim();
+      }
+
+      // Remove quotes if present
+      if ((importPath.startsWith('"') && importPath.endsWith('"')) ||
+        (importPath.startsWith("'") && importPath.endsWith("'"))) {
+        importPath = importPath.substring(1, importPath.length - 1);
+      }
+
+      if (importPath) {
+        // Find the position of the path in the line to ensures we only activate when clicking the path
+        const pathStart = lineText.indexOf(importPath);
+        if (pathStart !== -1 && position.character >= pathStart && position.character <= pathStart + importPath.length) {
+
+          const baseDir = path.dirname(document.uri.fsPath);
+          let absolutePath: string;
+
+          if (path.isAbsolute(importPath)) {
+            absolutePath = importPath;
+          } else {
+            absolutePath = path.resolve(baseDir, importPath);
+          }
+
+          if (fs.existsSync(absolutePath)) {
+            const stat = fs.statSync(absolutePath);
+            if (stat.isFile()) {
+              return new vscode.Location(
+                vscode.Uri.file(absolutePath),
+                new vscode.Position(0, 0)
+              );
+            }
+          }
+        }
+      }
+    }
+
     return null;
   }
 }
