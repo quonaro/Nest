@@ -43,6 +43,11 @@ test():
     desc: Run tests
     depends: build
     script: cargo test
+
+# Deploy command with validation
+deploy(env: str):
+    validate: env in ["staging", "production"]
+    script: echo "Deploying to {{env}}..."
 ```
 
 ## 🛠 Usage

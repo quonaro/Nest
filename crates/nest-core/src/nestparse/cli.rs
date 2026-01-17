@@ -799,12 +799,87 @@ impl CliGenerator {
         &self,
         validate_directives: &[(String, String)],
         args: &HashMap<String, String>,
+        env_vars: &HashMap<String, String>,
+        global_variables: &[Variable],
+        global_constants: &[Constant],
+        parent_variables: &[Variable],
+        parent_constants: &[Constant],
+        parent_args: &HashMap<String, String>,
         command_path: &[String],
     ) -> Result<(), String> {
         use regex::Regex;
+        use super::template::TemplateProcessor;
 
         for (param_name, pattern_part) in validate_directives {
-            let pattern_part = pattern_part.trim();
+            // Process templates in the pattern part (allows dynamic rules)
+            let processed_pattern = TemplateProcessor::process(
+                pattern_part,
+                args,
+                global_variables,
+                global_constants,
+                &[], // Local variables not applicable here as a separate list
+                &[], // Local constants not applicable here as a separate list
+                parent_variables,
+                parent_constants,
+                parent_args,
+            );
+            let pattern_part = processed_pattern.trim();
+
+            // Determine the target value (either from args or environment)
+            let target_value_result = if param_name.starts_with('$') {
+                let env_name = &param_name[1..];
+                // Check in Nest-defined session env vars first, then system env,
+                // and finally in Nest variables (since root-level 'env' directives are stored as variables)
+                env_vars.get(env_name).cloned()
+                    .or_else(|| std::env::var(env_name).ok())
+                    .or_else(|| parent_variables.iter().find(|v| v.name == env_name).map(|v| v.value.clone()))
+                    .or_else(|| global_variables.iter().find(|v| v.name == env_name).map(|v| v.value.clone()))
+            } else {
+                args.get(param_name).cloned()
+            };
+
+            let target_value = target_value_result.ok_or_else(|| {
+                format!(
+                    "Validation error: target '{}' not found in arguments or environment",
+                    param_name
+                )
+            })?;
+
+            // Check if it's a membership validation (in ["a", "b"])
+            if pattern_part.starts_with("in ") {
+                let list_part = pattern_part[3..].trim();
+                if (list_part.starts_with('[') && list_part.ends_with(']'))
+                    || (list_part.starts_with('(') && list_part.ends_with(')'))
+                {
+                    let content = &list_part[1..list_part.len() - 1];
+                    let allowed_values: Vec<String> = content
+                        .split(',')
+                        .map(|s| {
+                            let s = s.trim();
+                            if (s.starts_with('"') && s.ends_with('"'))
+                                || (s.starts_with('\'') && s.ends_with('\''))
+                            {
+                                s[1..s.len() - 1].to_string()
+                            } else {
+                                s.to_string()
+                            }
+                        })
+                        .filter(|s| !s.is_empty())
+                        .collect();
+
+                    if !allowed_values.contains(&target_value) {
+                        let command_str = command_path.join(" ");
+                        return Err(format!(
+                            "❌ Validation error in command 'nest {}':\n   Target '{}' with value '{}' is not in allowed list: [{}]",
+                            command_str,
+                            param_name,
+                            target_value,
+                            allowed_values.join(", ")
+                        ));
+                    }
+                    continue; // Validation passed for this directive
+                }
+            }
 
             // Extract regex pattern from /pattern/ or /pattern/flags
             let pattern = if pattern_part.starts_with('/') && pattern_part.len() > 1 {
@@ -869,20 +944,13 @@ impl CliGenerator {
                 }
             };
 
-            // Get parameter value
-            let param_value = args.get(param_name).ok_or_else(|| {
-                format!(
-                    "Validation error: parameter '{}' not found in arguments",
-                    param_name
-                )
-            })?;
-
             // Validate
-            if !pattern.is_match(param_value) {
+            if !pattern.is_match(&target_value) {
                 let command_str = command_path.join(" ");
+                let target_type = if param_name.starts_with('$') { "Environment variable" } else { "Parameter" };
                 return Err(format!(
-                    "❌ Validation error in command 'nest {}':\n   Parameter '{}' with value '{}' does not match pattern '{}'",
-                    command_str, param_name, param_value, pattern_part
+                    "❌ Validation error in command 'nest {}':\n   {} '{}' with value '{}' does not match pattern '{}'",
+                    command_str, target_type, param_name, target_value, pattern_part
                 ));
             }
         }
@@ -2347,6 +2415,40 @@ impl CliGenerator {
         // dependency graphs (e.g. `build` -> `clean`). Proper recursion detection should
         // be implemented separately from dependency tracking.
 
+        // Validate parameters (if validation directives are present)
+        let validate_directives = Self::get_validate_directives(&command.directives);
+        if !validate_directives.is_empty() {
+            // Collect all variables for template processing in validation rules
+            let (global_vars, global_consts) = (self.variables.clone(), self.constants.clone());
+            let (parent_vars, parent_consts) = self.collect_parent_variables(command_path_unwrapped);
+            
+            // Collect environment variables (some might be targets for validation)
+            let mut all_env_directives = self.collect_parent_env_directives(command_path_unwrapped);
+            for directive in &command.directives {
+                match directive {
+                    super::ast::Directive::Env(..) | super::ast::Directive::EnvFile(..) => {
+                        all_env_directives.push(directive.clone());
+                    }
+                    _ => {}
+                }
+            }
+            let env_vars = EnvironmentManager::extract_env_vars(&all_env_directives);
+            
+            if let Err(e) = self.validate_parameters(
+                &validate_directives, 
+                args, 
+                &env_vars,
+                &global_vars,
+                &global_consts,
+                &parent_vars,
+                &parent_consts,
+                parent_args,
+                command_path_unwrapped
+            ) {
+                return Err(e);
+            }
+        }
+
         // Execute dependencies first
         let (depends, parallel) = Self::get_depends_directive(&command.directives);
         if !depends.is_empty() {
@@ -2376,16 +2478,6 @@ impl CliGenerator {
                 ));
             }
             self.execute_dependencies(&depends, command_path_unwrapped, dry_run, verbose, visited, parallel)?;
-        }
-
-        // Validate parameters (if validation directives are present)
-        let validate_directives = Self::get_validate_directives(&command.directives);
-        if !validate_directives.is_empty() {
-            if let Err(e) =
-                self.validate_parameters(&validate_directives, args, command_path_unwrapped)
-            {
-                return Err(e);
-            }
         }
 
         // Check if confirmation is required

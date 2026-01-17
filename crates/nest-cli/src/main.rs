@@ -54,54 +54,72 @@ fn main() {
     // Check for special flags that don't need config by parsing args manually
     let args: Vec<String> = std::env::args().collect();
 
-    // Helper to check for a flag
-    let has_flag = |flag: &str| args.iter().any(|a| a == &format!("--{}", flag));
+    // Find the first argument that looks like a command (doesn't start with -)
+    // We skip the value of --config if present.
+    let mut first_command_idx = args.len();
+    let mut i = 1;
+    while i < args.len() {
+        let arg = &args[i];
+        if !arg.starts_with('-') {
+            first_command_idx = i;
+            break;
+        }
+        // Skip values for known global flags that take them
+        if arg == "--config" || arg == "-c" {
+            i += 1;
+        }
+        i += 1;
+    }
+
+    // Only handle global flags if they appear BEFORE the command
+    let global_args = &args[..first_command_idx];
+    let has_global_flag = |flag: &str| global_args.iter().any(|a| a == &format!("--{}", flag));
 
     // --version or -V
-    if args.iter().any(|a| a == "--version" || a == "-V") {
+    if global_args.iter().any(|a| a == "--version" || a == "-V") {
         handle_version();
         return;
     }
 
     // --std
-    if has_flag(FLAG_STD) {
+    if has_global_flag(FLAG_STD) {
         nest_core::nestparse::standard_commands::handle_std_help();
         return;
     }
 
     // --example
-    if has_flag(FLAG_EXAMPLE) {
+    if has_global_flag(FLAG_EXAMPLE) {
         handle_example();
         return;
     }
 
     // --init
-    if has_flag(FLAG_INIT) {
-        let force = args.iter().any(|a| a == "--force" || a == "-f");
+    if has_global_flag(FLAG_INIT) {
+        let force = global_args.iter().any(|a| a == "--force" || a == "-f");
         handle_init(force);
         return;
     }
 
     // --update
-    if has_flag(FLAG_UPDATE) {
+    if has_global_flag(FLAG_UPDATE) {
         handle_update();
         return;
     }
 
     // --doctor
-    if has_flag(FLAG_DOCTOR) {
+    if has_global_flag(FLAG_DOCTOR) {
         handle_doctor();
         return;
     }
 
     // --clean
-    if has_flag(FLAG_CLEAN) {
+    if has_global_flag(FLAG_CLEAN) {
         handle_clean();
         return;
     }
 
     // --uninstall
-    if has_flag(FLAG_UNINSTALL) {
+    if has_global_flag(FLAG_UNINSTALL) {
         handle_uninstall();
         return;
     }
@@ -159,7 +177,7 @@ fn main() {
     }
 
     // --check (requires config)
-    if has_flag(FLAG_CHECK) {
+    if has_global_flag(FLAG_CHECK) {
         // If user defined 'check', let them run it. Otherwise run built-in check.
         if !parse_result.commands.iter().any(|c| c.name == CMD_CHECK) {
             handle_check(&config_path);
@@ -168,7 +186,7 @@ fn main() {
     }
 
     // --list (requires config)
-    if has_flag(FLAG_LIST) {
+    if has_global_flag(FLAG_LIST) {
         // If user defined 'list', let them run it. Otherwise run built-in list.
         if !parse_result.commands.iter().any(|c| c.name == CMD_LIST) {
             handle_list(&parse_result.commands);

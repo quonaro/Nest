@@ -1298,9 +1298,12 @@ impl Parser {
                 }
             }
             "validate" => {
-                // Syntax: validate.PARAM: regex OR validate: target matches regex
+                // Syntax: 
+                // 1. validate.PARAM: regex/_array_
+                // 2. validate: target matches regex
+                // 3. validate: target in ["val1", "val2"]
                 if modifiers.is_empty() {
-                    // Try to parse "target matches regex"
+                    // Case 2: validate: target matches regex
                     if let Some(matches_pos) = value_str.find(" matches ") {
                          let target = value_str[..matches_pos].trim();
                          let regex = value_str[matches_pos + 9..].trim();
@@ -1312,15 +1315,36 @@ impl Parser {
                              ));
                          }
                          Ok(Directive::Validate(target.to_string(), regex.to_string()))
-                    } else {
+                    } 
+                    // Case 3: validate: target in ["val1", "val2"]
+                    else if let Some(in_pos) = value_str.find(" in ") {
+                         let target = value_str[..in_pos].trim();
+                         let list = value_str[in_pos + 4..].trim();
+                         
+                         if target.is_empty() || list.is_empty() {
+                             return Err(ParseError::InvalidSyntax(
+                                 format!("Invalid validate syntax. Expected 'target in [...]', got: {}", value_str),
+                                 self.current_line_number()
+                             ));
+                         }
+                         // We store it as "in [...]" to distinguish from regex in cli.rs
+                         Ok(Directive::Validate(target.to_string(), format!("in {}", list)))
+                    }
+                    else {
                          return Err(ParseError::InvalidSyntax(
-                             format!("Invalid validate syntax. Use 'validate: target matches regex' or 'validate.PARAM: regex'",),
+                             format!("Invalid validate syntax. Use 'validate: target matches regex', 'validate: target in [...]' or 'validate.PARAM: regex'",),
                              self.current_line_number(),
                          ));
                     }
                 } else {
+                    // Case 1: validate.PARAM: regex/_array_
                     let target = modifiers[0].to_string();
-                    Ok(Directive::Validate(target, value_str.to_string()))
+                    let rule = if value_str.trim().starts_with('[') || value_str.trim().starts_with('(') {
+                        format!("in {}", value_str.trim())
+                    } else {
+                        value_str.to_string()
+                    };
+                    Ok(Directive::Validate(target, rule))
                 }
             }
             "logs" => {
