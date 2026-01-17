@@ -274,6 +274,10 @@ impl Parser {
                 let env_directive = self.parse_env_directive_keyword()?;
                 directives.push(env_directive);
                 continue;
+            } else if next_trimmed == "privileged" {
+                directives.push(Directive::Privileged(true));
+                self.current_index += 1;
+                continue;
             }
 
             // Check if it's a directive (property: value or property.mod: value)
@@ -890,9 +894,9 @@ impl Parser {
         let indent = get_indent_size(line);
         let trimmed = line.trim();
 
-        // Format: @function name(params):
-        // Extract function name and parameters from "@function name(params):"
-        let func_part = trimmed.strip_prefix("@function ").unwrap_or("").trim();
+        // Format: function name(params):
+        // Extract function name and parameters from "function name(params):"
+        let func_part = trimmed.strip_prefix("function ").unwrap_or("").trim();
 
         // Parse function signature manually
         let (name, parameters) = if func_part.contains('(') {
@@ -948,7 +952,7 @@ impl Parser {
             }
 
             // Check for local variable definition
-            if next_trimmed.starts_with("@var ") {
+            if next_trimmed.starts_with("var ") {
                 let var = self.parse_variable()?;
                 local_variables.retain(|v: &Variable| v.name != var.name);
                 local_variables.push(var);
@@ -1220,10 +1224,18 @@ impl Parser {
         let key_with_mods = trimmed[..colon_pos].trim();
         let value_str = trimmed[colon_pos + 1..].trim();
 
-        // Handle dot-notation modifiers: script.hide: ...
+        // Handle dot-notation modifiers: script.linux.hide: ...
         let key_parts: Vec<&str> = key_with_mods.split('.').collect();
         let key = key_parts[0];
-        let hide = key_parts.contains(&"hide");
+        let modifiers = &key_parts[1..];
+
+        // Helper to extract common modifiers
+        let hide = modifiers.contains(&"hide") || modifiers.contains(&"silent");
+        
+        // Helper to extract OS modifier
+        let os = modifiers.iter()
+            .find(|&&m| matches!(m, "linux" | "macos" | "windows" | "unix" | "bsd"))
+            .map(|s| s.to_string());
 
         // Common directives
         match key {
@@ -1237,11 +1249,7 @@ impl Parser {
                 } else {
                     value_str.to_string()
                 };
-                if hide {
-                    Ok(Directive::ScriptHide(script))
-                } else {
-                    Ok(Directive::Script(script))
-                }
+                Ok(Directive::Script(script, os, hide))
             }
             "before" => {
                 let script = if value_str == "|" {
@@ -1249,11 +1257,7 @@ impl Parser {
                 } else {
                     value_str.to_string()
                 };
-                if hide {
-                    Ok(Directive::BeforeHide(script))
-                } else {
-                    Ok(Directive::Before(script))
-                }
+                Ok(Directive::Before(script, os, hide))
             }
             "after" => {
                 let script = if value_str == "|" {
@@ -1261,11 +1265,7 @@ impl Parser {
                 } else {
                     value_str.to_string()
                 };
-                if hide {
-                    Ok(Directive::AfterHide(script))
-                } else {
-                    Ok(Directive::After(script))
-                }
+                Ok(Directive::After(script, os, hide))
             }
             "finally" => {
                 let script = if value_str == "|" {
@@ -1273,14 +1273,10 @@ impl Parser {
                 } else {
                     value_str.to_string()
                 };
-                if hide {
-                    Ok(Directive::FinallyHide(script))
-                } else {
-                    Ok(Directive::Finally(script))
-                }
+                Ok(Directive::Finally(script, os, hide))
             }
             "depends" => {
-                let is_parallel = key_parts.contains(&"parallel");
+                let is_parallel = modifiers.contains(&"parallel");
                 let deps = self.parse_dependencies(value_str)?;
                 Ok(Directive::Depends(deps, is_parallel))
             }
@@ -1290,11 +1286,7 @@ impl Parser {
                 } else {
                     value_str.to_string()
                 };
-                if hide {
-                    Ok(Directive::FallbackHide(script))
-                } else {
-                    Ok(Directive::Fallback(script))
-                }
+                Ok(Directive::Fallback(script, os, hide))
             }
             "env" => {
                 if let Some(eq_pos) = value_str.find('=') {
@@ -1304,6 +1296,44 @@ impl Parser {
                 } else {
                      Ok(Directive::EnvFile(value_str.to_string(), hide))
                 }
+            }
+            "validate" => {
+                // Syntax: validate.PARAM: regex OR validate: target matches regex
+                if modifiers.is_empty() {
+                    // Try to parse "target matches regex"
+                    if let Some(matches_pos) = value_str.find(" matches ") {
+                         let target = value_str[..matches_pos].trim();
+                         let regex = value_str[matches_pos + 9..].trim();
+                         
+                         if target.is_empty() || regex.is_empty() {
+                             return Err(ParseError::InvalidSyntax(
+                                 format!("Invalid validate syntax. Expected 'target matches regex', got: {}", value_str),
+                                 self.current_line_number()
+                             ));
+                         }
+                         Ok(Directive::Validate(target.to_string(), regex.to_string()))
+                    } else {
+                         return Err(ParseError::InvalidSyntax(
+                             format!("Invalid validate syntax. Use 'validate: target matches regex' or 'validate.PARAM: regex'",),
+                             self.current_line_number(),
+                         ));
+                    }
+                } else {
+                    let target = modifiers[0].to_string();
+                    Ok(Directive::Validate(target, value_str.to_string()))
+                }
+            }
+            "logs" => {
+                // Syntax: logs.json: path/to/file or logs: path/to/file
+                let format = modifiers.iter()
+                    .find(|&&m| matches!(m, "json" | "txt" | "html" | "xml"))
+                    .unwrap_or(&"txt")
+                    .to_string();
+                
+                Ok(Directive::Logs(value_str.to_string(), format))
+            }
+            "require_confirm" => {
+                Ok(Directive::RequireConfirm(value_str.to_string()))
             }
             _ => {
                 Err(ParseError::InvalidSyntax(

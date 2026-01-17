@@ -48,6 +48,7 @@ BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 CUSTOM_VERSION=""
 CUSTOM_INSTALL_DIR=""
 STATIC_BUILD=false
+CLEAN_BUILD=false
 
 OS_NAME="$(uname -s)"
 
@@ -75,6 +76,8 @@ show_usage() {
     echo "Options:"
     echo "  --version VERSION       Use specific version instead of reading from Cargo.toml"
     echo "  --install-dir PATH      Install binary to custom directory (default: ~/.local/bin)"
+    echo "  --static                Build static binary (Linux only)"
+    echo "  --clean                 Clean build artifacts before building"
     echo "  --help                  Show this help message"
     echo ""
     echo "Examples:"
@@ -104,6 +107,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --static)
             STATIC_BUILD=true
+            shift
+            ;;
+        --clean)
+            CLEAN_BUILD=true
             shift
             ;;
         --help|-h)
@@ -214,6 +221,23 @@ if [ "$STATIC_BUILD" = true ]; then
         echo "   ${YELLOW}Warning: rustup not found, assuming musl target is already installed${RESET}"
     fi
     BUILD_CMD="cargo build --release --target ${TARGET_TRIPLE}"
+    BUILD_CMD="cargo build --release --target ${TARGET_TRIPLE}"
+fi
+
+# Force rebuild if requested or always ensures binaries are fresh
+if [ "$CLEAN_BUILD" = true ]; then
+    echo ""
+    echo "${INFO} ${BOLD}Cleaning build artifacts...${RESET}"
+    cargo clean
+else
+    # Touch main source files to force cargo to rebuild/relink
+    # even if no changes were made.
+    if [ -f "crates/nest-cli/src/main.rs" ]; then
+        touch "crates/nest-cli/src/main.rs"
+    fi
+    if [ -f "crates/nest-ui/src/main.rs" ]; then
+        touch "crates/nest-ui/src/main.rs"
+    fi
 fi
 
 # Build project

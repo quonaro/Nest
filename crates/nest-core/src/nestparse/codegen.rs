@@ -118,20 +118,40 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
                 }
             }
 
-            Directive::Validate(rule) => {
-                result.push_str(&format!("{}validate: {}\n", inner_indent_str, rule));
+            Directive::Validate(target, rule) => {
+                result.push_str(&format!("{}validate.{}: {}\n", inner_indent_str, target, rule));
             }
             // Script directives
-            Directive::Script(s) => format_script_directive(&mut result, &inner_indent_str, "script", s),
-            Directive::ScriptHide(s) => format_script_directive(&mut result, &inner_indent_str, "script.hide", s),
-            Directive::Before(s) => format_script_directive(&mut result, &inner_indent_str, "before", s),
-            Directive::BeforeHide(s) => format_script_directive(&mut result, &inner_indent_str, "before.hide", s),
-            Directive::After(s) => format_script_directive(&mut result, &inner_indent_str, "after", s),
-            Directive::AfterHide(s) => format_script_directive(&mut result, &inner_indent_str, "after.hide", s),
-            Directive::Fallback(s) => format_script_directive(&mut result, &inner_indent_str, "fallback", s),
-            Directive::FallbackHide(s) => format_script_directive(&mut result, &inner_indent_str, "fallback.hide", s),
-            Directive::Finally(s) => format_script_directive(&mut result, &inner_indent_str, "finally", s),
-            Directive::FinallyHide(s) => format_script_directive(&mut result, &inner_indent_str, "finally.hide", s),
+            Directive::Script(s, os, hide) => {
+                let mut name = String::from("script");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+                format_script_directive(&mut result, &inner_indent_str, &name, s);
+            }
+            Directive::Before(s, os, hide) => {
+                let mut name = String::from("before");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+                format_script_directive(&mut result, &inner_indent_str, &name, s);
+            }
+            Directive::After(s, os, hide) => {
+                let mut name = String::from("after");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+                format_script_directive(&mut result, &inner_indent_str, &name, s);
+            }
+            Directive::Fallback(s, os, hide) => {
+                let mut name = String::from("fallback");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+                format_script_directive(&mut result, &inner_indent_str, &name, s);
+            }
+            Directive::Finally(s, os, hide) => {
+                let mut name = String::from("finally");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+                format_script_directive(&mut result, &inner_indent_str, &name, s);
+            }
             Directive::Watch(inputs) => {
                 let formatted: Vec<String> = inputs.iter().map(|s| format!("\"{}\"", s)).collect();
                 result.push_str(&format!("{}watch: {}\n", inner_indent_str, formatted.join(", ")));

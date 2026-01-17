@@ -28,6 +28,7 @@ pub fn handle_std_help() {
     println!("  {:<19} {}", "--update", "Update Nest CLI to the latest version");
     println!("  {:<19} {}", "--init", "Initialize a new nestfile");
     println!("  {:<19} {}", "--example", "Download example nestfiles");
+    println!("  {:<19} {}", "--show", "Show commands in different formats (requires nestfile)");
     println!("  {:<19} {}", "--version", "Show version");
     println!("  {:<19} {}", "--std", "Show this help message");
 }

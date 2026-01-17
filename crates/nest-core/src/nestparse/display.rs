@@ -49,85 +49,80 @@ pub fn print_command(command: &Command, indent: usize) {
                 let suffix = if *parallel { ".parallel" } else { "" };
                 println!("{}    > depends{}: {}", indent_str, suffix, deps_str.join(", "));
             }
-            Directive::Before(s) | Directive::BeforeHide(s) => {
-                let directive_name = if matches!(directive, Directive::BeforeHide(_)) {
-                    "before.hide"
-                } else {
-                    "before"
-                };
+            Directive::Before(s, os, hide) => {
+                let mut name = String::from("before");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+                
                 if s.contains('\n') {
-                    println!("{}    > {}: |", indent_str, directive_name);
+                    println!("{}    > {}: |", indent_str, name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > {}: {}", indent_str, directive_name, s);
+                    println!("{}    > {}: {}", indent_str, name, s);
                 }
             }
-            Directive::After(s) | Directive::AfterHide(s) => {
-                let directive_name = if matches!(directive, Directive::AfterHide(_)) {
-                    "after.hide"
-                } else {
-                    "after"
-                };
+            Directive::After(s, os, hide) => {
+                let mut name = String::from("after");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+
                 if s.contains('\n') {
-                    println!("{}    > {}: |", indent_str, directive_name);
+                    println!("{}    > {}: |", indent_str, name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > {}: {}", indent_str, directive_name, s);
+                    println!("{}    > {}: {}", indent_str, name, s);
                 }
             }
-            Directive::Fallback(s) | Directive::FallbackHide(s) => {
-                let directive_name = if matches!(directive, Directive::FallbackHide(_)) {
-                    "fallback.hide"
-                } else {
-                    "fallback"
-                };
+            Directive::Fallback(s, os, hide) => {
+                let mut name = String::from("fallback");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+
                 if s.contains('\n') {
-                    println!("{}    > {}: |", indent_str, directive_name);
+                    println!("{}    > {}: |", indent_str, name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > {}: {}", indent_str, directive_name, s);
+                    println!("{}    > {}: {}", indent_str, name, s);
                 }
             }
-            Directive::Finally(s) | Directive::FinallyHide(s) => {
-                let directive_name = if matches!(directive, Directive::FinallyHide(_)) {
-                    "finally.hide"
-                } else {
-                    "finally"
-                };
+            Directive::Finally(s, os, hide) => {
+                let mut name = String::from("finally");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+
                 if s.contains('\n') {
-                    println!("{}    > {}: |", indent_str, directive_name);
+                    println!("{}    > {}: |", indent_str, name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > {}: {}", indent_str, directive_name, s);
+                    println!("{}    > {}: {}", indent_str, name, s);
                 }
             }
-            Directive::Validate(s) => {
-                println!("{}    > validate: {}", indent_str, s);
+            Directive::Validate(target, rule) => {
+                println!("{}    > validate.{}: {}", indent_str, target, rule);
             }
             Directive::Privileged(value) => {
                 println!("{}    > privileged: {}", indent_str, value);
             }
-            Directive::Script(s) | Directive::ScriptHide(s) => {
-                let directive_name = if matches!(directive, Directive::ScriptHide(_)) {
-                    "script.hide"
-                } else {
-                    "script"
-                };
+            Directive::Script(s, os, hide) => {
+                let mut name = String::from("script");
+                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
+                if *hide { name.push_str(".hide"); }
+
                 if s.contains('\n') {
-                    println!("{}    > {}: |", indent_str, directive_name);
+                    println!("{}    > {}: |", indent_str, name);
                     for line in s.lines() {
                         println!("{}        {}", indent_str, line);
                     }
                 } else {
-                    println!("{}    > {}: {}", indent_str, directive_name, s);
+                    println!("{}    > {}: {}", indent_str, name, s);
                 }
             }
             Directive::Logs(path, format) => {

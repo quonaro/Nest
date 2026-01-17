@@ -106,35 +106,24 @@ pub enum Directive {
     Env(String, String, bool),
     /// Environment file path (.env, hide)
     EnvFile(String, bool),
-    /// Script to execute (can be single line or multiline)
-    Script(String),
-    /// Script to execute with hidden output (can be single line or multiline)
-    ScriptHide(String),
-    /// Script to execute before the main script (can be single line or multiline)
-    Before(String),
-    /// Script to execute before the main script with hidden output (can be single line or multiline)
-    BeforeHide(String),
-    /// Script to execute after the main script (can be single line or multiline)
-    After(String),
-    /// Script to execute after the main script with hidden output (can be single line or multiline)
-    AfterHide(String),
-    /// Script to execute if the main script fails (can be single line or multiline)
-    Fallback(String),
-    /// Script to execute if the main script fails with hidden output (can be single line or multiline)
-    FallbackHide(String),
-    /// Script to execute always, regardless of success or failure (can be single line or multiline)
-    Finally(String),
-    /// Script to execute always with hidden output, regardless of success or failure (can be single line or multiline)
-    FinallyHide(String),
+    /// Script to execute (content, os, hidden)
+    Script(String, Option<String>, bool),
+    /// Script to execute before the main script (content, os, hidden)
+    Before(String, Option<String>, bool),
+    /// Script to execute after the main script (content, os, hidden)
+    After(String, Option<String>, bool),
+    /// Script to execute if the main script fails (content, os, hidden)
+    Fallback(String, Option<String>, bool),
+    /// Script to execute always, regardless of success or failure (content, os, hidden)
+    Finally(String, Option<String>, bool),
     /// Whether this command requires privileged access (sudo/administrator)
     Privileged(bool),
     /// Dependencies - commands that must be executed before this command
     /// Each dependency can have arguments (e.g., "build(target=\"x86_64\")")
     /// Second element is true if dependencies should run in parallel
     Depends(Vec<Dependency>, bool),
-    /// Validation rules for parameters
-    /// Format: "param_name matches /regex/" or "param_name matches /regex/ flags"
-    Validate(String),
+    /// Validation rules for parameters (target_param, rule)
+    Validate(String, String),
     /// Logging directive - logs command output to a file
     /// First String is the file path, second is the format ("json" or "txt")
     Logs(String, String),

@@ -414,17 +414,29 @@ nest deploy v1.0.0 -v
 
 ## 📝 Writing Nestfile
 
+> [!IMPORTANT]
+> **Syntax Update:** The Nestfile syntax has been updated. Older prefixes (`>` for directives, `@` for keywords) are deprecated.
+> Please use the new colon-based syntax.
+>
+> **Example:**
+> ```nest
+> # New Syntax
+> build:
+>     desc: Build the project
+>     script: echo "Building..."
+> ```
+
 ### Basic Command Structure
 
 A Nestfile consists of commands with parameters, directives, and nested subcommands:
 
 ```nest
 command_name(param: type = default):
-    > desc: Description of the command
-    > cwd: ./working/directory
-    > env: VARIABLE_NAME=value
-    > env: .env.local
-    > script: |
+    desc: Description of the command
+    cwd: ./working/directory
+    env: VARIABLE_NAME=value
+    env: .env.local
+    script: |
         #!/bin/sh
         echo "Running command..."
         ./script.sh {{param}}
@@ -436,8 +448,8 @@ Parameters are defined in the function signature:
 
 ```nest
 build(target: str = "x86_64", release: bool = false):
-    > desc: Build the project
-    > script: cargo build --target {{target}} ${release:+--release}
+    desc: Build the project
+    script: cargo build --target {{target}} ${release:+--release}
 ```
 
 **Parameter Types:**
@@ -461,8 +473,8 @@ build(target: str = "x86_64", release: bool = false):
 
 ```nest
 greet(name: str, message: str):
-    > desc: Greet someone with a message
-    > script: echo "Hello {{name}}, {{message}}"
+    desc: Greet someone with a message
+    script: echo "Hello {{name}}, {{message}}"
 ```
 
 ```bash
@@ -474,8 +486,8 @@ nest greet "Alice" "welcome!"
 
 ```nest
 deploy(version: str, !env|e: str = "production", !force|f: bool = false):
-    > desc: Deploy application
-    > script: |
+    desc: Deploy application
+    script: |
         #!/bin/sh
         echo "Deploying {{version}} to {{env}}"
         if [ "{{force}}" = "true" ]; then
@@ -495,8 +507,8 @@ nest deploy "v1.2.3"  # env defaults to "production"
 
 ```nest
 copy(source: str, !destination|d: str, !overwrite|o: bool = false):
-    > desc: Copy file with optional overwrite
-    > script: |
+    desc: Copy file with optional overwrite
+    script: |
         #!/bin/sh
         if [ "{{overwrite}}" = "true" ]; then
             cp -f "{{source}}" "{{destination}}"
@@ -521,42 +533,42 @@ nest build --target x86_64  # release defaults to false
 
 Directives control command behavior:
 
-- **`> desc:`** - Command description (shown in help)
-- **`> cwd:`** - Working directory for script execution
-- **`> env:`** - Environment variables:
-  - Direct assignment: `> env: NODE_ENV=production`
-  - Load from file: `> env: .env.local`
-  - System variable with fallback: `> env: NODE_ENV=${NODE_ENV:-development}`
-  - System variable: `> env: DATABASE_URL=${DATABASE_URL}`
-- **`> script:`** - Script to execute:
-  - Single line: `> script: echo "Hello"`
-  - Multiline: `> script: |` (followed by indented script block)
-  - Hidden output: `> script[hide]: |` (suppresses command output)
-- **`> before:`** - Script executed before the main script (see Before/After/Fallback section)
-  - Hidden variant: `> before[hide]:`
-- **`> after:`** - Script executed after successful completion (see Before/After/Fallback section)
-  - Hidden variant: `> after[hide]:`
-- **`> fallback:`** - Script executed on failure (see Before/After/Fallback section)
-  - Hidden variant: `> fallback[hide]:`
-- **`> finaly:`** - Script executed always, regardless of success or failure (see Before/After/Fallback section)
-  - Hidden variant: `> finaly[hide]:`
-- **`> depends:`** - Command dependencies (see Command Dependencies section)
-  - Parallel execution: `> depends[parallel]: cmd1, cmd2` (runs dependencies in parallel)
-- **`> validate:`** - Parameter validation rules (see Parameter Validation section)
+- **`desc:`** - Command description (shown in help)
+- **`cwd:`** - Working directory for script execution
+- **`env:`** - Environment variables:
+  - Direct assignment: `env: NODE_ENV=production`
+  - Load from file: `env: .env.local`
+  - System variable with fallback: `env: NODE_ENV=${NODE_ENV:-development}`
+  - System variable: `env: DATABASE_URL=${DATABASE_URL}`
+- **`script:`** - Script to execute:
+  - Single line: `script: echo "Hello"`
+  - Multiline: `script: |` (followed by indented script block)
+  - Hidden output: `script.hide: |` (suppresses command output)
+- **`before:`** - Script executed before the main script (see Before/After/Fallback section)
+  - Hidden variant: `before.hide:`
+- **`after:`** - Script executed after successful completion (see Before/After/Fallback section)
+  - Hidden variant: `after.hide:`
+- **`fallback:`** - Script executed on failure (see Before/After/Fallback section)
+  - Hidden variant: `fallback.hide:`
+- **`finally:`** - Script executed always, regardless of success or failure (see Before/After/Fallback section)
+  - Hidden variant: `finally.hide:`
+- **`depends:`** - Command dependencies (see Command Dependencies section)
+  - Parallel execution: `depends.parallel: cmd1, cmd2` (runs dependencies in parallel)
+- **`validate:`** - Parameter validation rules (see Parameter Validation section)
 
-- **`> logs:json <path>` / `> logs:txt <path>`** - Log command execution (see Logging section)
-- **`> privileged`** - Require privileged access (root/admin)
-- **`> require_confirm:`** - Require user confirmation before executing
-  - Custom message: `> require_confirm: Are you sure you want to deploy?`
-  - Default message: `> require_confirm:` (uses default confirmation prompt)
-- **`> watch:`** - Watch files for changes and re-run command (see Watch Mode section)
-  - Single pattern: `> watch: src/**/*.js`
-  - Multiple patterns: `> watch: src/**/*.js, tests/**/*.js`
+- **`logs.json: <path>` / `logs.txt: <path>`** - Log command execution (see Logging section)
+- **`privileged`** - Require privileged access (root/admin)
+- **`require_confirm:`** - Require user confirmation before executing
+  - Custom message: `require_confirm: Are you sure you want to deploy?`
+  - Default message: `require_confirm: true` (uses default confirmation prompt)
+- **`watch:`** - Watch files for changes and re-run command (see Watch Mode section)
+  - Single pattern: `watch: src/**/*.js`
+  - Multiple patterns: `watch: src/**/*.js, tests/**/*.js`
 
 **Directive Modifiers:**
 
-- **`[hide]`** - Suppresses output for script directives (`script[hide]`, `before[hide]`, `after[hide]`, `fallback[hide]`, `finaly[hide]`)
-- **`[parallel]`** - Runs dependencies in parallel (`depends[parallel]: cmd1, cmd2`)
+- **`.hide`** - Suppresses output for script directives (`script.hide`, `before.hide`, `after.hide`, `fallback.hide`, `finally.hide`)
+- **`.parallel`** - Runs dependencies in parallel (`depends.parallel: cmd1, cmd2`)
 
 ### Nested Commands
 
@@ -564,12 +576,12 @@ Group related commands under a namespace:
 
 ```nest
 dev:
-    > desc: Development tools
+    desc: Development tools
 
     default(!hot|h: bool = false):
-        > desc: Start dev server
-        > env: NODE_ENV=development
-        > script: |
+        desc: Start dev server
+        env: NODE_ENV=development
+        script: |
             #!/bin/sh
             if [ "{{hot}}" = "true" ]; then
                 nodemon src/index.js
@@ -578,8 +590,8 @@ dev:
             fi
 
     lint(!fix|f: bool = false):
-        > desc: Lint code
-        > script: eslint src/ ${fix:+--fix}
+        desc: Lint code
+        script: eslint src/ ${fix:+--fix}
 ```
 
 **Usage:**
@@ -595,13 +607,13 @@ nest dev lint -f true       # Use short alias
 
 ### Environment Variables in Scripts
 
-Environment variables set via `> env:` directives are available in scripts using standard shell syntax:
+Environment variables set via `env:` directives are available in scripts using standard shell syntax:
 
 ```nest
 build():
-    > env: NODE_ENV=production
-    > env: PORT=3000
-    > script: |
+    env: NODE_ENV=production
+    env: PORT=3000
+    script: |
         echo "Building in $NODE_ENV mode"
         echo "Port: $PORT"
         npm run build
@@ -613,9 +625,9 @@ You can use system environment variables with fallback values:
 
 ```nest
 build():
-    > env: NODE_ENV=${NODE_ENV:-development}  # Uses system NODE_ENV or defaults to "development"
-    > env: BUILD_NUMBER=${CI_BUILD_NUMBER:-local}  # Uses CI build number or "local"
-    > script: |
+    env: NODE_ENV=${NODE_ENV:-development}  # Uses system NODE_ENV or defaults to "development"
+    env: BUILD_NUMBER=${CI_BUILD_NUMBER:-local}  # Uses CI build number or "local"
+    script: |
         echo "Building in $NODE_ENV mode"
         echo "Build number: $BUILD_NUMBER"
         npm run build
@@ -630,7 +642,7 @@ build():
 
 1. System environment variables (if set)
 2. Variables from `.env` files
-3. Direct assignments in `> env:` directives
+3. Direct assignments in `env:` directives
 4. Fallback values (for `${VAR:-default}` syntax)
 
 ### Variables and Constants
@@ -639,22 +651,22 @@ Define variables and constants at the top level (global) or inside commands (loc
 
 ```nest
 # Global variables and constants
-@var APP_NAME = "myapp"
-@var VERSION = "1.0.0"
-@const COMPANY_NAME = "My Company"
+var APP_NAME = "myapp"
+var VERSION = "1.0.0"
+const COMPANY_NAME = "My Company"
 
 # Variables can be redefined (last definition wins)
-@var APP_NAME = "production-app"  # Overrides previous definition
+var APP_NAME = "production-app"  # Overrides previous definition
 
 # Command with local variables and constants
 build():
     # Local variable overrides global
-    @var APP_NAME = "local-app"
+    var APP_NAME = "local-app"
     # Local constant overrides global
-    @const COMPANY_NAME = "Local Company"
+    const COMPANY_NAME = "Local Company"
     # New local variable (only in this command)
-    @var BUILD_DIR = "./build"
-    > script: |
+    var BUILD_DIR = "./build"
+    script: |
         echo "Building {{APP_NAME}} v{{VERSION}}"
         echo "Company: {{COMPANY_NAME}}"
         echo "Build dir: {{BUILD_DIR}}"
@@ -665,7 +677,7 @@ build():
 
 ```nest
 build():
-    > script: |
+    script: |
         echo "Building {{APP_NAME}} v{{VERSION}}"
         echo "Company: {{COMPANY_NAME}}"
         npm run build
@@ -690,13 +702,13 @@ build():
 
 ```nest
 # Global variables
-@var APP_NAME = "global-app"
-@var NODE_ENV = "development"
-@const COMPANY = "Global Company"
+var APP_NAME = "global-app"
+var NODE_ENV = "development"
+const COMPANY = "Global Company"
 
 # Command 1: Uses global variables
 show_global():
-    > script: |
+    script: |
         echo "APP_NAME: {{APP_NAME}}"      # Output: "global-app"
         echo "NODE_ENV: {{NODE_ENV}}"      # Output: "development"
         echo "COMPANY: {{COMPANY}}"        # Output: "Global Company"
@@ -704,17 +716,17 @@ show_global():
 # Command 2: Overrides global variables with local ones
 show_local():
     # Local variables override global for this command only
-    @var APP_NAME = "local-app"
-    @var NODE_ENV = "production"
-    @const COMPANY = "Local Company"
-    > script: |
+    var APP_NAME = "local-app"
+    var NODE_ENV = "production"
+    const COMPANY = "Local Company"
+    script: |
         echo "APP_NAME: {{APP_NAME}}"      # Output: "local-app" (local overrides global)
         echo "NODE_ENV: {{NODE_ENV}}"      # Output: "production" (local overrides global)
         echo "COMPANY: {{COMPANY}}"        # Output: "Local Company" (local overrides global)
 
 # Command 3: Still uses global variables (no local overrides)
 show_global_again():
-    > script: |
+    script: |
         echo "APP_NAME: {{APP_NAME}}"      # Output: "global-app" (no local override)
         echo "NODE_ENV: {{NODE_ENV}}"      # Output: "development" (no local override)
 ```
@@ -741,10 +753,10 @@ Use `{{variable}}` syntax in scripts:
 
 ```nest
 deploy(version: str):
-    > desc: Deploy application
-    > env: DEPLOYER={{user}}
-    > env: BUILD_TIME={{now}}
-    > script: |
+    desc: Deploy application
+    env: DEPLOYER={{user}}
+    env: BUILD_TIME={{now}}
+    script: |
         #!/bin/sh
         echo "Deploying {{version}} by {{user}} at {{now}}"
         ./deploy.sh {{version}}
@@ -756,9 +768,9 @@ Environment variables are available in scripts using `$VAR` syntax:
 
 ```nest
 run_app():
-    > env: NODE_ENV=production
-    > env: PORT=3000
-    > script: |
+    env: NODE_ENV=production
+    env: PORT=3000
+    script: |
         echo "Starting app in $NODE_ENV mode on port $PORT"
         node server.js --port $PORT
 ```
@@ -769,9 +781,9 @@ You can combine template variables and environment variables:
 
 ```nest
 deploy(version: str):
-    > env: NODE_ENV=${NODE_ENV:-production}
-    > env: APP_VERSION={{version}}
-    > script: |
+    env: NODE_ENV=${NODE_ENV:-production}
+    env: APP_VERSION={{version}}
+    script: |
         echo "Deploying version {{version}} to $NODE_ENV"
         echo "App version: $APP_VERSION"
         ./deploy.sh --version {{version}} --env $NODE_ENV
@@ -779,27 +791,27 @@ deploy(version: str):
 
 ### Command Dependencies
 
-You can specify dependencies between commands using the `> depends:` directive:
+You can specify dependencies between commands using the `depends:` directive:
 
 ```nest
 clean():
-    > desc: Clean build artifacts
-    > script: rm -rf build/
+    desc: Clean build artifacts
+    script: rm -rf build/
 
 build():
-    > desc: Build the project
-    > depends: clean
-    > script: npm run build
+    desc: Build the project
+    depends: clean
+    script: npm run build
 
 test():
-    > desc: Run tests
-    > depends: build
-    > script: npm test
+    desc: Run tests
+    depends: build
+    script: npm test
 
 deploy():
-    > desc: Deploy application
-    > depends: build, test
-    > script: npm run deploy
+    desc: Deploy application
+    depends: build, test
+    script: npm run deploy
 ```
 
 **Dependency Resolution:**
@@ -827,13 +839,13 @@ You can pass arguments to dependency commands:
 
 ```nest
 build_custom(!target|t: str = "x86_64", !release|r: bool = false):
-    > desc: Build with target and release options
-    > script: echo "Building for {{target}} (release={{release}})..."
+    desc: Build with target and release options
+    script: echo "Building for {{target}} (release={{release}})..."
 
 deploy_with_args():
-    > desc: Deploy with specific build configuration
-    > depends: build_custom(target="arm64", release=true), test_custom(coverage=true)
-    > script: |
+    desc: Deploy with specific build configuration
+    depends: build_custom(target="arm64", release=true), test_custom(coverage=true)
+    script: |
         echo "Deploying with custom build configuration..."
 ```
 
@@ -841,12 +853,12 @@ deploy_with_args():
 
 ```nest
 a():
-    > depends: b
-    > script: echo "A"
+    depends: b
+    script: echo "A"
 
 b():
-    > depends: a  # ERROR: Circular dependency detected
-    > script: echo "B"
+    depends: a  # ERROR: Circular dependency detected
+    script: echo "B"
 ```
 
 ### Functions
@@ -863,8 +875,8 @@ Functions allow you to create reusable scripts that can be called from commands 
 **Syntax:**
 
 ```nest
-@function function_name(param1: str, param2: bool):
-    @var LOCAL_VAR = "value"
+function function_name(param1: str, param2: bool):
+    var LOCAL_VAR = "value"
     echo "Function body"
     # Can call commands, other functions, use variables, etc.
 ```
@@ -873,24 +885,24 @@ Functions allow you to create reusable scripts that can be called from commands 
 
 ```nest
 # Global variables
-@var APP_NAME = "myapp"
-@var VERSION = "1.0.0"
+var APP_NAME = "myapp"
+var VERSION = "1.0.0"
 
 # Function definition
-@function setup_env(env_name: str):
-    @var LOCAL_ENV = "{{env_name}}"
+function setup_env(env_name: str):
+    var LOCAL_ENV = "{{env_name}}"
     echo "Setting up environment: {{LOCAL_ENV}}"
     echo "App: {{APP_NAME}} v{{VERSION}}"
 
 # Function that calls another function
-@function build_app(target: str):
+function build_app(target: str):
     echo "Building for target: {{target}}"
     setup_env(env_name="{{target}}")
     npm run build --target={{target}}
 
 # Command using functions
 build():
-    > script: |
+    script: |
         setup_env(env_name="production")
         build_app(target="x86_64")
 ```
@@ -907,7 +919,7 @@ build():
 **Function Parameters:**
 
 ```nest
-@function deploy(version: str, force: bool):
+function deploy(version: str, force: bool):
     echo "Deploying version {{version}}"
     if [ "{{force}}" = "true" ]; then
         echo "Force deployment enabled"
@@ -918,7 +930,7 @@ build():
 
 ```nest
 deploy():
-    > script: |
+    script: |
         deploy(version="1.0.0", force="true")
         # Or call without arguments if function has defaults
         deploy(version="1.0.0")
@@ -937,59 +949,59 @@ You can define scripts that run before, after, as a fallback for, or always afte
 
 ```nest
 deploy(version: str):
-    > desc: Deploy application
-    > before: |
+    desc: Deploy application
+    before: |
         echo "Preparing deployment..."
         ./check-prerequisites.sh
-    > script: |
+    script: |
         echo "Deploying version {{version}}..."
         ./deploy.sh {{version}}
-    > after: |
+    after: |
         echo "Deployment successful!"
         ./notify-team.sh "Deployed {{version}}"
-    > fallback: |
+    fallback: |
         echo "Deployment failed!"
         echo "Error: {{SYSTEM_ERROR_MESSAGE}}"
         ./rollback.sh
-    > finaly: |
+    finaly: |
         echo "Cleaning up temporary files..."
         rm -rf /tmp/deploy-*
 ```
 
 **Execution Order:**
 
-1. **`> before:`** - Runs before the main script
+1. **`before:`** - Runs before the main script
    - If it fails, the main script is not executed
    - Use for setup, validation, or prerequisite checks
-2. **`> script:`** - The main command script
-3. **`> after:`** - Runs after the main script **only if it succeeds**
+2. **`script:`** - The main command script
+3. **`after:`** - Runs after the main script **only if it succeeds**
    - Use for cleanup, notifications, or post-processing
-4. **`> fallback:`** - Runs **only if the main script fails**
+4. **`fallback:`** - Runs **only if the main script fails**
    - Replaces the error output with the fallback script's output
    - Has access to `{{SYSTEM_ERROR_MESSAGE}}` template variable
    - Use for error handling, rollback, or custom error messages
-5. **`> finaly:`** - Runs **always**, regardless of success or failure
-   - Executes after `> after:` (if main script succeeded) or after `> fallback:` (if main script failed)
+5. **`finaly:`** - Runs **always**, regardless of success or failure
+   - Executes after `after:` (if main script succeeded) or after `fallback:` (if main script failed)
    - Use for cleanup operations that must always run (like `finally` in try-catch)
 
 **Hidden Output Variants:**
 
-All script lifecycle directives support the `[hide]` modifier to suppress their output:
+All script lifecycle directives support the `.hide` modifier to suppress their output:
 
 ```nest
 deploy(version: str):
-    > before[hide]: |
+    before.hide: |
         # This output won't be shown
         ./silent-check.sh
-    > script: |
+    script: |
         echo "Deploying..."  # This IS shown
-    > after[hide]: |
+    after.hide: |
         # Silent cleanup
         ./cleanup.sh
-    > fallback[hide]: |
+    fallback.hide: |
         # Silent error handling
         ./silent-rollback.sh
-    > finaly[hide]: |
+    finally.hide: |
         # Silent final cleanup
         rm -rf /tmp/*
 ```
@@ -1003,24 +1015,24 @@ deploy(version: str):
 
 **Special Variables:**
 
-- `{{SYSTEM_ERROR_MESSAGE}}` - Available in `> fallback:` scripts, contains the error message from the failed main script
+- `{{SYSTEM_ERROR_MESSAGE}}` - Available in `fallback:` scripts, contains the error message from the failed main script
 
 **Example with All Hooks:**
 
 ```nest
 build():
-    > before: echo "Starting build..."
-    > script: |
+    before: echo "Starting build..."
+    script: |
         npm run build
         if [ $? -ne 0 ]; then
             exit 1
         fi
-    > after: echo "Build completed successfully!"
-    > fallback: |
+    after: echo "Build completed successfully!"
+    fallback: |
         echo "Build failed, cleaning up..."
         rm -rf dist/
         echo "Cleanup complete"
-    > finaly: |
+    finaly: |
         echo "Build process finished"
         # This always runs, whether build succeeded or failed
 ```
@@ -1031,27 +1043,27 @@ Include directives allow you to split your configuration into multiple files for
 
 ```nest
 # Include a specific file
-@include docker.nest
+import docker.nest
 
 # Include all files matching a pattern
-@include modules/*.nest
+import modules/*.nest
 
 # Include all config files from a directory
-@include commands/
+import commands/
 ```
 
 **Types of includes:**
 
-1. **Specific file**: `@include docker.nest` - Includes commands from a specific file
-2. **Pattern with wildcard**: `@include modules/*.nest` - Includes all files matching the pattern
-- **Directory**: `@include commands/` - Includes all configuration files (nestfile, Nestfile, nest, Nest) from the directory
+1. **Specific file**: `import docker.nest` - Includes commands from a specific file
+2. **Pattern with wildcard**: `import modules/*.nest` - Includes all files matching the pattern
+- **Directory**: `import commands/` - Includes all configuration files (nestfile, Nestfile, nest, Nest) from the directory
 
 ### Include into Group
 
 You can import commands from a file directly into a specific group using the `into` keyword:
 
 ```nest
-@include modules/database.nest into db
+import modules/database.nest into db
 ```
 
 This will wrap all commands from `modules/database.nest` under the `db:` group.
@@ -1061,21 +1073,21 @@ This will wrap all commands from `modules/database.nest` under the `db:` group.
 `modules/database.nest`:
 ```nest
 migrate():
-    > desc: Run database migrations
-    > script: ./migrate.sh
+    desc: Run database migrations
+    script: ./migrate.sh
 
 seed():
-    > desc: Seed database with test data
-    > script: ./seed.sh
+    desc: Seed database with test data
+    script: ./seed.sh
 
 backup():
-    > desc: Backup database
-    > script: ./backup.sh
+    desc: Backup database
+    script: ./backup.sh
 ```
 
 `nestfile`:
 ```nest
-@include modules/database.nest into db
+import modules/database.nest into db
 ```
 
 **Result:** Commands are now available as:
@@ -1090,9 +1102,9 @@ nest db backup
 You can include multiple files into the same group:
 
 ```nest
-@include modules/postgres.nest into db
-@include modules/redis.nest into db
-@include modules/mongo.nest into db
+import modules/postgres.nest into db
+import modules/redis.nest into db
+import modules/mongo.nest into db
 ```
 
 All commands from these files will be merged under the `db:` group.
@@ -1102,8 +1114,8 @@ All commands from these files will be merged under the `db:` group.
 You can also include into nested groups:
 
 ```nest
-@include api/auth.nest into api:auth
-@include api/users.nest into api:users
+import api/auth.nest into api:auth
+import api/users.nest into api:users
 ```
 
 This creates a structure like:
@@ -1121,7 +1133,7 @@ When you define a command with the same name multiple times (e.g., via `@include
 **Merging Rules:**
 
 1. **Parameters**: Replaced completely if the overriding command defines any parameters.
-2. **Directives**: Appended (e.g., `> desc:` in the override replaces the original if it's the last one).
+2. **Directives**: Appended (e.g., `desc:` in the override replaces the original if it's the last one).
 3. **Children**: Merged recursively.
 4. **Variables/Constants**: Merged (local overrides override previous local definitions).
 
@@ -1130,17 +1142,17 @@ When you define a command with the same name multiple times (e.g., via `@include
 `base.nest`:
 ```nest
 serve:
-    > desc: "Start server"
-    > script: echo "Starting..."
+    desc: "Start server"
+    script: echo "Starting..."
 ```
 
 `nestfile`:
 ```nest
-@include base.nest
+import base.nest
 
 serve:
-    > desc: "Start dev server" # Overrides description
-    # Script directive from base.nest is preserved unless overridden by another > script:
+    desc: "Start dev server" # Overrides description
+    # Script directive from base.nest is preserved unless overridden by another script:
 ```
 
 
@@ -1156,10 +1168,10 @@ serve:
 
 ```nest
 # Main nestfile
-@var APP_NAME = "myapp"
+var APP_NAME = "myapp"
 
-@include docker.nest
-@include database.nest
+import docker.nest
+import database.nest
 
 # Commands from included files are now available
 # nest docker build
@@ -1170,13 +1182,13 @@ serve:
 
 Watch mode allows you to automatically re-run a command when files change. This is useful for development workflows where you want to rebuild, test, or restart your application on file changes.
 
-**Using the `> watch:` Directive:**
+**Using the `watch:` Directive:**
 
 ```nest
 dev():
-    > desc: Start development server with auto-reload
-    > watch: src/**/*.js, src/**/*.ts
-    > script: |
+    desc: Start development server with auto-reload
+    watch: src/**/*.js, src/**/*.ts
+    script: |
         echo "Starting dev server..."
         npm run dev
 ```
@@ -1202,19 +1214,19 @@ You can specify multiple glob patterns:
 
 ```nest
 test():
-    > desc: Run tests with auto-reload
-    > watch: src/**/*.js, tests/**/*.test.js, package.json
-    > script: npm test
+    desc: Run tests with auto-reload
+    watch: src/**/*.js, tests/**/*.test.js, package.json
+    script: npm test
 ```
 
 **Combining Directive and Flag:**
 
-If both `> watch:` directive and `--watch` flag are present, the patterns are combined:
+If both `watch:` directive and `--watch` flag are present, the patterns are combined:
 
 ```nest
 build():
-    > watch: src/**/*.rs
-    > script: cargo build
+    watch: src/**/*.rs
+    script: cargo build
 ```
 
 ```bash
@@ -1231,29 +1243,29 @@ Nest automatically debounces file change events (200ms by default) to avoid runn
 ```nest
 # Frontend development
 frontend():
-    > desc: Build frontend with hot reload
-    > watch: src/**/*.jsx, src/**/*.css, public/**/*
-    > script: npm run build
+    desc: Build frontend with hot reload
+    watch: src/**/*.jsx, src/**/*.css, public/**/*
+    script: npm run build
 
 # Backend development
 backend():
-    > desc: Restart server on code changes
-    > watch: src/**/*.go, go.mod
-    > script: |
+    desc: Restart server on code changes
+    watch: src/**/*.go, go.mod
+    script: |
         pkill -f "go run"
         go run main.go
 
 # Documentation
 docs():
-    > desc: Rebuild docs on changes
-    > watch: docs/**/*.md, docs/**/*.yaml
-    > script: mkdocs build
+    desc: Rebuild docs on changes
+    watch: docs/**/*.md, docs/**/*.yaml
+    script: mkdocs build
 
 # Tests
 test():
-    > desc: Run tests on file changes
-    > watch: src/**/*.py, tests/**/*.py
-    > script: pytest
+    desc: Run tests on file changes
+    watch: src/**/*.py, tests/**/*.py
+    script: pytest
 ```
 
 **Important Notes:**
@@ -1266,62 +1278,41 @@ test():
 
 ### Conditional Execution
 
-You can execute different scripts based on conditions using `if`, `elif`, and `else` directives:
+Directives like `if`, `elif`, and `else` have been removed. Instead, use standard shell conditionals within your `script` blocks. This keeps the configuration simple and leverages the full power of your shell.
 
 ```nest
 deploy(env: str):
-    > desc: Deploy to different environments
-    > if: env == "production"
-    > script: |
-        echo "Deploying to PRODUCTION..."
-        # Production deployment
-    > elif: env == "staging"
-    > script: |
-        echo "Deploying to STAGING..."
-        # Staging deployment
-    > else:
-    > script: |
-        echo "Deploying to development..."
-        # Development deployment
+    desc: Deploy to different environments
+    script: |
+        if [ "{{env}}" = "production" ]; then
+            echo "Deploying to PRODUCTION..."
+            # Production deployment
+        elif [ "{{env}}" = "staging" ]; then
+            echo "Deploying to STAGING..."
+            # Staging deployment
+        else
+            echo "Deploying to development..."
+            # Development deployment
+        fi
 ```
-
-**Supported Operators:**
-
-- Comparison: `==`, `!=`, `<=`, `>=`, `<`, `>`
-- Logical: `&&` (AND), `||` (OR), `!` (NOT)
-
-**Condition Types:**
-
-- String comparisons: `param == "value"`
-- Numeric comparisons: `count >= 10`
-- Boolean checks: `debug == "true"`
-- Complex conditions: `env == "prod" && force == "true"`
 
 **Example with Logical Operators:**
 
 ```nest
 build(!target|t: str = "x86_64", !release|r: bool = false):
-    > desc: Build with conditional logic
-    > if: target == "x86_64" && release == "true"
-    > script: |
-        echo "Building optimized x86_64 release..."
-        cargo build --release
-    > elif: target == "arm64" || target == "aarch64"
-    > script: |
-        echo "Building for ARM64..."
-        cargo build --target aarch64
-    > else:
-    > script: |
-        echo "Building default..."
-        cargo build
+    desc: Build with conditional logic
+    script: |
+        if [ "{{target}}" = "x86_64" ] && [ "{{release}}" = "true" ]; then
+            echo "Building optimized x86_64 release..."
+            cargo build --release
+        elif [ "{{target}}" = "arm64" ] || [ "{{target}}" = "aarch64" ]; then
+             echo "Building for ARM64..."
+             cargo build --target aarch64
+        else
+             echo "Building default..."
+             cargo build
+        fi
 ```
-
-**Key Points:**
-
-- First matching condition executes
-- `if` can be used multiple times (acts as separate conditions)
-- `elif` and `else` are evaluated only if previous conditions didn't match
-- Conditions are evaluated in order
 
 ### Parameter Validation
 
@@ -1329,22 +1320,22 @@ Validate command parameters using regex patterns:
 
 ```nest
 deploy(version: str):
-    > desc: Deploy with version validation
-    > validate: version matches /^v?\d+\.\d+\.\d+$/
-    > script: |
+    desc: Deploy with version validation
+    validate: version matches /^v?\d+\.\d+\.\d+$/
+    script: |
         echo "Deploying {{version}}"
 
 register(email: str, username: str):
-    > desc: Register user with validation
-    > validate: email matches /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
-    > validate: username matches /^[a-zA-Z0-9_]{3,20}$/
-    > script: |
+    desc: Register user with validation
+    validate: email matches /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+    validate: username matches /^[a-zA-Z0-9_]{3,20}$/
+    script: |
         echo "Registering {{username}} with {{email}}"
 ```
 
 **Validation Features:**
 
-- Multiple `> validate:` directives can be used for different parameters
+- Multiple `validate:` directives can be used for different parameters
 - Case-insensitive regex: use `/pattern/i` flag
 - Validation runs before command execution
 - Clear error messages when validation fails
@@ -1355,22 +1346,22 @@ Log command execution to files in JSON or text format:
 
 ```nest
 deploy(version: str):
-    > desc: Deploy with JSON logging
-    > logs:json ./logs/deploy-{{version}}.json
-    > script: |
+    desc: Deploy with JSON logging
+    logs.json: ./logs/deploy-{{version}}.json
+    script: |
         echo "Deploying {{version}}"
 
 build():
-    > desc: Build with text logging
-    > logs:txt ./logs/build.log
-    > script: |
+    desc: Build with text logging
+    logs.txt: ./logs/build.log
+    script: |
         npm run build
 ```
 
 **Log Formats:**
 
-- **JSON**: `> logs:json <path>` - Structured JSON format with timestamp, command, args, success status, and errors
-- **Text**: `> logs:txt <path>` - Human-readable text format
+- **JSON**: `logs.json: <path>` - Structured JSON format with timestamp, command, args, success status, and errors
+- **Text**: `logs.txt: <path>` - Human-readable text format
 
 **Log Entry Contents:**
 
@@ -1385,9 +1376,9 @@ You can use template variables in log file paths:
 
 ```nest
 deploy_logged(env: str):
-    > desc: Deploy with logging using template variables
-    > logs:json ./logs/{{env}}/deploy-{{now}}.json
-    > script: |
+    desc: Deploy with logging using template variables
+    logs.json: ./logs/{{env}}/deploy-{{now}}.json
+    script: |
         echo "Deploying to {{env}}"
 ```
 
@@ -1435,30 +1426,29 @@ See `examples/` folder for comprehensive working examples including:
 
 ✅ **Directives**
 
-- `> desc:` - Command descriptions
+- `desc:` - Command descriptions
 - `> cwd:` - Working directory
-- `> env:` - Environment variables (direct assignment and .env files)
-- `> script:` - Single-line and multiline scripts
-- `> script[hide]:` - Scripts with hidden output
-- `> before:` / `> before[hide]:` - Pre-execution scripts
-- `> after:` / `> after[hide]:` - Post-execution scripts (on success)
-- `> fallback:` / `> fallback[hide]:` - Error handling scripts (on failure)
-- `> finaly:` / `> finaly[hide]:` - Always-executed scripts (like finally)
-- `> depends:` - Command dependencies (executed before the command)
-- `> depends[parallel]:` - Parallel dependency execution
-- `> validate:` - Parameter validation rules (regex patterns)
-- `> if:` / `> elif:` / `> else:` - Conditional execution based on parameter values
-- `> logs:json <path>` / `> logs:txt <path>` - Log command execution to files
-- `> privileged` - Require privileged access
-- `> require_confirm:` - Require user confirmation before executing
-- `> watch:` - Watch files for changes and auto-reload
+- `env:` - Environment variables (direct assignment and .env files)
+- `script:` - Single-line and multiline scripts
+- `script.hide:` - Scripts with hidden output
+- `before:` / `before.hide:` - Pre-execution scripts
+- `after:` / `after.hide:` - Post-execution scripts (on success)
+- `fallback:` / `fallback.hide:` - Error handling scripts (on failure)
+- `finally:` / `finally.hide:` - Always-executed scripts (like finally)
+- `depends:` - Command dependencies (executed before the command)
+- `depends.parallel:` - Parallel dependency execution
+- `validate:` - Parameter validation rules (regex patterns)
+- `logs.json: <path>` / `logs.txt: <path>` - Log command execution to files
+- `privileged` - Require privileged access
+- `require_confirm:` - Require user confirmation before executing
+- `watch:` - Watch files for changes and auto-reload
 
 ✅ **Include Directives**
 
-- `@include <file>` - Include specific file
-- `@include <pattern>` - Include files matching wildcard pattern
-- `@include <directory>/` - Include all config files from directory
-- `@include <file> into <group>` - Include commands into a specific group
+- `import <file>` - Include specific file
+- `import <pattern>` - Include files matching wildcard pattern
+- `import <directory>/` - Include all config files from directory
+- `import <file> into <group>` - Include commands into a specific group
 - Command merging and overriding from included files
 
 ✅ **Variables and Constants**

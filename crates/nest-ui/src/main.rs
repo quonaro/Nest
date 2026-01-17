@@ -1186,7 +1186,7 @@ fn ui(f: &mut Frame, app: &mut App) {
                     info.push(format!("Env: {}={}", k, display_val))
                 },
                 nest_core::nestparse::ast::Directive::Privileged(true) => info.push("Privileged: Yes".to_string()),
-                nest_core::nestparse::ast::Directive::Validate(v) => info.push(format!("Validate: {}", v)),
+                nest_core::nestparse::ast::Directive::Validate(target, rule) => info.push(format!("Validate {}: {}", target, rule)),
                 _ => {}
             }
         }

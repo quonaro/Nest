@@ -82,22 +82,22 @@ pub enum JsonDirective {
     },
     /// Before script directive
     #[serde(rename = "before")]
-    Before { content: String, hide: bool },
+    Before { content: String, os: Option<String>, hide: bool },
     /// After script directive
     #[serde(rename = "after")]
-    After { content: String, hide: bool },
+    After { content: String, os: Option<String>, hide: bool },
     /// Fallback script directive
     #[serde(rename = "fallback")]
-    Fallback { content: String, hide: bool },
+    Fallback { content: String, os: Option<String>, hide: bool },
     /// Finally script directive
     #[serde(rename = "finally")]
-    Finally { content: String, hide: bool },
+    Finally { content: String, os: Option<String>, hide: bool },
     /// Validation directive
     #[serde(rename = "validate")]
-    Validate(String),
+    Validate { target: String, rule: String },
     /// Script directive
     #[serde(rename = "script")]
-    Script { content: String, hide: bool },
+    Script { content: String, os: Option<String>, hide: bool },
     /// Privileged access directive
     #[serde(rename = "privileged")]
     Privileged(bool),
@@ -182,17 +182,12 @@ impl From<&Directive> for JsonDirective {
                 }).collect();
                 JsonDirective::Depends { deps: json_deps, parallel: *parallel }
             },
-            Directive::Before(s) => JsonDirective::Before { content: s.clone(), hide: false },
-            Directive::BeforeHide(s) => JsonDirective::Before { content: s.clone(), hide: true },
-            Directive::After(s) => JsonDirective::After { content: s.clone(), hide: false },
-            Directive::AfterHide(s) => JsonDirective::After { content: s.clone(), hide: true },
-            Directive::Fallback(s) => JsonDirective::Fallback { content: s.clone(), hide: false },
-            Directive::FallbackHide(s) => JsonDirective::Fallback { content: s.clone(), hide: true },
-            Directive::Finally(s) => JsonDirective::Finally { content: s.clone(), hide: false },
-            Directive::FinallyHide(s) => JsonDirective::Finally { content: s.clone(), hide: true },
-            Directive::Validate(s) => JsonDirective::Validate(s.clone()),
-            Directive::Script(s) => JsonDirective::Script { content: s.clone(), hide: false },
-            Directive::ScriptHide(s) => JsonDirective::Script { content: s.clone(), hide: true },
+            Directive::Before(s, os, hide) => JsonDirective::Before { content: s.clone(), os: os.clone(), hide: *hide },
+            Directive::After(s, os, hide) => JsonDirective::After { content: s.clone(), os: os.clone(), hide: *hide },
+            Directive::Fallback(s, os, hide) => JsonDirective::Fallback { content: s.clone(), os: os.clone(), hide: *hide },
+            Directive::Finally(s, os, hide) => JsonDirective::Finally { content: s.clone(), os: os.clone(), hide: *hide },
+            Directive::Validate(target, rule) => JsonDirective::Validate { target: target.clone(), rule: rule.clone() },
+            Directive::Script(s, os, hide) => JsonDirective::Script { content: s.clone(), os: os.clone(), hide: *hide },
             Directive::Privileged(value) => JsonDirective::Privileged(*value),
             Directive::Logs(path, format) => JsonDirective::Logs {
                 path: path.clone(),

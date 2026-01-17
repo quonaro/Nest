@@ -473,25 +473,55 @@ impl CliGenerator {
         }
     }
 
+    /// Checks if the directive's OS requirement matches the current system.
+    fn check_os_match(os: &Option<String>) -> bool {
+        match os {
+            Some(required_os) => {
+                let current_os = std::env::consts::OS;
+                if required_os.eq_ignore_ascii_case(current_os) {
+                    return true;
+                }
+                if required_os.eq_ignore_ascii_case("unix") && cfg!(unix) {
+                    return true;
+                }
+                if required_os.eq_ignore_ascii_case("bsd") && current_os.contains("bsd") {
+                    return true;
+                }
+                false
+            }
+            None => true,
+        }
+    }
+
     fn get_directive_value(directives: &[Directive], name: &str) -> Option<String> {
-        directives.iter().find_map(|d| match (d, name) {
-            (Directive::Desc(s), "desc") => Some(s.clone()),
-            (Directive::Cwd(s), "cwd") => Some(s.clone()),
-            (Directive::Env(k, v, _), "env") => Some(format!("{}={}", k, v)),
-            (Directive::EnvFile(s, _), "env") => Some(s.clone()),
-            (Directive::Script(s), "script") => Some(s.clone()),
-            (Directive::ScriptHide(s), "script") => Some(s.clone()),
-            (Directive::Before(s), "before") => Some(s.clone()),
-            (Directive::BeforeHide(s), "before") => Some(s.clone()),
-            (Directive::After(s), "after") => Some(s.clone()),
-            (Directive::AfterHide(s), "after") => Some(s.clone()),
-            (Directive::Fallback(s), "fallback") => Some(s.clone()),
-            (Directive::FallbackHide(s), "fallback") => Some(s.clone()),
-            (Directive::Finally(s), "finally") => Some(s.clone()),
-            (Directive::FinallyHide(s), "finally") => Some(s.clone()),
-            (Directive::Validate(s), "validate") => Some(s.clone()),
-            _ => None,
-        })
+        let mut best_match: Option<String> = None;
+        let mut best_score = 0;
+
+        for d in directives {
+            let (val, os, target_name) = match d {
+                Directive::Desc(s) => (Some(s.clone()), &None, "desc"),
+                Directive::Cwd(s) => (Some(s.clone()), &None, "cwd"),
+                Directive::Env(k, v, _) => (Some(format!("{}={}", k, v)), &None, "env"),
+                Directive::EnvFile(s, _) => (Some(s.clone()), &None, "env"),
+                
+                Directive::Script(s, os, _) => (Some(s.clone()), os, "script"),
+                Directive::Before(s, os, _) => (Some(s.clone()), os, "before"),
+                Directive::After(s, os, _) => (Some(s.clone()), os, "after"),
+                Directive::Fallback(s, os, _) => (Some(s.clone()), os, "fallback"),
+                Directive::Finally(s, os, _) => (Some(s.clone()), os, "finally"),
+                Directive::Validate(_, _) => (None, &None, "validate"), // validation handled separately
+                _ => (None, &None, ""),
+            };
+
+            if target_name == name && Self::check_os_match(os) {
+                let score = if os.is_some() { 2 } else { 1 };
+                if score > best_score {
+                    best_score = score;
+                    best_match = val;
+                }
+            }
+        }
+        best_match
     }
 
     /// Gets directive value and checks if output should be hidden.
@@ -500,21 +530,34 @@ impl CliGenerator {
         directives: &[Directive],
         name: &str,
     ) -> Option<(String, bool)> {
-        directives.iter().find_map(|d| match (d, name) {
-            (Directive::Env(k, v, hide), "env") => Some((format!("{}={}", k, v), *hide)),
-            (Directive::EnvFile(s, hide), "env") => Some((s.clone(), *hide)),
-            (Directive::Script(s), "script") => Some((s.clone(), false)),
-            (Directive::ScriptHide(s), "script") => Some((s.clone(), true)),
-            (Directive::Before(s), "before") => Some((s.clone(), false)),
-            (Directive::BeforeHide(s), "before") => Some((s.clone(), true)),
-            (Directive::After(s), "after") => Some((s.clone(), false)),
-            (Directive::AfterHide(s), "after") => Some((s.clone(), true)),
-            (Directive::Fallback(s), "fallback") => Some((s.clone(), false)),
-            (Directive::FallbackHide(s), "fallback") => Some((s.clone(), true)),
-            (Directive::Finally(s), "finally") => Some((s.clone(), false)),
-            (Directive::FinallyHide(s), "finally") => Some((s.clone(), true)),
-            _ => None,
-        })
+        let mut best_match: Option<(String, bool)> = None;
+        let mut best_score = 0;
+
+        for d in directives {
+             let (val, os, hide, target_name) = match d {
+                Directive::Env(k, v, hide) => (Some(format!("{}={}", k, v)), &None, *hide, "env"),
+                Directive::EnvFile(s, hide) => (Some(s.clone()), &None, *hide, "env"),
+                
+                Directive::Script(s, os, hide) => (Some(s.clone()), os, *hide, "script"),
+                Directive::Before(s, os, hide) => (Some(s.clone()), os, *hide, "before"),
+                Directive::After(s, os, hide) => (Some(s.clone()), os, *hide, "after"),
+                Directive::Fallback(s, os, hide) => (Some(s.clone()), os, *hide, "fallback"),
+                Directive::Finally(s, os, hide) => (Some(s.clone()), os, *hide, "finally"),
+                _ => (None, &None, false, ""),
+            };
+
+            if target_name == name && Self::check_os_match(os) {
+                let score = if os.is_some() { 2 } else { 1 };
+                if score > best_score {
+                    best_score = score;
+                    // Unwrap is safe because we checked val is Some in match arms if target_name matches
+                    if let Some(v) = val {
+                         best_match = Some((v, hide));
+                    }
+                }
+            }
+        }
+        best_match
     }
 
     fn get_depends_directive(directives: &[Directive]) -> (Vec<super::ast::Dependency>, bool) {
@@ -623,11 +666,11 @@ impl CliGenerator {
         })
     }
 
-    fn get_validate_directives(directives: &[Directive]) -> Vec<String> {
+    fn get_validate_directives(directives: &[Directive]) -> Vec<(String, String)> {
         directives
             .iter()
             .filter_map(|d| match d {
-                Directive::Validate(s) => Some(s.clone()),
+                Directive::Validate(target, rule) => Some((target.clone(), rule.clone())),
                 _ => None,
             })
             .collect()
@@ -738,38 +781,30 @@ impl CliGenerator {
     ///
     /// Returns `Ok(())` if all validations pass,
     /// `Err(message)` if validation fails.
+    /// Validates command parameters according to validation directives.
+    ///
+    /// The rule should be a regex pattern, optionally wrapped in slashes (e.g. "/pattern/flags").
+    ///
+    /// # Arguments
+    ///
+    /// * `validate_directives` - List of (param_name, rule) tuples
+    /// * `args` - Arguments to validate
+    /// * `command_path` - Command path for error messages
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if all validations pass,
+    /// `Err(message)` if validation fails.
     fn validate_parameters(
         &self,
-        validate_directives: &[String],
+        validate_directives: &[(String, String)],
         args: &HashMap<String, String>,
         command_path: &[String],
     ) -> Result<(), String> {
         use regex::Regex;
 
-        for validate_rule in validate_directives {
-            // Parse validation rule: "param_name matches /regex/"
-            // Format: <param_name> matches /<pattern>/
-            let trimmed = validate_rule.trim();
-
-            // Check for "matches" keyword
-            if !trimmed.contains("matches") {
-                return Err(format!(
-                    "Invalid validation rule: '{}'. Expected format: 'param_name matches /regex/'",
-                    trimmed
-                ));
-            }
-
-            // Split by "matches"
-            let parts: Vec<&str> = trimmed.splitn(2, "matches").collect();
-            if parts.len() != 2 {
-                return Err(format!(
-                    "Invalid validation rule: '{}'. Expected format: 'param_name matches /regex/'",
-                    trimmed
-                ));
-            }
-
-            let param_name = parts[0].trim();
-            let pattern_part = parts[1].trim();
+        for (param_name, pattern_part) in validate_directives {
+            let pattern_part = pattern_part.trim();
 
             // Extract regex pattern from /pattern/ or /pattern/flags
             let pattern = if pattern_part.starts_with('/') && pattern_part.len() > 1 {
@@ -799,7 +834,7 @@ impl CliGenerator {
 
                     // Check for flags after closing /
                     let flags = pattern_part[end..].trim();
-                    let regex = if flags.is_empty() {
+                     let regex = if flags.is_empty() {
                         Regex::new(&unescaped)
                     } else {
                         // Parse flags (e.g., "i" for case-insensitive)
@@ -814,22 +849,24 @@ impl CliGenerator {
                         Ok(re) => re,
                         Err(e) => {
                             return Err(format!(
-                                "Invalid regex pattern in validation rule: '{}'. Error: {}",
-                                trimmed, e
+                                "Invalid regex pattern in validation rule for '{}': '{}'. Error: {}",
+                                param_name, pattern_part, e
                             ));
                         }
                     }
                 } else {
-                    return Err(format!(
-                        "Invalid regex pattern in validation rule: '{}'. Expected format: '/pattern/'",
-                        trimmed
-                    ));
+                     // No closing slash found - treat whole string as regex
+                     match Regex::new(pattern_part) {
+                        Ok(re) => re,
+                        Err(e) => return Err(format!("Invalid regex pattern: {}. Error: {}", pattern_part, e))
+                    }
                 }
             } else {
-                return Err(format!(
-                    "Invalid regex pattern in validation rule: '{}'. Expected format: '/pattern/'",
-                    trimmed
-                ));
+                // simple pattern, try to compile as is
+                 match Regex::new(pattern_part) {
+                    Ok(re) => re,
+                    Err(e) => return Err(format!("Invalid regex pattern: {}. Error: {}", pattern_part, e))
+                }
             };
 
             // Get parameter value

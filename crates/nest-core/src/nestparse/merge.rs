@@ -40,9 +40,9 @@ fn merge_single_command(base: &mut Command, override_cmd: Command) {
     for dir in override_cmd.directives {
         match dir {
             // Scalars: Replace existing
-            Directive::Script(_) | Directive::ScriptHide(_) => {
+            Directive::Script(..) => {
                 // Remove all script directives from base
-                base.directives.retain(|d| !matches!(d, Directive::Script(_) | Directive::ScriptHide(_)));
+                base.directives.retain(|d| !matches!(d, Directive::Script(..)));
                 base.directives.push(dir);
             }
             Directive::Desc(_) => {

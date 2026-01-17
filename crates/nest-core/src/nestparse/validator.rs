@@ -324,14 +324,14 @@ fn validate_command_recursive(
 
     for directive in &command.directives {
         match directive {
-            Directive::Script(_) | Directive::ScriptHide(_) => has_script = true,
+            Directive::Script(..) => has_script = true,
             Directive::Desc(_) => {}
             Directive::Depends(_, _) => {}
-            Directive::Before(_) | Directive::BeforeHide(_) => {}
-            Directive::After(_) | Directive::AfterHide(_) => {}
-            Directive::Fallback(_) | Directive::FallbackHide(_) => {}
-            Directive::Finally(_) | Directive::FinallyHide(_) => {}
-            Directive::Validate(_) => {}
+            Directive::Before(..) => {}
+            Directive::After(..) => {}
+            Directive::Fallback(..) => {}
+            Directive::Finally(..) => {}
+            Directive::Validate(..) => {}
             Directive::Privileged(_) => {}
             Directive::RequireConfirm(_) => {}
             Directive::Cwd(path) => {
