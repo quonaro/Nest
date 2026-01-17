@@ -71,8 +71,8 @@
         <p class="section-text">Create a Nestfile in your project root:</p>
         
         <pre v-pre><code>greet(name: str, message: str):
-    > desc: Greet someone with a message
-    > script: echo "Hello {{name}}, {{message}}!"</code></pre>
+    desc: Greet someone with a message
+    script: echo "Hello {{name}}, {{message}}!"</code></pre>
 
         <p class="section-text">Then run your command:</p>
         
@@ -86,7 +86,7 @@ Hello Alice, welcome!</code></pre>
           <li>✅ <strong>Command Structure - Top-level and nested subcommands</strong></li>
           <li>✅ <strong>Parameters - Positional and named arguments with types (str, bool, num, arr)</strong></li>
           <li>✅ <strong>Directives - Control working directory, environment variables, and scripts</strong></li>
-          <li>✅ <strong>Template Processing - Variable substitution with [param] syntax</strong></li>
+          <li>✅ <strong>Template Processing - Variable substitution with <code v-pre>{{param}}</code> syntax</strong></li>
           <li>✅ <strong>Dynamic CLI - Automatically generated from your Nestfile</strong></li>
           <li>✅ <strong>Environment Management - Load from .env files or direct assignment</strong></li>
         </ul>

@@ -30,10 +30,10 @@
 
         <h3>Command Structure</h3>
         <pre v-pre><code>command_name(param1: str, !param2|p: bool = false):
-    > desc: Command description
-    > cwd: ./path
-    > env: VAR=value
-    > script: |
+    desc: Command description
+    cwd: ./path
+    env: VAR=value
+    script: |
         #!/bin/sh
         echo "{{param1}}"</code></pre>
       </section>
@@ -45,7 +45,7 @@
         <h3>Parameter Substitution</h3>
         <p>Use [param_name] to reference command parameters:</p>
         <pre v-pre><code>greet(name: str):
-    > script: echo "Hello {{name}}!"</code></pre>
+    script: echo "Hello {{name}}!"</code></pre>
 
         <h3>Special Variables</h3>
         <ul>
@@ -55,9 +55,9 @@
 
         <h3>Example</h3>
         <pre v-pre><code>deploy(version: str):
-    > env: DEPLOYER={{user}}
-    > env: BUILD_TIME={{now}}
-    > script: |
+    env: DEPLOYER={{user}}
+    env: BUILD_TIME={{now}}
+    script: |
         #!/bin/sh
         echo "Deploying {{version}} by {{user}} at {{now}}"</code></pre>
       </section>
@@ -78,9 +78,9 @@
         <h3>Environment Variables</h3>
         <p>Environment variables can be set in multiple ways:</p>
         <ul>
-          <li>Direct assignment: > env: NODE_ENV=production</li>
-          <li>Load from file: > env: .env.local</li>
-          <li>Multiple directives: Each > env: directive adds to the environment</li>
+          <li>Direct assignment: env: NODE_ENV=production</li>
+          <li>Load from file: env: .env.local</li>
+          <li>Multiple directives: Each env: directive adds to the environment</li>
         </ul>
       </section>
     </div>

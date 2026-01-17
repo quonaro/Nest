@@ -737,13 +737,13 @@ b():
         <h3>Example</h3>
         <pre v-pre><code>build():
     desc: Build with hidden verbose output
-    before[hide]: |
+    before.hide: |
         echo "Preparing build environment..."
         # Verbose setup output hidden
-    script[hide]: |
+    script.hide: |
         npm run build --verbose
         # Build output hidden
-    after[hide]: |
+    after.hide: |
         echo "Post-build tasks..."
         # Post-build output hidden
     script: |
@@ -754,14 +754,14 @@ b():
         <p>Use Case Desc</p>
         <pre v-pre><code>deploy():
     desc: Deploy with clean output
-    before[hide]: |
+    before.hide: |
         # Verbose pre-deployment checks
         ./check-dependencies.sh
         ./validate-config.sh
     script: |
         echo "Deploying..."
         ./deploy.sh
-    after[hide]: |
+    after.hide: |
         # Verbose post-deployment tasks
         ./update-cache.sh
         ./notify-services.sh</code></pre>
@@ -847,14 +847,14 @@ import modules/utils.nest from db.migrate</code></pre>
 
 serve:
     desc: "Start dev server" # Overrides description
-    # Script directive from base.nest is preserved unless overridden by another > script:</code></pre>
+    # Script directive from base.nest is preserved unless overridden by another script:</code></pre>
       </section>
 
       <section id="watch-mode">
         <h2>Watch Mode</h2>
         <p>Watch mode allows you to automatically re-run a command when files change. This is useful for development workflows where you want to rebuild, test, or restart your application on file changes.</p>
 
-        <h3>Using the <code>> watch:</code> Directive</h3>
+        <h3>Using the <code>watch:</code> Directive</h3>
         <pre v-pre><code>dev():
     desc: Start development server with auto-reload
     watch: src/**/*.js, src/**/*.ts
@@ -895,12 +895,12 @@ test():
 
       <section id="parallel-dependencies">
         <h2>Parallel Dependencies</h2>
-        <p>By default, dependencies run sequentially. You can run them in parallel using the <code>[parallel]</code> modifier:</p>
+        <p>By default, dependencies run sequentially. You can run them in parallel using the <code>.parallel</code> modifier:</p>
 
         <h3>Syntax</h3>
         <pre v-pre><code>deploy():
     desc: Deploy with parallel dependencies
-    depends[parallel]: build-frontend, build-backend, run-tests
+    depends.parallel: build-frontend, build-backend, run-tests
     script: ./deploy.sh</code></pre>
 
         <h3>Sequential vs Parallel</h3>
@@ -912,7 +912,7 @@ test():
 
         <h4>Parallel</h4>
         <pre v-pre><code>deploy():
-    depends[parallel]: build-frontend, build-backend, build-api
+    depends.parallel: build-frontend, build-backend, build-api
     script: ./deploy.sh
 # Executes: build-frontend, build-backend, build-api (all at once) -> deploy</code></pre>
 
@@ -924,38 +924,30 @@ test():
         </ul>
       </section>
 
-        </ul>
-
-        <h3>Condition Types</h3>
-        <ul>
-          <li>String</li>
-          <li>Numeric</li>
-          <li>Boolean</li>
-          <li>Complex</li>
-        </ul>
+      <section id="conditional-logic">
+        <h2>Conditional Logic</h2>
+        <p>Directives like <code>if</code>, <code>elif</code>, and <code>else</code> have been removed in favor of standard shell conditionals within your script blocks. This keeps the configuration simple and leverages the full power of your shell.</p>
 
         <h3>Example</h3>
         <pre v-pre><code>build(!target|t: str = "x86_64", !release|r: bool = false):
     desc: Build with conditional logic
-    if: target == "x86_64" && release == "true"
     script: |
-        echo "Building optimized x86_64 release..."
-        cargo build --release
-    elif: target == "arm64" || target == "aarch64"
-    script: |
-        echo "Building for ARM64..."
-        cargo build --target aarch64
-    else:
-    script: |
-        echo "Building default..."
-        cargo build</code></pre>
+        if [ "{{target}}" = "x86_64" ] && [ "{{release}}" = "true" ]; then
+            echo "Building optimized x86_64 release..."
+            cargo build --release
+        elif [ "{{target}}" = "arm64" ] || [ "{{target}}" = "aarch64" ]; then
+             echo "Building for ARM64..."
+             cargo build --target aarch64
+        else
+             echo "Building default..."
+             cargo build
+        fi</code></pre>
 
         <h3>Key Points</h3>
         <ul>
-          <li>before executes before the main script</li>
-          <li>after executes only if main script succeeds</li>
-          <li>fallback executes only if main script fails and replaces error output</li>
-          <li>finally always executes regardless of success or failure</li>
+          <li>Use standard shell syntax (e.g., <code>[ ... ]</code> or <code>[[ ... ]]</code>)</li>
+          <li>Access parameters and variables using <code>&#123;&#123;name&#125;&#125;</code></li>
+          <li>Templates are processed before the script is passed to the shell</li>
         </ul>
       </section>
 
@@ -1009,28 +1001,27 @@ register(email: str, username: str):
         <p>Templates Desc</p>
         <pre v-pre><code>deploy_logged(env: str):
     desc: Deploy with logging using template variables
-    logs:json ./logs/{{env}}/deploy-{{now}}.json
+    logs.json: ./logs/{{env}}/deploy-{{now}}.json
     script: |
         echo "Deploying to {{env}}"</code></pre>
 
         <h3>Key Points</h3>
         <ul>
-          <li>before executes before the main script</li>
-          <li>after executes only if main script succeeds</li>
-          <li>fallback executes only if main script fails and replaces error output</li>
-          <li>finally always executes regardless of success or failure</li>
+          <li>Log directories are created automatically</li>
+          <li>Logs are appended to existing files</li>
+          <li>Template variables are processed in log paths</li>
         </ul>
 
         <h3>Example</h3>
         <pre v-pre><code>deploy(version: str):
     desc: Deploy with JSON logging
-    logs:json ./logs/deploy-{{version}}.json
+    logs.json: ./logs/deploy-{{version}}.json
     script: |
         echo "Deploying {{version}}"
 
 build():
     desc: Build with text logging
-    logs:txt ./logs/build.log
+    logs.txt: ./logs/build.log
     script: npm run build</code></pre>
       </section>
     </div>

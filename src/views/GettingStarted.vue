@@ -45,8 +45,8 @@ sudo cp target/release/nest /usr/local/bin/</code></pre>
         <p>Create a Nestfile in your project root:</p>
         <p>Or use the <code>nest --example</code> command to download examples from GitHub.</p>
         <pre v-pre><code>greet(name: str, message: str):
-    > desc: Greet someone with a message
-    > script: echo "Hello {{name}}, {{message}}!"</code></pre>
+    desc: Greet someone with a message
+    script: echo "Hello {{name}}, {{message}}!"</code></pre>
 
         <h3>2. Run Your Command</h3>
         <pre v-pre><code>$ nest greet "Alice" "welcome!"
@@ -65,17 +65,11 @@ $ nest greet --help</code></pre>
           <li>✅ <strong>Command Structure - Top-level commands, nested subcommands, default subcommands</strong></li>
           <li>✅ <strong>Parameters - Types (str, bool, num, arr), positional and named arguments, aliases, defaults</strong></li>
           <li>✅ <strong>Directives - Descriptions, working directory, environment variables, scripts</strong></li>
-          <li>✅ <strong>Template Processing - Parameter substitution, special variables ([now], [user])</strong></li>
+          <li>✅ <strong>Template Processing - Parameter substitution, special variables (<code v-pre>{{now}}</code>, <code v-pre>{{user}}</code>)</strong></li>
+          <li>✅ <strong>Functions - Reusable script blocks</strong></li>
+          <li>✅ <strong>Lifecycle hooks (before, after, fallback, finally)</strong></li>
+          <li>✅ <strong>Command dependencies (depends, depends.parallel)</strong></li>
           <li>✅ <strong>CLI Features - Dynamic CLI generation, help system, JSON/AST output</strong></li>
-          <li>✅ <strong>Execution - Script execution with environment variables and working directory support</strong></li>
-        </ul>
-
-        <h3>Future Plans</h3>
-        <ul>
-          <li>🔜 <strong>Functions (#func) - Reusable script blocks</strong></li>
-          <li>🔜 <strong>Lifecycle hooks (#before, #after, #fallback)</strong></li>
-          <li>🔜 <strong>Command dependencies (#depends)</strong></li>
-          <li>🔜 <strong>Function calls (#call)</strong></li>
         </ul>
       </section>
     </div>

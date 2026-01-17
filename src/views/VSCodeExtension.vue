@@ -53,7 +53,7 @@
         <p>Autocompletion is available for:</p>
         <ul>
           <li>Directives (desc, cwd, env, script, etc.)</li>
-          <li>Meta commands (@var, @const, @function, @include)</li>
+          <li>Meta commands (var, const, function, import)</li>
           <li>Templates and variables</li>
           <li>Commands and parameters</li>
         </ul>
