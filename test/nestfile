@@ -61,6 +61,7 @@ deploy(env: str, !force|f: bool = false, *rest):
     desc: Deploy using multiple directives and wildcard args
     env: NODE_ENV={{env}}
     env: DEPLOYER={{force}}
+    validate: env in ["staging", "production"]
     logs.json: ./logs/deploy-{{env}}-{{now}}.json
     depends: build(target="x86_64", release=true)
     

@@ -37,7 +37,7 @@ const VALID_DIRECTIVES = new Set([
   "before",
   "after",
   "fallback",
-  "finaly",
+  "finally",
   "depends",
   "validate",
 
@@ -155,8 +155,9 @@ export function validateNestfileDocument(
       }
 
       // env format check
-      const dotIndex = name.indexOf(".");
-      const directiveBase = dotIndex !== -1 ? name.substring(0, dotIndex) : name;
+      const keyParts = name.split(".");
+      const directiveBase = keyParts[0];
+      const modifiers = keyParts.slice(1);
 
       if (directiveBase === "env" && value) {
         const trimmedValue = value.trim();
@@ -226,6 +227,24 @@ export function validateNestfileDocument(
         }
       }
 
+      // validate format check
+      if (directiveBase === "validate") {
+        if (modifiers.length === 0) {
+          // Check for "target matches regex" or "target in [...]"
+          if (!value.includes(" matches ") && !value.includes(" in ")) {
+            diagnostics.push(
+              createDiagnostic(
+                lineNumber,
+                0,
+                rawLine.length,
+                'Invalid validate syntax. Expected "validate: target matches regex" or "validate: target in [...]" or "validate.PARAM: regex".',
+                vscode.DiagnosticSeverity.Error
+              )
+            );
+          }
+        }
+      }
+
       // Basic detection of unclosed $(...) substitutions in value
       if (value.includes("$(") && !hasBalancedSubstitutions(value)) {
         diagnostics.push(
@@ -239,8 +258,8 @@ export function validateNestfileDocument(
         );
       }
 
-      // Check for multiline script directives (script, before, after, fallback, finaly)
-      const multilineDirectives = new Set(["script", "before", "after", "fallback", "finaly"]);
+      // Check for multiline script directives (script, before, after, fallback, finally)
+      const multilineDirectives = new Set(["script", "before", "after", "fallback", "finally"]);
       if (multilineDirectives.has(directiveBase)) {
         const baseIndentSpaces = rawLine.match(/^(\s*)/)?.[1]?.length || 0;
 
@@ -809,19 +828,34 @@ function validateUndefinedVariables(
     if (varMatch) {
       definedVars.add(varMatch[1]);
     }
+    const envMatch = line.match(/^\s*env\s+([A-Za-z0-9_]+)\s*=/);
+    if (envMatch) {
+      definedVars.add(envMatch[1]);
+    }
   }
 
-  // From command parameters (we'll need to parse commands again or pass AST)
-  // For simplicity, let's extract them with regex if they look like parameters
+  // From command parameters
   for (const line of lines) {
     const paramMatch = line.match(/\(([^\)]+)\)\s*:\s*$/);
     if (paramMatch) {
       const params = paramMatch[1].split(",");
       for (const p of params) {
-        const nameMatch = p.trim().match(/^(!?[A-Za-z0-9_]+)/);
-        if (nameMatch) {
-          let name = nameMatch[1];
-          if (name.startsWith("!")) name = name.substring(1);
+        // Match both normal parameters, named params (!), and wildcards (*)
+        // Example: !version, *args, *[2]
+        const trimmed = p.trim();
+        if (trimmed.startsWith("!")) {
+          // Named param: !version -> version
+          const name = trimmed.substring(1).split(":")[0].trim();
+          definedVars.add(name);
+        } else if (trimmed.startsWith("*")) {
+          // Wildcard: *args or * or *[2] -> keep * prefix
+          // Strip [N] and :type if present (though wildcards shouldn't have types)
+          const namePart = trimmed.split(":")[0].trim();
+          const name = namePart.split("[")[0].trim();
+          definedVars.add(name);
+        } else {
+          // Positional: version: str -> version
+          const name = trimmed.split(":")[0].trim();
           definedVars.add(name);
         }
       }
@@ -831,7 +865,8 @@ function validateUndefinedVariables(
   // 2. Check all {{var}} usages
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const regex = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
+    // Allow * prefix for wildcards
+    const regex = /\{\{\s*(\*?[A-Za-z0-9_]+)\s*\}\}/g;
     let match;
     while ((match = regex.exec(line)) !== null) {
       const varName = match[1];
@@ -841,7 +876,7 @@ function validateUndefinedVariables(
             i,
             match.index + 2,
             match.index + 2 + varName.length,
-            `Undefined variable "${varName}". Ensure it is defined with @var or is a command parameter.`,
+            `Undefined variable "${varName}". Ensure it is defined with var/const or is a command parameter.`,
             vscode.DiagnosticSeverity.Error
           )
         );
