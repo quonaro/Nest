@@ -841,11 +841,12 @@ function validateUndefinedVariables(
       const params = paramMatch[1].split(",");
       for (const p of params) {
         // Match both normal parameters, named params (!), and wildcards (*)
-        // Example: !version, *args, *[2]
+        // Example: !version, !force|f, *args, *[2]
         const trimmed = p.trim();
         if (trimmed.startsWith("!")) {
-          // Named param: !version -> version
-          const name = trimmed.substring(1).split(":")[0].trim();
+          // Named param: !force|f: bool -> force
+          const namePart = trimmed.substring(1).split(":")[0].trim();
+          const name = namePart.split("|")[0].trim();
           definedVars.add(name);
         } else if (trimmed.startsWith("*")) {
           // Wildcard: *args or * or *[2] -> keep * prefix
@@ -854,8 +855,9 @@ function validateUndefinedVariables(
           const name = namePart.split("[")[0].trim();
           definedVars.add(name);
         } else {
-          // Positional: version: str -> version
-          const name = trimmed.split(":")[0].trim();
+          // Positional: version|v: str -> version
+          const namePart = trimmed.split(":")[0].trim();
+          const name = namePart.split("|")[0].trim();
           definedVars.add(name);
         }
       }
