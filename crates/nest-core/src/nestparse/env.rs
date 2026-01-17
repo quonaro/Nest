@@ -8,7 +8,6 @@ use super::ast::Directive;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::path::Path;
 
 /// Manages environment variables for command execution.
 ///
@@ -43,25 +42,34 @@ impl EnvironmentManager {
         let mut env_vars = HashMap::new();
 
         for directive in directives {
-            if let Directive::Env(env_value) = directive {
-                if Self::is_env_file(env_value) {
-                    Self::load_from_file(env_value, &mut env_vars);
-                } else if Self::is_direct_assignment(env_value) {
-                    Self::parse_direct_assignment(env_value, &mut env_vars);
+            match directive {
+                Directive::Env(name, value, _) => {
+                    env_vars.insert(name.clone(), value.clone());
                 }
+                Directive::EnvFile(path, _) => {
+                    Self::load_from_file(path, &mut env_vars);
+                }
+                _ => {}
             }
         }
 
         env_vars
     }
 
-    fn is_env_file(value: &str) -> bool {
-        value.starts_with('.') && Path::new(value).exists()
+    /// Exports all Nest variables and constants to the environment HashMap.
+    pub fn export_all_vars(
+        env_vars: &mut HashMap<String, String>,
+        variables: &[super::ast::Variable],
+        constants: &[super::ast::Constant],
+    ) {
+        for var in variables {
+            env_vars.insert(var.name.clone(), var.value.clone());
+        }
+        for constant in constants {
+            env_vars.insert(constant.name.clone(), constant.value.clone());
+        }
     }
 
-    fn is_direct_assignment(value: &str) -> bool {
-        value.contains('=')
-    }
 
     fn load_from_file(file_path: &str, env_vars: &mut HashMap<String, String>) {
         if let Ok(content) = fs::read_to_string(file_path) {
@@ -89,14 +97,6 @@ impl EnvironmentManager {
         })
     }
 
-    fn parse_direct_assignment(env_value: &str, env_vars: &mut HashMap<String, String>) {
-        if let Some((key, value)) = Self::parse_env_line(env_value) {
-            // Resolve environment variables with fallback syntax: ${VAR:-default} or $VAR
-            // First check already loaded env_vars, then system environment
-            let resolved_value = Self::resolve_env_value(&value, env_vars);
-            env_vars.insert(key, resolved_value);
-        }
-    }
 
     /// Resolves environment variable references in a value string.
     ///

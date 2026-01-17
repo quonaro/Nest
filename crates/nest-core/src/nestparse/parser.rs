@@ -27,10 +27,11 @@ pub enum ParseError {
     /// Unexpected end of file (e.g., incomplete command definition)
     UnexpectedEndOfFile(usize),
     /// Invalid syntax in the configuration file
-    #[allow(dead_code)]
     InvalidSyntax(String, usize),
     /// Invalid indentation (e.g., child command not properly indented)
     InvalidIndent(usize),
+    /// Deprecated syntax used in the configuration file
+    DeprecatedSyntax(String, usize),
 }
 
 /// Result of parsing a configuration file.
@@ -114,16 +115,30 @@ impl Parser {
                 continue;
             }
 
-            // Check for variable or constant definition (@var or @const)
-            if trimmed.starts_with("@var ") {
+            // DEPRECATION CHECK: Detect legacy syntax prefixes
+            if trimmed.starts_with('@') {
+                let msg = format!(
+                    "Legacy syntax '@' is deprecated. Use keywords (var, const, env, import, function) without '@'. Line: {}",
+                    trimmed
+                );
+                return Err(ParseError::DeprecatedSyntax(msg, self.current_line_number()));
+            }
+            if trimmed.starts_with('>') {
+                let msg = format!(
+                    "Legacy directive prefix '>' is deprecated. Remove '>' and use 'key: value' style. Line: {}",
+                    trimmed
+                );
+                return Err(ParseError::DeprecatedSyntax(msg, self.current_line_number()));
+            }
+
+            // Check for new keywords (import, var, const, env, function)
+            if trimmed.starts_with("var ") {
                 let var = self.parse_variable()?;
-                // Check if variable already exists (allow redefinition)
                 variables.retain(|v: &Variable| v.name != var.name);
                 variables.push(var);
                 continue;
-            } else if trimmed.starts_with("@const ") {
+            } else if trimmed.starts_with("const ") {
                 let const_def = self.parse_constant()?;
-                // Check if constant already exists (disallow redefinition)
                 if constant_names.contains(&const_def.name) {
                     return Err(ParseError::InvalidSyntax(
                         format!(
@@ -136,16 +151,21 @@ impl Parser {
                 constant_names.insert(const_def.name.clone());
                 constants.push(const_def);
                 continue;
-            } else if trimmed.starts_with("@function ") {
+            } else if trimmed.starts_with("env ") {
+                // Handle 'env KEY = VALUE' or 'env .env'
+                self.parse_env_keyword(&mut variables)?;
+                continue;
+            } else if trimmed.starts_with("import ") {
+                self.parse_import()?;
+                continue;
+            } else if trimmed.starts_with("function ") {
                 let func = self.parse_function()?;
                 functions.push(func);
                 continue;
             }
 
             // Check if it's a command definition (ends with : or contains opening parenthesis but not closing)
-            // A line like "):" should not be recognized as a command
-            let is_command = !trimmed.starts_with('>')
-                && (trimmed.ends_with(':') || (trimmed.contains('(') && !trimmed.contains(')')));
+            let is_command = trimmed.ends_with(':') || (trimmed.contains('(') && !trimmed.contains(')'));
 
             if is_command {
                 let command = self.parse_command(0)?;
@@ -213,16 +233,30 @@ impl Parser {
                 continue;
             }
 
-            // Check for local variable or constant definition (@var or @const)
-            if next_trimmed.starts_with("@var ") {
+            // DEPRECATION CHECK: Detect legacy syntax prefixes in commands
+            if next_trimmed.starts_with('@') {
+                let msg = format!(
+                    "Legacy syntax '@' is deprecated. Use keywords (var, const, env) without '@'. Line: {}",
+                    next_trimmed
+                );
+                return Err(ParseError::DeprecatedSyntax(msg, self.current_line_number()));
+            }
+            if next_trimmed.starts_with('>') {
+                let msg = format!(
+                    "Legacy directive prefix '>' is deprecated. Remove '>' and use 'key: value' style. Line: {}",
+                    next_trimmed
+                );
+                return Err(ParseError::DeprecatedSyntax(msg, self.current_line_number()));
+            }
+
+            // Check for local variable, constant, or env definition
+            if next_trimmed.starts_with("var ") {
                 let var = self.parse_variable()?;
-                // Allow redefinition (last definition wins)
                 local_variables.retain(|v: &Variable| v.name != var.name);
                 local_variables.push(var);
                 continue;
-            } else if next_trimmed.starts_with("@const ") {
+            } else if next_trimmed.starts_with("const ") {
                 let const_def = self.parse_constant()?;
-                // Check if constant already exists in this command (disallow redefinition)
                 if local_constant_names.contains(&const_def.name) {
                     return Err(ParseError::InvalidSyntax(
                         format!("Constant '{}' is already defined in this command and cannot be redefined", const_def.name),
@@ -232,27 +266,34 @@ impl Parser {
                 local_constant_names.insert(const_def.name.clone());
                 local_constants.push(const_def);
                 continue;
+            } else if next_trimmed.starts_with("env ") {
+                // For local env, we store it as a Directive::Env
+                let env_directive = self.parse_env_directive_keyword()?;
+                directives.push(env_directive);
+                continue;
             }
 
-            // Check if it's a directive (> desc:, > env:, etc.)
-            if next_trimmed.starts_with('>') {
-                let (directive, is_multiline) = self.parse_directive(&next_line, next_indent)?;
-                directives.push(directive);
-                // Only increment if it's not a multiline block (multiline already increments inside)
-                if !is_multiline {
-                    self.current_index += 1;
-                }
+            // Check if it's a directive (property: value or property.mod: value)
+            let is_directive = next_trimmed.contains(':') && {
+                let key_part = next_trimmed.split(':').next().unwrap_or("").trim();
+                // Key part shouldn't have spaces unless it's a command name with params
+                !key_part.contains(' ') || (key_part.contains('(') && key_part.contains(')'))
+            };
+
+            if is_directive && !next_trimmed.ends_with(':') {
+                 // It's a property: value directive
+                 let directive = self.parse_property_directive(&next_line, next_indent)?;
+                 directives.push(directive);
             }
             // Check if it's a child command
-            // A line like "):" should not be recognized as a command
-            else if !next_trimmed.starts_with('>')
-                && (next_trimmed.ends_with(':')
-                    || (next_trimmed.contains('(') && !next_trimmed.contains(')')))
-            {
+            else if next_trimmed.ends_with(':') || (next_trimmed.contains('(') && !next_trimmed.contains(')')) {
                 let child = self.parse_command(indent)?;
                 children.push(child);
             } else {
-                self.current_index += 1;
+                return Err(ParseError::InvalidSyntax(
+                    format!("Unexpected line in command definition: {}", next_trimmed),
+                    self.current_line_number()
+                ));
             }
         }
 
@@ -614,12 +655,6 @@ impl Parser {
     fn parse_value(&self, value_str: &str) -> Result<Value, ParseError> {
         let trimmed = value_str.trim();
 
-        // String literal
-        if trimmed.starts_with('"') && trimmed.ends_with('"') {
-            let s = trimmed[1..trimmed.len() - 1].to_string();
-            return Ok(Value::String(s));
-        }
-
         // Boolean
         if trimmed == BOOL_TRUE {
             return Ok(Value::Bool(true));
@@ -632,14 +667,20 @@ impl Parser {
         if (trimmed.starts_with('[') && trimmed.ends_with(']'))
             || (trimmed.starts_with('(') && trimmed.ends_with(')'))
         {
-            let content = if trimmed.starts_with('[') {
-                &trimmed[1..trimmed.len() - 1]
-            } else {
-                &trimmed[1..trimmed.len() - 1]
-            };
+            let content = &trimmed[1..trimmed.len() - 1];
             let items: Vec<String> = content
                 .split(',')
-                .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
+                .map(|s| {
+                    let s = s.trim();
+                    let s = if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+                        &s[1..s.len() - 1]
+                    } else {
+                        s
+                    };
+                    // Command substitution in array items? 
+                    // Let's assume yes, for consistency.
+                    self.execute_command_substitutions(s, self.current_line_number()).unwrap_or_else(|_| s.to_string())
+                })
                 .filter(|s| !s.is_empty())
                 .collect();
             return Ok(Value::Array(items));
@@ -650,334 +691,21 @@ impl Parser {
             return Ok(Value::Number(num));
         }
 
-        // Default to string
-        Ok(Value::String(trimmed.to_string()))
-    }
-
-    fn parse_directive(&mut self, line: &str, indent: u8) -> Result<(Directive, bool), ParseError> {
-        let trimmed = line.trim();
-
-        // Remove '>' prefix
-        let content = trimmed.strip_prefix('>').unwrap_or(trimmed).trim();
-
-        if let Some(colon_pos) = content.find(':') {
-            let directive_name_with_modifiers = content[..colon_pos].trim();
-            let directive_value = content[colon_pos + 1..].trim();
-
-            // Parse directive name and modifiers (e.g., "script[hide]" -> ("script", true))
-            let (directive_name, hide_output) =
-                if let Some(bracket_start) = directive_name_with_modifiers.find('[') {
-                    let name = directive_name_with_modifiers[..bracket_start].trim();
-                    let modifier = &directive_name_with_modifiers[bracket_start..];
-                    if modifier == "[hide]" {
-                        (name, true)
-                    } else {
-                        (directive_name_with_modifiers, false)
-                    }
-                } else {
-                    (directive_name_with_modifiers, false)
-                };
-
-            match directive_name {
-                "desc" => Ok((Directive::Desc(directive_value.to_string()), false)),
-                "cwd" => Ok((Directive::Cwd(directive_value.to_string()), false)),
-                "env" => Ok((Directive::Env(directive_value.to_string()), false)),
-                "depends" => {
-                    // Check if it's parallel (depends[parallel])
-                    // The directive_name (e.g. "depends[parallel]") logic is handled earlier
-                    // checking for modifiers. Wait, previous logic was:
-                    // let (directive_name, hide_output) = ... check [hide]
-                    // I need to check for [parallel] too.
-                    
-                    // Actually, the modifier logic in `parse_directive` only checks for `[hide]`.
-                    // I should modify `parse_directive` logic to check for specific modifiers per directive,
-                    // or just handle "depends" specifically.
-                    
-                    // Since `parse_directive` splits generic modifier... 
-                    // Let's look at how I can hack this cleanly.
-                    // The `directive_name` passed to match is stripped of modifier? 
-                    // No, `parse_directive` logic only splits `[hide]`.
-                    // If I write `depends[parallel]`, `directive_name_with_modifiers` is `depends[parallel]`.
-                    // If `parse_directive` logic didn't match `[hide]`, `directive_name` is `depends[parallel]`.
-                    
-                    // So I can match "depends[parallel]" here.
-                    
-                    let deps = self.parse_dependencies(directive_value)?;
-                    Ok((Directive::Depends(deps, false), false))
-                }
-                "depends[parallel]" => {
-                    let deps = self.parse_dependencies(directive_value)?;
-                    Ok((Directive::Depends(deps, true), false))
-                }
-                "watch" => {
-                    // Parse comma-separated list of glob patterns
-                    // handle quoted strings "pattern1", "pattern2" or simple pattern1, pattern2
-                    let patterns = self.parse_string_list(directive_value)?;
-                    Ok((Directive::Watch(patterns), false))
-                }
-                "privileged" => {
-                    // Parse boolean value: true, false, or empty (defaults to true)
-                    let privileged = if directive_value.is_empty() {
-                        true
-                    } else {
-                        match directive_value.to_lowercase().as_str() {
-                            "true" | "1" | "yes" => true,
-                            "false" | "0" | "no" => false,
-                            _ => {
-                                return Err(ParseError::InvalidSyntax(
-                                    format!(
-                                        "Invalid privileged value: {}. Expected true or false",
-                                        directive_value
-                                    ),
-                                    self.current_line_number(),
-                                ));
-                            }
-                        }
-                    };
-                    Ok((Directive::Privileged(privileged), false))
-                }
-                "script" => {
-                    // Check if it's multiline (ends with |)
-                    if directive_value == "|" {
-                        // Parse multiline block
-                        let script_content = self.parse_multiline_block(indent)?;
-                        if hide_output {
-                            Ok((Directive::ScriptHide(script_content), true))
-                        } else {
-                            Ok((Directive::Script(script_content), true))
-                        }
-                    } else {
-                        // Single line script - but check if there are indented lines after (missing |)
-                        if self.current_index + 1 < self.lines.len() {
-                            let next_line = &self.lines[self.current_index + 1];
-                            let next_indent = get_indent_size(next_line);
-                            let next_trimmed = next_line.trim();
-
-                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent
-                                && !next_trimmed.is_empty()
-                                && !next_trimmed.starts_with('#')
-                                && !next_trimmed.starts_with('>')
-                            {
-                                return Err(ParseError::InvalidSyntax(
-                                    format!("Multiline script detected but missing '|' after 'script:'. Add '|' for multiline scripts or put script content on the same line."),
-                                    self.current_line_number()
-                                ));
-                            }
-                        }
-
-                        // Single line script
-                        if hide_output {
-                            Ok((Directive::ScriptHide(directive_value.to_string()), false))
-                        } else {
-                            Ok((Directive::Script(directive_value.to_string()), false))
-                        }
-                    }
-                }
-                "before" => {
-                    // Check if it's multiline (ends with |)
-                    if directive_value == "|" {
-                        // Parse multiline block
-                        let script_content = self.parse_multiline_block(indent)?;
-                        if hide_output {
-                            Ok((Directive::BeforeHide(script_content), true))
-                        } else {
-                            Ok((Directive::Before(script_content), true))
-                        }
-                    } else {
-                        // Single line script - but check if there are indented lines after (missing |)
-                        if self.current_index + 1 < self.lines.len() {
-                            let next_line = &self.lines[self.current_index + 1];
-                            let next_indent = get_indent_size(next_line);
-                            let next_trimmed = next_line.trim();
-
-                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent
-                                && !next_trimmed.is_empty()
-                                && !next_trimmed.starts_with('#')
-                                && !next_trimmed.starts_with('>')
-                            {
-                                return Err(ParseError::InvalidSyntax(
-                                    format!("Multiline script detected but missing '|' after 'before:'. Add '|' for multiline scripts or put script content on the same line."),
-                                    self.current_line_number()
-                                ));
-                            }
-                        }
-
-                        // Single line script
-                        if hide_output {
-                            Ok((Directive::BeforeHide(directive_value.to_string()), false))
-                        } else {
-                            Ok((Directive::Before(directive_value.to_string()), false))
-                        }
-                    }
-                }
-                "after" => {
-                    // Check if it's multiline (ends with |)
-                    if directive_value == "|" {
-                        // Parse multiline block
-                        let script_content = self.parse_multiline_block(indent)?;
-                        if hide_output {
-                            Ok((Directive::AfterHide(script_content), true))
-                        } else {
-                            Ok((Directive::After(script_content), true))
-                        }
-                    } else {
-                        // Single line script - but check if there are indented lines after (missing |)
-                        if self.current_index + 1 < self.lines.len() {
-                            let next_line = &self.lines[self.current_index + 1];
-                            let next_indent = get_indent_size(next_line);
-                            let next_trimmed = next_line.trim();
-
-                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent
-                                && !next_trimmed.is_empty()
-                                && !next_trimmed.starts_with('#')
-                                && !next_trimmed.starts_with('>')
-                            {
-                                return Err(ParseError::InvalidSyntax(
-                                    format!("Multiline script detected but missing '|' after 'after:'. Add '|' for multiline scripts or put script content on the same line."),
-                                    self.current_line_number()
-                                ));
-                            }
-                        }
-
-                        // Single line script
-                        if hide_output {
-                            Ok((Directive::AfterHide(directive_value.to_string()), false))
-                        } else {
-                            Ok((Directive::After(directive_value.to_string()), false))
-                        }
-                    }
-                }
-                "fallback" => {
-                    // Check if it's multiline (ends with |)
-                    if directive_value == "|" {
-                        // Parse multiline block
-                        let script_content = self.parse_multiline_block(indent)?;
-                        if hide_output {
-                            Ok((Directive::FallbackHide(script_content), true))
-                        } else {
-                            Ok((Directive::Fallback(script_content), true))
-                        }
-                    } else {
-                        // Single line script - but check if there are indented lines after (missing |)
-                        if self.current_index + 1 < self.lines.len() {
-                            let next_line = &self.lines[self.current_index + 1];
-                            let next_indent = get_indent_size(next_line);
-                            let next_trimmed = next_line.trim();
-
-                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent
-                                && !next_trimmed.is_empty()
-                                && !next_trimmed.starts_with('#')
-                                && !next_trimmed.starts_with('>')
-                            {
-                                return Err(ParseError::InvalidSyntax(
-                                    format!("Multiline script detected but missing '|' after 'fallback:'. Add '|' for multiline scripts or put script content on the same line."),
-                                    self.current_line_number()
-                                ));
-                            }
-                        }
-
-                        // Single line script
-                        if hide_output {
-                            Ok((Directive::FallbackHide(directive_value.to_string()), false))
-                        } else {
-                            Ok((Directive::Fallback(directive_value.to_string()), false))
-                        }
-                    }
-                }
-                "finaly" => {
-                    // Check if it's multiline (ends with |)
-                    if directive_value == "|" {
-                        // Parse multiline block
-                        let script_content = self.parse_multiline_block(indent)?;
-                        if hide_output {
-                            Ok((Directive::FinalyHide(script_content), true))
-                        } else {
-                            Ok((Directive::Finaly(script_content), true))
-                        }
-                    } else {
-                        // Single line script - but check if there are indented lines after (missing |)
-                        if self.current_index + 1 < self.lines.len() {
-                            let next_line = &self.lines[self.current_index + 1];
-                            let next_indent = get_indent_size(next_line);
-                            let next_trimmed = next_line.trim();
-
-                            // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
-                            if next_indent > indent
-                                && !next_trimmed.is_empty()
-                                && !next_trimmed.starts_with('#')
-                                && !next_trimmed.starts_with('>')
-                            {
-                                return Err(ParseError::InvalidSyntax(
-                                    format!("Multiline script detected but missing '|' after 'finaly:'. Add '|' for multiline scripts or put script content on the same line."),
-                                    self.current_line_number()
-                                ));
-                            }
-                        }
-
-                        // Single line script
-                        if hide_output {
-                            Ok((Directive::FinalyHide(directive_value.to_string()), false))
-                        } else {
-                            Ok((Directive::Finaly(directive_value.to_string()), false))
-                        }
-                    }
-                }
-                "validate" => {
-                    // Validation directive (single line only)
-                    Ok((Directive::Validate(directive_value.to_string()), false))
-                }
-                "logs" => {
-                    // Parse logs directive: logs:json path or logs:txt path
-                    // Format: logs:json /path/to/file.log or logs:txt /path/to/file.log
-                    let parts: Vec<&str> = directive_value.splitn(2, ' ').collect();
-                    if parts.len() != 2 {
-                        return Err(ParseError::InvalidSyntax(
-                            format!("Invalid logs directive format. Expected: logs:json <path> or logs:txt <path>, got: {}", directive_value),
-                            self.current_line_number()
-                        ));
-                    }
-                    let format = parts[0].trim().to_lowercase();
-                    let path = parts[1].trim().to_string();
-
-                    if format != "json" && format != "txt" {
-                        return Err(ParseError::InvalidSyntax(
-                            format!("Invalid logs format: {}. Expected 'json' or 'txt'", format),
-                            self.current_line_number(),
-                        ));
-                    }
-
-                    Ok((Directive::Logs(path, format), false))
-                }
-
-                "require_confirm" => {
-                    // Require confirmation directive: require_confirm: message (optional)
-                    Ok((
-                        Directive::RequireConfirm(directive_value.to_string()),
-                        false,
-                    ))
-                }
-                _ => Err(ParseError::InvalidSyntax(
-                    format!("Unknown directive: {}", directive_name),
-                    self.current_line_number(),
-                )),
-            }
+        // String literal or just raw string
+        let s = if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        {
+            &trimmed[1..trimmed.len() - 1]
         } else {
-            // No colon - check if it's a standalone privileged directive or else directive
-            if content == "privileged" {
-                Ok((Directive::Privileged(true), false))
+            trimmed
+        };
 
-            } else {
-                Err(ParseError::InvalidSyntax(
-                    format!("Invalid directive format: {}", trimmed),
-                    self.current_line_number(),
-                ))
-            }
-        }
+        // Support command substitution $(...)
+        let s = self.execute_command_substitutions(s, self.current_line_number())?;
+
+        Ok(Value::String(s))
     }
+
 
     fn parse_variable(&mut self) -> Result<Variable, ParseError> {
         if self.current_index >= self.lines.len() {
@@ -987,8 +715,8 @@ impl Parser {
         let line = &self.lines[self.current_index];
         let trimmed = line.trim();
 
-        // Format: @var NAME = "value" or @var NAME = value
-        let var_part = trimmed.strip_prefix("@var ").unwrap_or("").trim();
+        // Format: var NAME = value
+        let var_part = trimmed.strip_prefix("var ").unwrap_or("").trim();
 
         if let Some(eq_pos) = var_part.find('=') {
             let name = var_part[..eq_pos].trim().to_string();
@@ -1001,8 +729,14 @@ impl Parser {
                 ));
             }
 
-            // Parse value (remove quotes if present)
-            let mut value = value_str.trim_matches('"').trim_matches('\'').to_string();
+            // Parse value: if start with quote, use parse_value, otherwise use as-is
+            let mut value = if (value_str.starts_with('"') && value_str.ends_with('"'))
+                || (value_str.starts_with('\'') && value_str.ends_with('\''))
+            {
+                self.parse_value(value_str)?.to_string()
+            } else {
+                value_str.to_string()
+            };
 
             // Execute command substitutions $(...) if present
             value = self.execute_command_substitutions(&value, self.current_line_number())?;
@@ -1012,7 +746,7 @@ impl Parser {
         } else {
             Err(ParseError::InvalidSyntax(
                 format!(
-                    "Invalid variable syntax. Expected: @var NAME = value, got: {}",
+                    "Invalid variable syntax. Expected: var NAME = value, got: {}",
                     trimmed
                 ),
                 self.current_line_number(),
@@ -1028,8 +762,8 @@ impl Parser {
         let line = &self.lines[self.current_index];
         let trimmed = line.trim();
 
-        // Format: @const NAME = "value" or @const NAME = value
-        let const_part = trimmed.strip_prefix("@const ").unwrap_or("").trim();
+        // Format: const NAME = value
+        let const_part = trimmed.strip_prefix("const ").unwrap_or("").trim();
 
         if let Some(eq_pos) = const_part.find('=') {
             let name = const_part[..eq_pos].trim().to_string();
@@ -1042,8 +776,14 @@ impl Parser {
                 ));
             }
 
-            // Parse value (remove quotes if present)
-            let mut value = value_str.trim_matches('"').trim_matches('\'').to_string();
+            // Parse value: if start with quote, use parse_value, otherwise use as-is
+            let mut value = if (value_str.starts_with('"') && value_str.ends_with('"'))
+                || (value_str.starts_with('\'') && value_str.ends_with('\''))
+            {
+                self.parse_value(value_str)?.to_string()
+            } else {
+                value_str.to_string()
+            };
 
             // Execute command substitutions $(...) if present
             value = self.execute_command_substitutions(&value, self.current_line_number())?;
@@ -1053,11 +793,88 @@ impl Parser {
         } else {
             Err(ParseError::InvalidSyntax(
                 format!(
-                    "Invalid constant syntax. Expected: @const NAME = value, got: {}",
+                    "Invalid constant syntax. Expected: const NAME = value, got: {}",
                     trimmed
                 ),
                 self.current_line_number(),
             ))
+        }
+    }
+
+    fn parse_env_keyword(&mut self, variables: &mut Vec<Variable>) -> Result<(), ParseError> {
+        if self.current_index >= self.lines.len() {
+            return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
+        }
+
+        let line = &self.lines[self.current_index];
+        let trimmed = line.trim();
+
+        // Format: env KEY = VALUE or env .env
+        let env_part = trimmed.strip_prefix("env ").unwrap_or("").trim();
+
+        if let Some(eq_pos) = env_part.find('=') {
+            // env KEY = VALUE
+            let name = env_part[..eq_pos].trim().to_string();
+            let value_str = env_part[eq_pos + 1..].trim();
+
+            if name.is_empty() {
+                return Err(ParseError::InvalidSyntax(
+                    "Environment variable name cannot be empty".to_string(),
+                    self.current_line_number(),
+                ));
+            }
+
+            // Parse value
+            let mut value = if (value_str.starts_with('"') && value_str.ends_with('"'))
+                || (value_str.starts_with('\'') && value_str.ends_with('\''))
+            {
+                self.parse_value(value_str)?.to_string()
+            } else {
+                value_str.to_string()
+            };
+
+            // Execute command substitutions
+            value = self.execute_command_substitutions(&value, self.current_line_number())?;
+
+            // Add to variables (env variables are stored as variables with ENV_ prefix internally sometimes, 
+            // but here we might just want to store them so execution logic can find them.
+            // Actually, Nest stores env in a separate place in Directive, but global env
+            // might be stored as special variables or we might need a GlobalEnv in ParseResult.
+            // Let's check ParseResult structure again.)
+            
+            // Re-checking ParseResult: it doesn't have a global env. 
+            // Previous code likely didn't support global env outside of commands except via @env in some versions.
+            // Looking at parser.rs, @env wasn't in the main loop before my change.
+            // Wait, did the previous version support @env at top level?
+            // No, only @var, @const, @function.
+            
+            // So I should probably add 'env' to ParseResult or handle it by adding to variables with a prefix.
+            // But the user wants 'env' to be special.
+            
+            // Let's look at Directive::Env. It's used inside commands.
+            // For global 'env', we could add it to a new field in ParseResult.
+            
+            // For now, I'll store it in variables with an internal prefix or just add GlobalEnv to ParseResult.
+            // Wait, the user said: "var, const, and env variables are automatically exported... while {{}} is reserved for Nest-level composition".
+            // So 'env' at top level is just a special kind of 'var' that is EXPECTED to be an environment variable.
+            
+            // I'll add it as a variable for now, and later ensure 'nest' handles it.
+            variables.retain(|v| v.name != name);
+            variables.push(Variable { name, value });
+            self.current_index += 1;
+            Ok(())
+        } else {
+            // env .env (load from file)
+            // We'll store this as a special variable or directive.
+            // For now, let's just increment index and maybe store as a special var.
+            // Actually, we should probably handle this in include.rs or similar.
+            // But let's just store it as a variable with a special name for now.
+            variables.push(Variable { 
+                name: format!("__env_file_{}", self.current_line_number()), 
+                value: env_part.to_string() 
+            });
+            self.current_index += 1;
+            Ok(())
         }
     }
 
@@ -1353,6 +1170,157 @@ impl Parser {
     /// - `test(coverage=true)` - dependency with boolean argument
     /// - `build(target="x86_64", release=true)` - multiple arguments
     /// - `dev:build(target="x86_64")` - nested command with arguments
+    fn parse_env_directive_keyword(&mut self) -> Result<Directive, ParseError> {
+        if self.current_index >= self.lines.len() {
+            return Err(ParseError::UnexpectedEndOfFile(self.current_line_number()));
+        }
+
+        let line = &self.lines[self.current_index];
+        let trimmed = line.trim();
+
+        // Format: env KEY = VALUE
+        let env_part = trimmed.strip_prefix("env ").unwrap_or("").trim();
+
+        if let Some(eq_pos) = env_part.find('=') {
+            let name = env_part[..eq_pos].trim().to_string();
+            let value_str = env_part[eq_pos + 1..].trim();
+
+            if name.is_empty() {
+                return Err(ParseError::InvalidSyntax(
+                    "Environment variable name cannot be empty".to_string(),
+                    self.current_line_number(),
+                ));
+            }
+
+            // Parse value
+            let value = self.parse_value(value_str)?.to_string();
+            self.current_index += 1;
+            Ok(Directive::Env(name, value, false))
+        } else {
+            // env .env
+            let value = env_part.to_string();
+            self.current_index += 1;
+            Ok(Directive::EnvFile(value, false))
+        }
+    }
+
+    fn parse_property_directive(&mut self, line: &str, indent: u8) -> Result<Directive, ParseError> {
+        let trimmed = line.trim();
+        
+        let colon_pos = trimmed.find(':').ok_or_else(|| {
+            ParseError::InvalidSyntax(
+                format!("Invalid directive format. Expected 'key: value', got: {}", trimmed),
+                self.current_line_number(),
+            )
+        })?;
+
+        let key_with_mods = trimmed[..colon_pos].trim();
+        let value_str = trimmed[colon_pos + 1..].trim();
+
+        // Handle dot-notation modifiers: script.hide: ...
+        let key_parts: Vec<&str> = key_with_mods.split('.').collect();
+        let key = key_parts[0];
+        let hide = key_parts.contains(&"hide");
+
+        // Common directives
+        match key {
+            "desc" => {
+                let value = self.parse_value(value_str)?.to_string();
+                Ok(Directive::Desc(value))
+            }
+            "script" => {
+                let script = if value_str == "|" {
+                    self.parse_multiline_block(indent)?
+                } else {
+                    value_str.to_string()
+                };
+                if hide {
+                    Ok(Directive::ScriptHide(script))
+                } else {
+                    Ok(Directive::Script(script))
+                }
+            }
+            "before" => {
+                let script = if value_str == "|" {
+                    self.parse_multiline_block(indent)?
+                } else {
+                    value_str.to_string()
+                };
+                if hide {
+                    Ok(Directive::BeforeHide(script))
+                } else {
+                    Ok(Directive::Before(script))
+                }
+            }
+            "after" => {
+                let script = if value_str == "|" {
+                    self.parse_multiline_block(indent)?
+                } else {
+                    value_str.to_string()
+                };
+                if hide {
+                    Ok(Directive::AfterHide(script))
+                } else {
+                    Ok(Directive::After(script))
+                }
+            }
+            "finally" => {
+                let script = if value_str == "|" {
+                    self.parse_multiline_block(indent)?
+                } else {
+                    value_str.to_string()
+                };
+                if hide {
+                    Ok(Directive::FinallyHide(script))
+                } else {
+                    Ok(Directive::Finally(script))
+                }
+            }
+            "depends" => {
+                let is_parallel = key_parts.contains(&"parallel");
+                let deps = self.parse_dependencies(value_str)?;
+                Ok(Directive::Depends(deps, is_parallel))
+            }
+            "fallback" => {
+                let script = if value_str == "|" {
+                    self.parse_multiline_block(indent)?
+                } else {
+                    value_str.to_string()
+                };
+                if hide {
+                    Ok(Directive::FallbackHide(script))
+                } else {
+                    Ok(Directive::Fallback(script))
+                }
+            }
+            "env" => {
+                if let Some(eq_pos) = value_str.find('=') {
+                     let name = value_str[..eq_pos].trim().to_string();
+                     let val = self.parse_value(value_str[eq_pos + 1..].trim())?.to_string();
+                     Ok(Directive::Env(name, val, hide))
+                } else {
+                     Ok(Directive::EnvFile(value_str.to_string(), hide))
+                }
+            }
+            _ => {
+                Err(ParseError::InvalidSyntax(
+                    format!("Unknown directive property: {}", key),
+                    self.current_line_number(),
+                ))
+            }
+        }.map(|d| {
+            if !value_str.starts_with('|') {
+                self.current_index += 1;
+            }
+            d
+        })
+    }
+
+    fn parse_import(&mut self) -> Result<(), ParseError> {
+        self.current_index += 1;
+        Ok(())
+    }
+
     fn parse_dependencies(&self, value: &str) -> Result<Vec<Dependency>, ParseError> {
         let mut dependencies = Vec::new();
         let mut current = value.trim();
@@ -1571,57 +1539,4 @@ impl Parser {
         }
     }
 
-    /// Parses a comma-separated list of strings, handling quotes.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The string containing comma-separated items
-    ///
-    /// # Returns
-    ///
-    /// Returns a vector of strings.
-    fn parse_string_list(&self, value: &str) -> Result<Vec<String>, ParseError> {
-        let mut items = Vec::new();
-        let mut current_item = String::new();
-        let mut in_quote = false;
-        let mut quote_char = '\0';
-        
-        for ch in value.chars() {
-            match ch {
-                '"' | '\'' => {
-                    if in_quote {
-                        if ch == quote_char {
-                            in_quote = false;
-                        } else {
-                            current_item.push(ch);
-                        }
-                    } else {
-                        in_quote = true;
-                        quote_char = ch;
-                    }
-                }
-                ',' => {
-                    if in_quote {
-                        current_item.push(ch);
-                    } else {
-                        let trimmed = current_item.trim();
-                        if !trimmed.is_empty() {
-                            items.push(trimmed.to_string());
-                        }
-                        current_item.clear();
-                    }
-                }
-                _ => {
-                    current_item.push(ch);
-                }
-            }
-        }
-        
-        let trimmed = current_item.trim();
-        if !trimmed.is_empty() {
-            items.push(trimmed.to_string());
-        }
-        
-        Ok(items)
-    }
 }

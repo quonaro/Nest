@@ -27,8 +27,13 @@ pub fn print_command(command: &Command, indent: usize) {
             Directive::Cwd(s) => {
                 println!("{}    > cwd: {}", indent_str, s);
             }
-            Directive::Env(s) => {
-                println!("{}    > env: {}", indent_str, s);
+            Directive::Env(k, v, hide) => {
+                let suffix = if *hide { ".hide" } else { "" };
+                println!("{}    > env{}: {}={}", indent_str, suffix, k, v);
+            }
+            Directive::EnvFile(s, hide) => {
+                let suffix = if *hide { ".hide" } else { "" };
+                println!("{}    > env{}: {}", indent_str, suffix, s);
             }
             Directive::Depends(deps, parallel) => {
                 let deps_str: Vec<String> = deps.iter().map(|dep| {
@@ -41,12 +46,12 @@ pub fn print_command(command: &Command, indent: usize) {
                         format!("{}({})", dep.command_path, args_str.join(", "))
                     }
                 }).collect();
-                let suffix = if *parallel { " [parallel]" } else { "" };
+                let suffix = if *parallel { ".parallel" } else { "" };
                 println!("{}    > depends{}: {}", indent_str, suffix, deps_str.join(", "));
             }
             Directive::Before(s) | Directive::BeforeHide(s) => {
                 let directive_name = if matches!(directive, Directive::BeforeHide(_)) {
-                    "before[hide]"
+                    "before.hide"
                 } else {
                     "before"
                 };
@@ -61,7 +66,7 @@ pub fn print_command(command: &Command, indent: usize) {
             }
             Directive::After(s) | Directive::AfterHide(s) => {
                 let directive_name = if matches!(directive, Directive::AfterHide(_)) {
-                    "after[hide]"
+                    "after.hide"
                 } else {
                     "after"
                 };
@@ -76,7 +81,7 @@ pub fn print_command(command: &Command, indent: usize) {
             }
             Directive::Fallback(s) | Directive::FallbackHide(s) => {
                 let directive_name = if matches!(directive, Directive::FallbackHide(_)) {
-                    "fallback[hide]"
+                    "fallback.hide"
                 } else {
                     "fallback"
                 };
@@ -89,11 +94,11 @@ pub fn print_command(command: &Command, indent: usize) {
                     println!("{}    > {}: {}", indent_str, directive_name, s);
                 }
             }
-            Directive::Finaly(s) | Directive::FinalyHide(s) => {
-                let directive_name = if matches!(directive, Directive::FinalyHide(_)) {
-                    "finaly[hide]"
+            Directive::Finally(s) | Directive::FinallyHide(s) => {
+                let directive_name = if matches!(directive, Directive::FinallyHide(_)) {
+                    "finally.hide"
                 } else {
-                    "finaly"
+                    "finally"
                 };
                 if s.contains('\n') {
                     println!("{}    > {}: |", indent_str, directive_name);
@@ -112,7 +117,7 @@ pub fn print_command(command: &Command, indent: usize) {
             }
             Directive::Script(s) | Directive::ScriptHide(s) => {
                 let directive_name = if matches!(directive, Directive::ScriptHide(_)) {
-                    "script[hide]"
+                    "script.hide"
                 } else {
                     "script"
                 };
@@ -126,7 +131,7 @@ pub fn print_command(command: &Command, indent: usize) {
                 }
             }
             Directive::Logs(path, format) => {
-                println!("{}    > logs:{} {}", indent_str, format, path);
+                println!("{}    > logs.{}: {}", indent_str, format, path);
             }
 
             Directive::RequireConfirm(message) => {

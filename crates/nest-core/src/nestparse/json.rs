@@ -64,9 +64,15 @@ pub enum JsonDirective {
     /// Working directory directive
     #[serde(rename = "cwd")]
     Cwd(String),
-    /// Environment variable directive
+    /// Environment variable assignment (name, value, hide)
     #[serde(rename = "env")]
-    Env(String),
+    Env { name: String, value: String, hide: bool },
+    /// Environment file path (.env, hide)
+    #[serde(rename = "env_file")]
+    EnvFile { path: String, hide: bool },
+    /// Legacy environment directive
+    #[serde(rename = "env_legacy")]
+    EnvLegacy(String),
     /// Dependencies directive
     #[serde(rename = "depends")]
     Depends { 
@@ -76,22 +82,22 @@ pub enum JsonDirective {
     },
     /// Before script directive
     #[serde(rename = "before")]
-    Before(String),
+    Before { content: String, hide: bool },
     /// After script directive
     #[serde(rename = "after")]
-    After(String),
+    After { content: String, hide: bool },
     /// Fallback script directive
     #[serde(rename = "fallback")]
-    Fallback(String),
-    /// Finaly script directive
-    #[serde(rename = "finaly")]
-    Finaly(String),
+    Fallback { content: String, hide: bool },
+    /// Finally script directive
+    #[serde(rename = "finally")]
+    Finally { content: String, hide: bool },
     /// Validation directive
     #[serde(rename = "validate")]
     Validate(String),
     /// Script directive
     #[serde(rename = "script")]
-    Script(String),
+    Script { content: String, hide: bool },
     /// Privileged access directive
     #[serde(rename = "privileged")]
     Privileged(bool),
@@ -160,7 +166,15 @@ impl From<&Directive> for JsonDirective {
         match directive {
             Directive::Desc(s) => JsonDirective::Desc(s.clone()),
             Directive::Cwd(s) => JsonDirective::Cwd(s.clone()),
-            Directive::Env(s) => JsonDirective::Env(s.clone()),
+            Directive::Env(name, value, hide) => JsonDirective::Env {
+                name: name.clone(),
+                value: value.clone(),
+                hide: *hide,
+            },
+            Directive::EnvFile(path, hide) => JsonDirective::EnvFile {
+                path: path.clone(),
+                hide: *hide,
+            },
             Directive::Depends(deps, parallel) => {
                 let json_deps: Vec<JsonDependency> = deps.iter().map(|dep| JsonDependency {
                     command_path: dep.command_path.clone(),
@@ -168,17 +182,17 @@ impl From<&Directive> for JsonDirective {
                 }).collect();
                 JsonDirective::Depends { deps: json_deps, parallel: *parallel }
             },
-            Directive::Before(s) => JsonDirective::Before(s.clone()),
-            Directive::BeforeHide(s) => JsonDirective::Before(s.clone()),
-            Directive::After(s) => JsonDirective::After(s.clone()),
-            Directive::AfterHide(s) => JsonDirective::After(s.clone()),
-            Directive::Fallback(s) => JsonDirective::Fallback(s.clone()),
-            Directive::FallbackHide(s) => JsonDirective::Fallback(s.clone()),
-            Directive::Finaly(s) => JsonDirective::Finaly(s.clone()),
-            Directive::FinalyHide(s) => JsonDirective::Finaly(s.clone()),
+            Directive::Before(s) => JsonDirective::Before { content: s.clone(), hide: false },
+            Directive::BeforeHide(s) => JsonDirective::Before { content: s.clone(), hide: true },
+            Directive::After(s) => JsonDirective::After { content: s.clone(), hide: false },
+            Directive::AfterHide(s) => JsonDirective::After { content: s.clone(), hide: true },
+            Directive::Fallback(s) => JsonDirective::Fallback { content: s.clone(), hide: false },
+            Directive::FallbackHide(s) => JsonDirective::Fallback { content: s.clone(), hide: true },
+            Directive::Finally(s) => JsonDirective::Finally { content: s.clone(), hide: false },
+            Directive::FinallyHide(s) => JsonDirective::Finally { content: s.clone(), hide: true },
             Directive::Validate(s) => JsonDirective::Validate(s.clone()),
-            Directive::Script(s) => JsonDirective::Script(s.clone()),
-            Directive::ScriptHide(s) => JsonDirective::Script(s.clone()),
+            Directive::Script(s) => JsonDirective::Script { content: s.clone(), hide: false },
+            Directive::ScriptHide(s) => JsonDirective::Script { content: s.clone(), hide: true },
             Directive::Privileged(value) => JsonDirective::Privileged(*value),
             Directive::Logs(path, format) => JsonDirective::Logs {
                 path: path.clone(),

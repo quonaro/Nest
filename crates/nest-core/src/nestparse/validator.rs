@@ -330,19 +330,17 @@ fn validate_command_recursive(
             Directive::Before(_) | Directive::BeforeHide(_) => {}
             Directive::After(_) | Directive::AfterHide(_) => {}
             Directive::Fallback(_) | Directive::FallbackHide(_) => {}
-            Directive::Finaly(_) | Directive::FinalyHide(_) => {}
+            Directive::Finally(_) | Directive::FinallyHide(_) => {}
             Directive::Validate(_) => {}
             Directive::Privileged(_) => {}
             Directive::RequireConfirm(_) => {}
             Directive::Cwd(path) => {
                 cwd_paths.push(path.clone());
             }
-            Directive::Env(env_value) => {
-                // Check if it's a file path (starts with .)
-                if env_value.starts_with('.') {
-                    env_files.push(env_value.clone());
-                }
+            Directive::EnvFile(path, _) => {
+                env_files.push(path.clone());
             }
+            Directive::Env(_, _, _) => {}
             Directive::Logs(_, _) => {}
 
             Directive::Watch(_) => {},

@@ -508,6 +508,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 nest_core::nestparse::parser::ParseError::InvalidIndent(line) => {
                     format!("Parse error at line {}: Invalid indentation.", line)
                 }
+                nest_core::nestparse::parser::ParseError::DeprecatedSyntax(msg, line) => {
+                    format!("Parse error at line {}: {} (deprecated syntax)", line, msg)
+                }
             };
             nest_core::nestparse::output::OutputFormatter::error(&msg);
             process::exit(1);
@@ -1138,7 +1141,10 @@ fn ui(f: &mut Frame, app: &mut App) {
         for d in &cmd.directives {
             match d {
                 nest_core::nestparse::ast::Directive::Cwd(p) => info.push(format!("Cwd: {}", p)),
-                nest_core::nestparse::ast::Directive::Env(e) => info.push(format!("Env: {}", e)),
+                nest_core::nestparse::ast::Directive::Env(k, v, hide) => {
+                    let display_val = if *hide { "********".to_string() } else { v.clone() };
+                    info.push(format!("Env: {}={}", k, display_val))
+                },
                 nest_core::nestparse::ast::Directive::Privileged(true) => info.push("Privileged: Yes".to_string()),
                 nest_core::nestparse::ast::Directive::Validate(v) => info.push(format!("Validate: {}", v)),
                 _ => {}

@@ -477,7 +477,8 @@ impl CliGenerator {
         directives.iter().find_map(|d| match (d, name) {
             (Directive::Desc(s), "desc") => Some(s.clone()),
             (Directive::Cwd(s), "cwd") => Some(s.clone()),
-            (Directive::Env(s), "env") => Some(s.clone()),
+            (Directive::Env(k, v, _), "env") => Some(format!("{}={}", k, v)),
+            (Directive::EnvFile(s, _), "env") => Some(s.clone()),
             (Directive::Script(s), "script") => Some(s.clone()),
             (Directive::ScriptHide(s), "script") => Some(s.clone()),
             (Directive::Before(s), "before") => Some(s.clone()),
@@ -486,8 +487,8 @@ impl CliGenerator {
             (Directive::AfterHide(s), "after") => Some(s.clone()),
             (Directive::Fallback(s), "fallback") => Some(s.clone()),
             (Directive::FallbackHide(s), "fallback") => Some(s.clone()),
-            (Directive::Finaly(s), "finaly") => Some(s.clone()),
-            (Directive::FinalyHide(s), "finaly") => Some(s.clone()),
+            (Directive::Finally(s), "finally") => Some(s.clone()),
+            (Directive::FinallyHide(s), "finally") => Some(s.clone()),
             (Directive::Validate(s), "validate") => Some(s.clone()),
             _ => None,
         })
@@ -500,6 +501,8 @@ impl CliGenerator {
         name: &str,
     ) -> Option<(String, bool)> {
         directives.iter().find_map(|d| match (d, name) {
+            (Directive::Env(k, v, hide), "env") => Some((format!("{}={}", k, v), *hide)),
+            (Directive::EnvFile(s, hide), "env") => Some((s.clone(), *hide)),
             (Directive::Script(s), "script") => Some((s.clone(), false)),
             (Directive::ScriptHide(s), "script") => Some((s.clone(), true)),
             (Directive::Before(s), "before") => Some((s.clone(), false)),
@@ -508,8 +511,8 @@ impl CliGenerator {
             (Directive::AfterHide(s), "after") => Some((s.clone(), true)),
             (Directive::Fallback(s), "fallback") => Some((s.clone(), false)),
             (Directive::FallbackHide(s), "fallback") => Some((s.clone(), true)),
-            (Directive::Finaly(s), "finaly") => Some((s.clone(), false)),
-            (Directive::FinalyHide(s), "finaly") => Some((s.clone(), true)),
+            (Directive::Finally(s), "finally") => Some((s.clone(), false)),
+            (Directive::FinallyHide(s), "finally") => Some((s.clone(), true)),
             _ => None,
         })
     }
@@ -1738,10 +1741,10 @@ impl CliGenerator {
                 {
                     parent_directives.insert("fallback".to_string(), (fallback, hide_fallback));
                 }
-                if let Some((finaly, hide_finaly)) =
-                    Self::get_directive_value_with_hide(&cmd.directives, "finaly")
+                if let Some((finally, hide_finally)) =
+                    Self::get_directive_value_with_hide(&cmd.directives, "finally")
                 {
-                    parent_directives.insert("finaly".to_string(), (finaly, hide_finaly));
+                    parent_directives.insert("finally".to_string(), (finally, hide_finally));
                 }
                 current = &cmd.children;
             } else {
@@ -1766,7 +1769,7 @@ impl CliGenerator {
     /// # Returns
     ///
     /// Returns a vector of ENV directive values, ordered from root to leaf.
-    fn collect_parent_env_directives(&self, command_path: &[String]) -> Vec<String> {
+    fn collect_parent_env_directives(&self, command_path: &[String]) -> Vec<super::ast::Directive> {
         let mut parent_env_directives = Vec::new();
 
         // If path is empty or has only one element, no parents
@@ -1782,8 +1785,11 @@ impl CliGenerator {
             if let Some(cmd) = current.iter().find(|c| &c.name == name) {
                 // Collect all ENV directives from this parent command
                 for directive in &cmd.directives {
-                    if let super::ast::Directive::Env(env_value) = directive {
-                        parent_env_directives.push(env_value.clone());
+                    match directive {
+                        super::ast::Directive::Env(..) | super::ast::Directive::EnvFile(..) => {
+                            parent_env_directives.push(directive.clone());
+                        }
+                        _ => {}
                     }
                 }
                 current = &cmd.children;
@@ -2366,22 +2372,19 @@ impl CliGenerator {
 
         // Prepare environment
         // First, collect ENV directives from parent groups
-        let parent_env_directives = if let Some(path) = command_path {
+        let mut all_env_directives = if let Some(path) = command_path {
             self.collect_parent_env_directives(path)
         } else {
             Vec::new()
         };
 
-        // Convert parent ENV directives to Directive::Env format
-        let mut all_env_directives: Vec<super::ast::Directive> = parent_env_directives
-            .iter()
-            .map(|env_value| super::ast::Directive::Env(env_value.clone()))
-            .collect();
-
         // Add command ENV directives (they will override parent ones)
         for directive in &command.directives {
-            if let super::ast::Directive::Env(_) = directive {
-                all_env_directives.push(directive.clone());
+            match directive {
+                super::ast::Directive::Env(..) | super::ast::Directive::EnvFile(..) => {
+                    all_env_directives.push(directive.clone());
+                }
+                _ => {}
             }
         }
 
@@ -2417,8 +2420,24 @@ impl CliGenerator {
         // Process environment variables through template processor to resolve Nest templates (e.g., {{type}})
         // This allows parent command arguments to be used in environment variables
         let mut processed_env_vars = std::collections::HashMap::new();
+        
+        // 1. Export global variables and constants
+        EnvironmentManager::export_all_vars(&mut processed_env_vars, &self.variables, &self.constants);
+        
+        // 2. Export parent variables and constants
+        EnvironmentManager::export_all_vars(&mut processed_env_vars, &parent_variables, &parent_constants);
+        
+        // 3. Export local variables and constants
+        EnvironmentManager::export_all_vars(&mut processed_env_vars, &command.local_variables, &command.local_constants);
+
+        // 4. Merge direct env directives (they have highest priority among Nest variables)
         for (key, value) in &env_vars {
-            let processed_value = TemplateProcessor::process(
+            processed_env_vars.insert(key.clone(), value.clone());
+        }
+
+        // Process ALL environment variables through template processor
+        for value in processed_env_vars.values_mut() {
+            *value = TemplateProcessor::process(
                 value,
                 args,
                 &self.variables,
@@ -2429,7 +2448,6 @@ impl CliGenerator {
                 &parent_constants,
                 &merged_parent_args,
             );
-            processed_env_vars.insert(key.clone(), processed_value);
         }
         
         // Update NEST_CALL_STACK for child processes
@@ -2667,18 +2685,18 @@ impl CliGenerator {
             }
         }
 
-        // Execute finaly script (always executes, regardless of success or failure)
-        let finaly_info = Self::get_directive_value_with_hide(&command.directives, "finaly")
-            .or_else(|| parent_directives.get("finaly").cloned());
-        if let Some((finaly_script, hide_finaly)) = finaly_info {
-            // Store original result before executing finaly
+        // Execute finally script (always executes, regardless of success or failure)
+        let finally_info = Self::get_directive_value_with_hide(&command.directives, "finally")
+            .or_else(|| parent_directives.get("finally").cloned());
+        if let Some((finally_script, hide_finally)) = finally_info {
+            // Store original result before executing finally
             let original_result = match &result {
                 Ok(_) => Ok(()),
                 Err(e) => Err(e.clone()),
             };
 
-            let processed_finaly = TemplateProcessor::process(
-                &finaly_script,
+            let processed_finally = TemplateProcessor::process(
+                &finally_script,
                 args,
                 &self.variables,
                 &self.constants,
@@ -2691,12 +2709,12 @@ impl CliGenerator {
 
             if verbose {
                 use super::output::OutputFormatter;
-                OutputFormatter::info("Executing finaly script...");
+                OutputFormatter::info("Executing finally script...");
             }
 
-            // Execute finaly - errors are logged but don't change the result
+            // Execute finally - errors are logged but don't change the result
             if let Err(e) = self.execute_script(
-                &processed_finaly,
+                &processed_finally,
                 &env_vars,
                 cwd.as_deref(),
                 Some(command_path_unwrapped),
@@ -2704,16 +2722,16 @@ impl CliGenerator {
                 dry_run,
                 verbose,
                 &merged_parent_args,
-                hide_finaly,
+                hide_finally,
             ) {
-                // Log finaly error but don't fail the command
+                // Log finally error but don't fail the command
                 if verbose {
                     use super::output::OutputFormatter;
-                    OutputFormatter::warning(&format!("Finaly script failed: {}", e));
+                    OutputFormatter::warning(&format!("Finally script failed: {}", e));
                 }
             }
 
-            // Return original result (finaly doesn't change the command result)
+            // Return original result (finally doesn't change the command result)
             return original_result;
         }
 

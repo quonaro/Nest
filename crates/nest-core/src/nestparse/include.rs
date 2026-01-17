@@ -87,91 +87,116 @@ pub fn process_includes(
             continue;
         }
         
-        // Check if this is an include directive
-        if trimmed.starts_with("@include ") {
-            let rest = trimmed[9..].trim(); // Skip "@include "
-            
-            // Check for "from" syntax: ... from cmd1, cmd2
-            let (rest_before_from, from_clause) = if let Some(from_pos) = rest.rfind(" from ") {
-                let before = rest[..from_pos].trim();
-                let after = rest[from_pos + 6..].trim();
-                (before, Some(after))
-            } else {
-                (rest, None)
-            };
-
-            // Check for "into" syntax: @include path/to/file into group_name
-            let (include_path_str, into_group) = if let Some(into_pos) = rest_before_from.find(" into ") {
-                let path_part = rest_before_from[..into_pos].trim();
-                let group_part = rest_before_from[into_pos + 6..].trim();
-                (path_part, Some(group_part))
-            } else {
-                (rest_before_from, None)
-            };
-            
-            if include_path_str.is_empty() {
-                return Err(IncludeError::InvalidPath("Empty include path".to_string()));
-            }
-
-            // Parse filter list if present
-            let filter_commands: Option<Vec<&str>> = from_clause.map(|s| {
-                s.split(',')
-                    .map(|cmd| cmd.trim())
-                    .filter(|cmd| !cmd.is_empty())
-                    .collect()
-            });
-            let filter_slice = filter_commands.as_deref();
-
-            // Resolve the include path
-            let include_path = base_dir.join(include_path_str);
-            
-            // Process the include
-            let included_content = match resolve_and_load_include(&include_path, base_dir, visited, filter_slice)? {
-                Some(content) => content,
-                None => {
-                    // Include path didn't match any files, skip this include
-                    continue;
-                }
-            };
-
-            // Add the included content
-            if let Some(group_name) = into_group {
-                // If importing into a group, we need to:
-                // 1. Create the group command
-                // 2. Indent the included content
-                
-                if group_name.is_empty() {
-                    return Err(IncludeError::InvalidPath("Empty group name in 'into' clause".to_string()));
-                }
-                
-                // Add group definition
-                result.push_str(line.split("@include").next().unwrap_or("")); // Preserve original indentation
-                result.push_str(group_name);
-                result.push_str(":\n");
-                
-                // Indent content
-                for content_line in included_content.lines() {
-                    // Preserve original indentation of the @include line for the content
-                    let base_indent = line.split("@include").next().unwrap_or("");
-                    result.push_str(base_indent);
-                    result.push_str("    "); // Add 4 spaces indentation
-                    result.push_str(content_line);
-                    result.push('\n');
-                }
-            } else {
-                // Process includes in the included content
-                let processed_inc = process_includes(&included_content, &include_path, visited)?;
-                
-                // Add marker for start of include
-                result.push_str(&format!("# @source: {}\n", include_path.display()));
-                result.push_str(&processed_inc);
-                // Add marker for restoring current context
-                result.push_str(&format!("# @source: {}\n", normalized_base.display()));
-            }
+        // Check if this is an include or import directive
+        let (is_import, rest) = if trimmed.starts_with("@include ") {
+            (false, trimmed[9..].trim())
+        } else if trimmed.starts_with("import ") {
+            (true, trimmed[7..].trim())
         } else {
             // Regular line, add it as-is
             result.push_str(line);
             result.push('\n');
+            continue;
+        };
+
+        let (include_path_str, into_group, filter_commands) = if is_import {
+            // NEW SYNTAX: import symbols from file into group
+            // 1. Check for 'into'
+            let (rest_before_into, into_group) = if let Some(into_pos) = rest.rfind(" into ") {
+                (rest[..into_pos].trim(), Some(rest[into_pos + 6..].trim()))
+            } else {
+                (rest, None)
+            };
+
+            // 2. Check for 'from'
+            let (symbols_part, path_part) = if let Some(from_pos) = rest_before_into.rfind(" from ") {
+                (rest_before_into[..from_pos].trim(), rest_before_into[from_pos + 6..].trim())
+            } else {
+                // If no 'from', it might be just 'import file' (which we treat as 'import * from file')
+                ("*", rest_before_into)
+            };
+
+            let filter = if symbols_part == "*" {
+                None
+            } else {
+                Some(symbols_part.split(',')
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>())
+            };
+
+            (path_part, into_group, filter)
+        } else {
+            // OLD SYNTAX: @include path [into group] [from symbols]
+            let (rest_before_from, from_clause) = if let Some(from_pos) = rest.rfind(" from ") {
+                (rest[..from_pos].trim(), Some(rest[from_pos + 6..].trim()))
+            } else {
+                (rest, None)
+            };
+
+            let (path_part, into_group) = if let Some(into_pos) = rest_before_from.find(" into ") {
+                (rest_before_from[..into_pos].trim(), Some(rest_before_from[into_pos + 6..].trim()))
+            } else {
+                (rest_before_from, None)
+            };
+
+            let filter = from_clause.map(|s| {
+                s.split(',')
+                    .map(|cmd| cmd.trim())
+                    .filter(|cmd| !cmd.is_empty())
+                    .collect::<Vec<_>>()
+            });
+
+            (path_part, into_group, filter)
+        };
+
+        if include_path_str.is_empty() {
+            return Err(IncludeError::InvalidPath("Empty include path".to_string()));
+        }
+
+        let filter_slice = filter_commands.as_deref();
+
+        // Resolve the include path (remove quotes if present)
+        let include_path_str_clean = include_path_str.trim_matches('"').trim_matches('\'');
+        let include_path = base_dir.join(include_path_str_clean);
+        
+        // Process the include
+        let included_content = match resolve_and_load_include(&include_path, base_dir, visited, filter_slice)? {
+            Some(content) => content,
+            None => {
+                // Include path didn't match any files, skip this include
+                continue;
+            }
+        };
+
+        // Add the included content
+        if let Some(group_name) = into_group {
+            if group_name.is_empty() {
+                return Err(IncludeError::InvalidPath("Empty group name in 'into' clause".to_string()));
+            }
+            
+            // Add group definition
+            result.push_str(line.split(if is_import { "import" } else { "@include" }).next().unwrap_or("")); // Preserve original indentation
+            result.push_str(group_name);
+            result.push_str(":\n");
+            
+            // Indent content
+            for content_line in included_content.lines() {
+                let base_indent = line.split(if is_import { "import" } else { "@include" }).next().unwrap_or("");
+                result.push_str(base_indent);
+                result.push_str("    "); // Add 4 spaces indentation
+                result.push_str(content_line);
+                result.push('\n');
+            }
+        } else {
+            // Process includes in the included content
+            let processed_inc = process_includes(&included_content, &include_path, visited)?;
+            
+            // Add marker for start of include
+            result.push_str(&format!("# @source: {}\n", include_path.display()));
+            result.push_str(&processed_inc);
+            // Add marker for restoring current context
+            result.push_str(&format!("# @source: {}\n", normalized_base.display()));
         }
     }
 
@@ -590,6 +615,8 @@ struct SelectionNode {
     children: std::collections::HashMap<String, SelectionNode>,
     /// Whether this node is explicitly selected as a leaf (implies deep import)
     is_leaf_selection: bool,
+    /// Whether this node's children should be unpacked into the parent context
+    is_unpack_selection: bool,
 }
 
 impl SelectionNode {
@@ -601,6 +628,11 @@ impl SelectionNode {
 
         let head = path_parts[0];
         let tail = &path_parts[1..];
+
+        if head == "*" {
+            self.is_unpack_selection = true;
+            return;
+        }
         
         self.children
             .entry(head.to_string())
@@ -621,7 +653,12 @@ fn filter_commands(
     // 1. Build selection tree
     let mut root = SelectionNode::default();
     for path in filter_paths {
-        let parts: Vec<&str> = path.split('.').collect();
+        // Support both : and . as separators for compatibility
+        let parts: Vec<&str> = if path.contains(':') {
+            path.split(':').collect()
+        } else {
+            path.split('.').collect()
+        };
         root.insert(&parts);
     }
 
@@ -640,6 +677,12 @@ fn filter_commands_recursive(
         if let Some(child_selection) = selection.children.get(&cmd.name) {
             // It is selected!
             
+            // If it's an unpack selection ("group:*"), take its children directly
+            if child_selection.is_unpack_selection {
+                result.extend(cmd.children);
+                continue;
+            }
+
             // If explicit leaf selection ("group"), keep it fully (deep import)
             if child_selection.is_leaf_selection {
                 // Keep the command as is (with all children)

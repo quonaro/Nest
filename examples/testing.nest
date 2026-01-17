@@ -2,51 +2,51 @@
 # This file contains testing-related commands
 
 test:
-    > desc: Testing commands
+    desc: Testing commands
 
     unit(!coverage|c: bool = false):
-        > desc: Run unit tests
-        > env: NODE_ENV=test
-        > script: |
+        desc: Run unit tests
+        env: NODE_ENV=test
+        script: |
             echo "Running unit tests"
             test "{{coverage}}" = "true" && echo "Coverage enabled" || echo "Coverage disabled"
 
     integration():
-        > desc: Run integration tests
-        > env: NODE_ENV=test
-        > script: |
+        desc: Run integration tests
+        env: NODE_ENV=test
+        script: |
             echo "Running integration tests..."
             # npm run test:integration
 
     e2e():
-        > desc: Run end-to-end tests
-        > env: NODE_ENV=test
-        > script: |
+        desc: Run end-to-end tests
+        env: NODE_ENV=test
+        script: |
             echo "Running end-to-end tests..."
             # npm run test:e2e
 
     watch():
-        > desc: Run tests in watch mode
-        > env: NODE_ENV=test
-        > script: |
+        desc: Run tests in watch mode
+        env: NODE_ENV=test
+        script: |
             echo "Running tests in watch mode..."
             # npm test -- --watch
 
     all():
-        > desc: Run all tests
-        > depends: unit, integration, e2e
-        > script: |
+        desc: Run all tests
+        depends: unit, integration, e2e
+        script: |
             echo "All tests completed!"
 
     wildcard-basic(app: str, *):
-        > desc: Example of mixed positional argument with anonymous wildcard
-        > script: |
+        desc: Example of mixed positional argument with anonymous wildcard
+        script: |
             echo "App: {{app}}"
             echo "Rest args ({{*}})"
 
-    wildcard-named(*cmd[1], *args):
-        > desc: Example of named wildcard with fixed-size head and unbounded tail
-        > script: |
+    wildcard-named(app: str, *args):
+        desc: Example of named wildcard with fixed-size head and unbounded tail
+        script: |
             echo "Command: {{*cmd}}"
             echo "Args: {{*args}}"
 

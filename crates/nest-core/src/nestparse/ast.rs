@@ -20,6 +20,17 @@ pub enum Value {
     Array(Vec<String>),
 }
 
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::String(s) => write!(f, "{}", s),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Number(n) => write!(f, "{}", n),
+            Value::Array(a) => write!(f, "[{}]", a.join(", ")),
+        }
+    }
+}
+
 /// Represents the kind of a parameter in a command or function signature.
 ///
 /// Parameters can be:
@@ -91,8 +102,10 @@ pub enum Directive {
     Desc(String),
     /// Working directory for command execution
     Cwd(String),
-    /// Environment variable assignment or .env file path
-    Env(String),
+    /// Environment variable assignment (name, value, hide)
+    Env(String, String, bool),
+    /// Environment file path (.env, hide)
+    EnvFile(String, bool),
     /// Script to execute (can be single line or multiline)
     Script(String),
     /// Script to execute with hidden output (can be single line or multiline)
@@ -106,19 +119,15 @@ pub enum Directive {
     /// Script to execute after the main script with hidden output (can be single line or multiline)
     AfterHide(String),
     /// Script to execute if the main script fails (can be single line or multiline)
-    /// Replaces error output with this script's output
     Fallback(String),
     /// Script to execute if the main script fails with hidden output (can be single line or multiline)
-    /// Replaces error output with this script's output
     FallbackHide(String),
     /// Script to execute always, regardless of success or failure (can be single line or multiline)
-    Finaly(String),
+    Finally(String),
     /// Script to execute always with hidden output, regardless of success or failure (can be single line or multiline)
-    FinalyHide(String),
+    FinallyHide(String),
     /// Whether this command requires privileged access (sudo/administrator)
     Privileged(bool),
-    /// Dependencies - commands that must be executed before this command
-    /// Each dependency can have arguments (e.g., "build(target=\"x86_64\")")
     /// Dependencies - commands that must be executed before this command
     /// Each dependency can have arguments (e.g., "build(target=\"x86_64\")")
     /// Second element is true if dependencies should run in parallel
@@ -136,6 +145,7 @@ pub enum Directive {
     /// Watch directive - list of file patterns to watch for changes
     /// String contains comma-separated glob patterns
     Watch(Vec<String>),
+
 }
 
 /// Represents a variable that can be redefined.

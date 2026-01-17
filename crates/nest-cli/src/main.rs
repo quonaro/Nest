@@ -384,6 +384,9 @@ fn load_and_parse_config(config_path_arg: Option<&str>) -> Result<(ParseResult, 
                 ParseError::InvalidIndent(line) => {
                     format!("Parse error at line {}: Invalid indentation.", line)
                 }
+                ParseError::DeprecatedSyntax(msg, line) => {
+                    format!("Deprecated syntax error at line {}: {}", line, msg)
+                }
             }
         })?;
 
