@@ -1,0 +1,67 @@
+# Nestfile - Task Runner Configuration
+# This file defines commands that can be executed with: nest <command>
+
+# ============================================================================
+# BASIC COMMANDS
+# ============================================================================
+
+hello():
+    > desc: Print a greeting message
+    > script: |
+        echo "Hello from Nest!"
+
+build():
+    > desc: Build the project
+    > script: |
+        echo "Building project..."
+        # Add your build commands here
+
+test():
+    > desc: Run tests
+    > script: |
+        echo "Running tests..."
+        # Add your test commands here
+
+clean():
+    > desc: Clean build artifacts
+    > script: |
+        echo "Cleaning build artifacts..."
+        # Add your clean commands here
+
+# ============================================================================
+# COMMANDS WITH PARAMETERS
+# ============================================================================
+
+# Example command with parameters
+# deploy(version: str, !env|e: str = "production"):
+#     > desc: Deploy application
+#     > script: |
+#         echo "Deploying version {{version}} to {{env}}"
+#         # Add your deployment commands here
+
+# ============================================================================
+# VARIABLES AND CONSTANTS
+# ============================================================================
+
+# @var APP_NAME = "myapp"
+# @var VERSION = "1.0.0"
+# @const BUILD_DIR = "./dist"
+
+# ============================================================================
+# NESTED COMMANDS (GROUPS)
+# ============================================================================
+
+# dev:
+#     > desc: Development commands
+#     
+#     dev start():
+#         > desc: Start development server
+#         > script: |
+#             echo "Starting development server..."
+#     
+#     dev test():
+#         > desc: Run development tests
+#         > script: |
+#             echo "Running development tests..."
+
+# For more examples, see: nest --example

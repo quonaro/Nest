@@ -1,0 +1,6 @@
+tag_prefix = "v"
+disable_changelog = true
+
+pre_bump_hooks = [
+    "sed -i 's/^version = \".*\"/version = \"{{version}}\"/' Cargo.toml"
+]
