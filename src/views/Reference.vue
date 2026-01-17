@@ -50,7 +50,7 @@ $ nest &lt;command&gt; &lt;subcommand&gt; --help</code></pre>
         
         <h4>Command Definition</h4>
         <pre v-pre><code>command_name(param1: type, !param2|alias: type = default):
-    > directive: value</code></pre>
+    directive: value</code></pre>
 
         <h4>Parameter Types</h4>
         <ul>
@@ -62,28 +62,27 @@ $ nest &lt;command&gt; &lt;subcommand&gt; --help</code></pre>
 
         <h4>Directives</h4>
         <ul>
-          <li><code>> desc: &lt;description&gt;</code> - Command description shown in help</li>
-          <li><code>> cwd: &lt;path&gt;</code> - Set working directory for command execution</li>
-          <li><code>> env: &lt;VAR=value&gt;</code> - Set environment variable</li>
-          <li><code>> env: &lt;.env.file&gt;</code> - Load environment variables from file</li>
-          <li><code>> env: ${VAR:-default}</code> - Use system environment variable with default</li>
-          <li><code>> script: &lt;command&gt;</code> - Single-line script to execute</li>
-          <li><code>> script: |</code> - Multi-line script to execute</li>
-          <li><code>> script[hide]:</code> - Hide script output from console</li>
-          <li><code>> before:</code> - Execute before main script</li>
-          <li><code>> before[hide]:</code> - Execute before main script (hidden output)</li>
-          <li><code>> after:</code> - Execute after main script (on success)</li>
-          <li><code>> after[hide]:</code> - Execute after main script (hidden output, on success)</li>
-          <li><code>> fallback:</code> - Execute on script failure (replaces error output)</li>
-          <li><code>> fallback[hide]:</code> - Execute on script failure (hidden output)</li>
-          <li><code>> finaly:</code> - Always execute (regardless of success/failure)</li>
-          <li><code>> finaly[hide]:</code> - Always execute (hidden output)</li>
-          <li><code>> require_confirm: &lt;message&gt;</code> - Require user confirmation before execution</li>
-          <li><code>> depends:</code> - Specify command dependencies</li>
-          <li><code>> validate:</code> - Validate parameter values</li>
-          <li><code>> if: / > elif: / > else:</code> - Conditional execution</li>
-          <li><code>> logs:json &lt;path&gt; / > logs:txt &lt;path&gt;</code> - Log command execution to file</li>
-          <li><code>> privileged: true</code> or <code>> privileged</code> - Require elevated permissions</li>
+          <li><code>desc: &lt;description&gt;</code> - Command description shown in help</li>
+          <li><code>cwd: &lt;path&gt;</code> - Set working directory for command execution</li>
+          <li><code>env: &lt;VAR=value&gt;</code> - Set environment variable</li>
+          <li><code>env: &lt;.env.file&gt;</code> - Load environment variables from file</li>
+          <li><code>env: ${VAR:-default}</code> - Use system environment variable with default</li>
+          <li><code>script: &lt;command&gt;</code> - Single-line script to execute</li>
+          <li><code>script: |</code> - Multi-line script to execute</li>
+          <li><code>script.hide:</code> - Hide script output from console</li>
+          <li><code>before:</code> - Execute before main script</li>
+          <li><code>before.hide:</code> - Execute before main script (hidden output)</li>
+          <li><code>after:</code> - Execute after main script (on success)</li>
+          <li><code>after.hide:</code> - Execute after main script (hidden output, on success)</li>
+          <li><code>fallback:</code> - Execute on script failure (replaces error output)</li>
+          <li><code>fallback.hide:</code> - Execute on script failure (hidden output)</li>
+          <li><code>finally:</code> - Always execute (regardless of success/failure)</li>
+          <li><code>finally.hide:</code> - Always execute (hidden output)</li>
+          <li><code>require_confirm: &lt;message&gt;</code> - Require user confirmation before execution</li>
+          <li><code>depends:</code> - Specify command dependencies</li>
+          <li><code>validate:</code> - Validate parameter values</li>
+          <li><code>logs.json: &lt;path&gt;</code> / <code>logs.txt: &lt;path&gt;</code> - Log command execution (see Logging section)</li>
+          <li><code>privileged</code> - Require elevated permissions</li>
         </ul>
 
         <h3>File Location</h3>
@@ -91,44 +90,33 @@ $ nest &lt;command&gt; &lt;subcommand&gt; --help</code></pre>
 
         <h3>Commands with Dependencies</h3>
         <pre v-pre><code>clean():
-    > desc: Clean build artifacts
-    > script: rm -rf build/
+    desc: Clean build artifacts
+    script: rm -rf build/
 
 build():
-    > desc: Build the project
-    > depends: clean
-    > script: npm run build
+    desc: Build the project
+    depends: clean
+    script: npm run build
 
 deploy():
-    > desc: Deploy application
-    > depends: build, test
-    > script: npm run deploy</code></pre>
+    desc: Deploy application
+    depends: build, test
+    script: npm run deploy</code></pre>
 
-        <h3>Commands with Conditional Logic</h3>
-        <pre v-pre><code>deploy(env: str):
-    > desc: Deploy to different environments
-    > if: env == "production"
-    > script: |
-        echo "Deploying to PRODUCTION..."
-    > elif: env == "staging"
-    > script: |
-        echo "Deploying to STAGING..."
-    > else:
-    > script: |
-        echo "Deploying to development..."</code></pre>
+
 
         <h3>Commands with Validation</h3>
         <pre v-pre><code>deploy(version: str):
-    > desc: Deploy with version validation
-    > validate: version matches /^v?\d+\.\d+\.\d+$/
-    > script: |
+    desc: Deploy with version validation
+    validate: version matches /^v?\d+\.\d+\.\d+$/
+    script: |
         echo "Deploying {{version}}"</code></pre>
 
         <h3>Commands with Logging</h3>
         <pre v-pre><code>deploy(version: str):
-    > desc: Deploy with JSON logging
-    > logs:json ./logs/deploy-{{version}}.json
-    > script: |
+    desc: Deploy with JSON logging
+    logs.json: ./logs/deploy-{{version}}.json
+    script: |
         echo "Deploying {{version}}"</code></pre>
       </section>
 
@@ -137,27 +125,27 @@ deploy():
         
         <h3>Simple Command</h3>
         <pre v-pre><code>hello():
-    > desc: Print hello world
-    > script: echo "Hello, World!"</code></pre>
+    desc: Print hello world
+    script: echo "Hello, World!"</code></pre>
 
         <h3>Command with Parameters</h3>
         <pre v-pre><code>greet(name: str, message: str):
-    > desc: Greet someone
-    > script: echo "Hello {{name}}, {{message}}!"</code></pre>
+    desc: Greet someone
+    script: echo "Hello {{name}}, {{message}}!"</code></pre>
 
         <h3>Command with Named Parameters</h3>
         <pre v-pre><code>build(!target|t: str = "x86_64", !release|r: bool = false):
-    > desc: Build project
-    > script: cargo build --target {{target}} ${release:+--release}</code></pre>
+    desc: Build project
+    script: cargo build --target {{target}} ${release:+--release}</code></pre>
 
         <h3>Nested Commands</h3>
         <pre v-pre><code>dev:
-    > desc: Development tools
+    desc: Development tools
 
     default(!hot|h: bool = false):
-        > desc: Start dev server
-        > env: NODE_ENV=development
-        > script: |
+        desc: Start dev server
+        env: NODE_ENV=development
+        script: |
             #!/bin/sh
             if [ "$hot" = "true" ]; then
                 nodemon src/index.js
@@ -166,8 +154,8 @@ deploy():
             fi
 
     lint(!fix|f: bool = false):
-        > desc: Lint code
-        > script: eslint src/ ${fix:+--fix}</code></pre>
+        desc: Lint code
+        script: eslint src/ ${fix:+--fix}</code></pre>
       </section>
     </div>
   </Layout>

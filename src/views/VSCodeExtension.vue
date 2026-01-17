@@ -89,25 +89,25 @@
         
         <h3>Commands</h3>
         <pre v-pre><code>command_name(param: type = default):
-    > desc: Description
-    > script: echo "Hello"</code></pre>
+    desc: Description
+    script: echo "Hello"</code></pre>
 
         <h3>Directives</h3>
         <p>All directives are supported:</p>
         <ul>
-          <li><code>> desc:</code>, <code>> cwd:</code>, <code>> env:</code>, <code>> script:</code></li>
-          <li><code>> before:</code>, <code>> after:</code>, <code>> fallback:</code>, <code>> finaly:</code></li>
-          <li><code>> depends:</code>, <code>> validate:</code>, <code>> if:</code>, <code>> elif:</code>, <code>> else:</code></li>
-          <li><code>> logs:json</code>, <code>> logs:txt</code>, <code>> privileged</code>, <code>> require_confirm:</code></li>
-          <li><code>> script[hide]:</code>, <code>> before[hide]:</code>, <code>> after[hide]:</code>, <code>> fallback[hide]:</code>, <code>> finaly[hide]:</code></li>
+          <li><code>desc:</code>, <code>cwd:</code>, <code>env:</code>, <code>script:</code></li>
+          <li><code>before:</code>, <code>after:</code>, <code>fallback:</code>, <code>finally:</code></li>
+          <li><code>depends:</code>, <code>validate:</code></li>
+          <li><code>logs.json:</code>, <code>logs.txt:</code>, <code>privileged</code>, <code>require_confirm:</code></li>
+          <li><code>script.hide:</code>, <code>before.hide:</code>, <code>after.hide:</code>, <code>fallback.hide:</code>, <code>finally.hide:</code></li>
         </ul>
 
         <h3>Meta Commands</h3>
         <ul>
-          <li><code>@var</code> - Variable declarations</li>
-          <li><code>@const</code> - Constant declarations</li>
-          <li><code>@function</code> - Function definitions</li>
-          <li><code>@include</code> - Include other files</li>
+          <li><code>var</code> - Variable declarations</li>
+          <li><code>const</code> - Constant declarations</li>
+          <li><code>function</code> - Function definitions</li>
+          <li><code>import</code> - Include other files</li>
         </ul>
 
         <h3>Templates</h3>
