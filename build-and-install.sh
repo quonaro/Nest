@@ -45,7 +45,6 @@ BINARY_NAME="nest"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
 # Default options
-SKIP_INCREMENT=false
 CUSTOM_VERSION=""
 CUSTOM_INSTALL_DIR=""
 STATIC_BUILD=false
@@ -76,13 +75,11 @@ show_usage() {
     echo "Options:"
     echo "  --version VERSION       Use specific version instead of reading from Cargo.toml"
     echo "  --install-dir PATH      Install binary to custom directory (default: ~/.local/bin)"
-    echo "  --skip-increment        Don't increment version after successful build"
     echo "  --help                  Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Build and install with version from Cargo.toml"
     echo "  $0 --version 1.0.0                    # Build and install with specific version"
-    echo "  $0 --skip-increment                   # Build and install without incrementing version"
     echo "  $0 --install-dir /usr/local/bin       # Install to custom directory"
 }
 
@@ -104,10 +101,6 @@ while [[ $# -gt 0 ]]; do
             fi
             CUSTOM_INSTALL_DIR="$2"
             shift 2
-            ;;
-        --skip-increment)
-            SKIP_INCREMENT=true
-            shift
             ;;
         --static)
             STATIC_BUILD=true
@@ -142,18 +135,7 @@ read_version() {
     grep -E '^version\s*=' "$CARGO_TOML" | sed -E 's/^version\s*=\s*"([^"]+)".*/\1/' | tr -d '[:space:]'
 }
 
-# Function to increment patch version (0.0.1 -> 0.0.2)
-increment_version() {
-    local version="$1"
-    local major=$(echo "$version" | cut -d. -f1)
-    local minor=$(echo "$version" | cut -d. -f2)
-    local patch=$(echo "$version" | cut -d. -f3)
-    
-    # Increment patch version
-    patch=$((patch + 1))
-    
-    echo "${major}.${minor}.${patch}"
-}
+
 
 # Function to update version in Cargo.toml
 update_cargo_version() {
@@ -289,19 +271,6 @@ else
     echo "   ${YELLOW}Warning: nestui binary not found at ${RELEASE_NESTUI}${RESET}"
 fi
 
-# Increment version for next build (if not skipped)
-if [ "$SKIP_INCREMENT" = false ]; then
-    echo ""
-    echo "${INFO} ${BOLD}Updating version for next build...${RESET}"
-    NEXT_VERSION=$(increment_version "$CURRENT_VERSION")
-    update_cargo_version "$NEXT_VERSION"
-    echo "   ${CHECK} Version updated: ${BOLD}${CURRENT_VERSION}${RESET} → ${BOLD}${NEXT_VERSION}${RESET}"
-else
-    echo ""
-    echo "${INFO} ${BOLD}Skipping version increment${RESET}"
-    NEXT_VERSION="$CURRENT_VERSION"
-fi
-
 # Success message
 echo ""
 if [ "$HAS_COLORS" = "1" ]; then
@@ -314,6 +283,5 @@ else
 fi
 echo ""
 echo "   Installed version: ${BOLD}${CURRENT_VERSION}${RESET}"
-echo "   Next version: ${BOLD}${NEXT_VERSION}${RESET}"
 echo "   Run ${BOLD}nest --version${RESET} to verify installation."
 echo ""

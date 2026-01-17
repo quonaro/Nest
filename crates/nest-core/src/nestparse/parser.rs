@@ -118,14 +118,14 @@ impl Parser {
             // DEPRECATION CHECK: Detect legacy syntax prefixes
             if trimmed.starts_with('@') {
                 let msg = format!(
-                    "Legacy syntax '@' is deprecated. Use keywords (var, const, env, import, function) without '@'. The last version supporting this legacy configuration is 3.0.19. Line: {}",
+                    "Legacy syntax '@' is deprecated.\nUse keywords (var, const, env, import, function) without '@'.\nThe last version supporting this legacy configuration is 3.0.19.\n\nOffending line: {}",
                     trimmed
                 );
                 return Err(ParseError::DeprecatedSyntax(msg, self.current_line_number()));
             }
             if trimmed.starts_with('>') {
                 let msg = format!(
-                    "Legacy directive prefix '>' is deprecated. Remove '>' and use 'key: value' style. The last version supporting this legacy configuration is 3.0.19. Line: {}",
+                    "Legacy directive prefix '>' is deprecated.\nRemove '>' and use 'key: value' style.\nThe last version supporting this legacy configuration is 3.0.19.\n\nOffending line: {}",
                     trimmed
                 );
                 return Err(ParseError::DeprecatedSyntax(msg, self.current_line_number()));
@@ -239,14 +239,14 @@ impl Parser {
             // DEPRECATION CHECK: Detect legacy syntax prefixes in commands
             if next_trimmed.starts_with('@') {
                 let msg = format!(
-                    "Legacy syntax '@' is deprecated. Use keywords (var, const, env) without '@'. The last version supporting this legacy configuration is 3.0.19. Line: {}",
+                    "Legacy syntax '@' is deprecated.\nUse keywords (var, const, env) without '@'.\nThe last version supporting this legacy configuration is 3.0.19.\n\nOffending line: {}",
                     next_trimmed
                 );
                 return Err(ParseError::DeprecatedSyntax(msg, self.current_line_number()));
             }
             if next_trimmed.starts_with('>') {
                 let msg = format!(
-                    "Legacy directive prefix '>' is deprecated. Remove '>' and use 'key: value' style. The last version supporting this legacy configuration is 3.0.19. Line: {}",
+                    "Legacy directive prefix '>' is deprecated.\nRemove '>' and use 'key: value' style.\nThe last version supporting this legacy configuration is 3.0.19.\n\nOffending line: {}",
                     next_trimmed
                 );
                 return Err(ParseError::DeprecatedSyntax(msg, self.current_line_number()));
