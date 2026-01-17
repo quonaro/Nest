@@ -128,8 +128,8 @@ source ~/.bashrc  # for bash
 
 **Note for older Linux distributions (e.g., Debian 12, Ubuntu 20.04):**
 
-Linux x86_64 релизные бинарники теперь собираются как **статически слинкованные (musl)**, поэтому ошибка вроде `GLIBC_2.39 not found` при установке через `install.sh` или из GitHub Releases не должна возникать.
-Если вы хотите собрать такой же статический бинарник локально:
+Linux x86_64 release binaries are now built as **statically linked (musl)**, so errors like `GLIBC_2.39 not found` should not occur when installing via `install.sh` or GitHub Releases.
+If you want to build the same static binary locally:
 
 1. Install Rust (if not already installed):
 
