@@ -11,3 +11,5 @@ _metadata.json
 .vite
 nestfile
 *.nest
+*.log
+*.nestfile
