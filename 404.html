@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/Nest.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nest - Task Runner for CLI Commands</title>
+  <script>
+    // GitHub Pages SPA redirect
+    // Save the original path and redirect to index.html
+    var path = window.location.pathname;
+    var base = '/Nest/';
+
+    if (!path.endsWith('index.html')) {
+      // Extract the route path (remove base)
+      var routePath = path;
+      if (routePath.startsWith(base)) {
+        // Remove base path, keep the leading slash
+        routePath = routePath.slice(base.length - 1);
+      }
+      // Ensure we have a leading slash
+      if (!routePath.startsWith('/')) {
+        routePath = '/' + routePath;
+      }
+
+      // Save the route path in sessionStorage
+      if (routePath && routePath !== '/') {
+        sessionStorage.setItem('ghp_redirect', routePath);
+      }
+
+      // Redirect to index.html
+      var redirectUrl = base + 'index.html';
+      if (window.location.search) {
+        redirectUrl += window.location.search;
+      }
+      if (window.location.hash) {
+        redirectUrl += window.location.hash;
+      }
+      window.location.replace(redirectUrl);
+    }
+  </script>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script type="module" src="/Nest/assets/index-jDzLMedW.js"></script>
+</body>
+
+</html>
