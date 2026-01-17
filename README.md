@@ -6,6 +6,8 @@ I actively use this tool in my daily work and will continue to maintain and impr
 
 Nest is a declarative task runner that replaces brittle `Makefile`s and scattered shell scripts with a unified, readable, and maintainable task orchestration system. It's especially suited for polyglot, self-hosted, or automation-heavy projects.
 
+**📚 Documentation:** [quonaro.github.io/Nest](https://quonaro.github.io/Nest)
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -541,7 +543,7 @@ Directives control command behavior:
 - **`> depends:`** - Command dependencies (see Command Dependencies section)
   - Parallel execution: `> depends[parallel]: cmd1, cmd2` (runs dependencies in parallel)
 - **`> validate:`** - Parameter validation rules (see Parameter Validation section)
-- **`> if:` / `> elif:` / `> else:`** - Conditional execution (see Conditional Execution section)
+
 - **`> logs:json <path>` / `> logs:txt <path>`** - Log command execution (see Logging section)
 - **`> privileged`** - Require privileged access (root/admin)
 - **`> require_confirm:`** - Require user confirmation before executing
