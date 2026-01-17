@@ -11,7 +11,7 @@ use super::template::TemplateProcessor;
 use crate::constants::{
     APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_COMPLETE, FLAG_CONFIG, FLAG_DRY_RUN,
     FLAG_EXAMPLE, FLAG_SHOW, FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON,
-    SHORT_VERSION,
+    SHORT_VERSION, ENV_NEST_CALL_STACK,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
@@ -2361,6 +2361,21 @@ impl CliGenerator {
         let command_path_unwrapped = command_path.unwrap_or(&[]);
         let command_path_for_logging = command_path;
 
+        // Check for recursion cycle via ENV_NEST_CALL_STACK
+        // This detects cycles across process boundaries (e.g. script calling `nest command`)
+        let command_id = command_path_unwrapped.join(":");
+        if !command_id.is_empty() {
+             if let Ok(stack_str) = std::env::var(ENV_NEST_CALL_STACK) {
+                let stack: Vec<&str> = stack_str.split(',').collect();
+                if stack.contains(&command_id.as_str()) {
+                     return Err(format!(
+                         "Circular dependency detected: Command '{}' is already in the call stack.\nCall stack: {}", 
+                         command_id, stack_str
+                     ));
+                }
+             }
+        }
+
         // NOTE: recursive command-call detection is temporarily disabled here because it
         // conflicts with dependency-cycle tracking and was falsely triggering for valid
         // dependency graphs (e.g. `build` -> `clean`). Proper recursion detection should
@@ -2493,6 +2508,21 @@ impl CliGenerator {
             );
             processed_env_vars.insert(key.clone(), processed_value);
         }
+        
+        // Update NEST_CALL_STACK for child processes
+        if !command_id.is_empty() {
+            let new_stack = if let Ok(stack_str) = std::env::var(ENV_NEST_CALL_STACK) {
+                if stack_str.is_empty() {
+                    command_id.clone()
+                } else {
+                    format!("{},{}", stack_str, command_id)
+                }
+            } else {
+                command_id.clone()
+            };
+            processed_env_vars.insert(ENV_NEST_CALL_STACK.to_string(), new_stack);
+        }
+        
         let env_vars = processed_env_vars;
 
         // Execute before script (if present in command or inherited from parent)
@@ -2735,6 +2765,7 @@ impl CliGenerator {
                     // Add error message to args for template processing
                     let mut fallback_args = args.clone();
                     fallback_args.insert("SYSTEM_ERROR_MESSAGE".to_string(), error_msg.clone());
+                    fallback_args.insert("error".to_string(), error_msg.clone());
 
                     let processed_fallback = TemplateProcessor::process(
                         &fallback_script,

@@ -715,7 +715,7 @@ dependencies = [
 
 [[package]]
 name = "nest"
-version = "3.1.0"
+version = "3.2.5"
 dependencies = [
  "clap",
  "clap_complete",
@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "nest-core"
-version = "3.1.0"
+version = "3.2.5"
 dependencies = [
  "chrono",
  "clap",
@@ -741,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "nestui"
-version = "3.1.0"
+version = "3.2.5"
 dependencies = [
  "crossterm",
  "dirs",

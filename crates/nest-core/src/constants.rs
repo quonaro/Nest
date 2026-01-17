@@ -140,3 +140,6 @@ pub const ENV_VAR_USER: &str = "USER";
 
 /// Default value for user when USER environment variable is not set.
 pub const DEFAULT_USER: &str = "unknown";
+
+/// Environment variable name for tracking recursion depth and cycles.
+pub const ENV_NEST_CALL_STACK: &str = "NEST_CALL_STACK";
