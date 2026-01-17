@@ -112,15 +112,7 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
                     result.push_str(&format!("{}> require_confirm: {}\n", inner_indent_str, msg));
                 }
             }
-            Directive::If(cond) => {
-                result.push_str(&format!("{}> if: {}\n", inner_indent_str, cond));
-            }
-            Directive::Elif(cond) => {
-                result.push_str(&format!("{}> elif: {}\n", inner_indent_str, cond));
-            }
-            Directive::Else => {
-                result.push_str(&format!("{}> else\n", inner_indent_str));
-            }
+
             Directive::Validate(rule) => {
                 result.push_str(&format!("{}> validate: {}\n", inner_indent_str, rule));
             }

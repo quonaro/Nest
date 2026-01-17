@@ -13,7 +13,7 @@ pub mod codegen;
 pub mod command_handler;
 pub mod completion;
 pub mod standard_commands;
-pub mod condition;
+
 pub mod display;
 pub mod env;
 pub mod executor;

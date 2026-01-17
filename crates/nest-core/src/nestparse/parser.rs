@@ -952,18 +952,7 @@ impl Parser {
 
                     Ok((Directive::Logs(path, format), false))
                 }
-                "if" => {
-                    // Conditional execution directive: if: condition
-                    Ok((Directive::If(directive_value.to_string()), false))
-                }
-                "elif" => {
-                    // Else-if conditional execution directive: elif: condition
-                    Ok((Directive::Elif(directive_value.to_string()), false))
-                }
-                "else" => {
-                    // Else directive: else: (value is ignored, can be empty)
-                    Ok((Directive::Else, false))
-                }
+
                 "require_confirm" => {
                     // Require confirmation directive: require_confirm: message (optional)
                     Ok((
@@ -980,8 +969,7 @@ impl Parser {
             // No colon - check if it's a standalone privileged directive or else directive
             if content == "privileged" {
                 Ok((Directive::Privileged(true), false))
-            } else if content == "else" {
-                Ok((Directive::Else, false))
+
             } else {
                 Err(ParseError::InvalidSyntax(
                     format!("Invalid directive format: {}", trimmed),

@@ -9,3 +9,5 @@ dist/
 package.json
 _metadata.json
 .vite
+nestfile
+*.nest

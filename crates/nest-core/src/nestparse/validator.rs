@@ -344,9 +344,7 @@ fn validate_command_recursive(
                 }
             }
             Directive::Logs(_, _) => {}
-            Directive::If(_) => {}
-            Directive::Elif(_) => {},
-            Directive::Else => {},
+
             Directive::Watch(_) => {},
         }
     }

@@ -5,7 +5,7 @@
 //! special cases like default subcommands.
 
 use super::ast::{Command, Constant, Directive, Function, Parameter, Value, Variable};
-use super::condition;
+
 use super::env::EnvironmentManager;
 use super::template::TemplateProcessor;
 use crate::constants::{
@@ -16,16 +16,7 @@ use crate::constants::{
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
 
-/// Represents a conditional block (if/elif/else with associated script)
-#[derive(Debug, Clone)]
-enum ConditionalBlock {
-    /// If block: condition and script
-    If(String, String),
-    /// Elif block: condition and script
-    Elif(String, String),
-    /// Else block: script only
-    Else(String),
-}
+
 
 // Removed: ShortAliasConflict - validation is now done in validator module
 
@@ -728,75 +719,7 @@ impl CliGenerator {
         Ok(())
     }
 
-    /// Parses conditional blocks from directives.
-    ///
-    /// Groups if/elif/else directives with their following script directives.
-    /// Returns empty vector if no conditional directives are found.
-    fn parse_conditional_blocks(directives: &[Directive]) -> Vec<ConditionalBlock> {
-        let mut blocks = Vec::new();
-        let mut i = 0;
 
-        while i < directives.len() {
-            let (condition_type, condition_value) = match &directives[i] {
-                Directive::If(cond) => (Some("if"), Some(cond.clone())),
-                Directive::Elif(cond) => (Some("elif"), Some(cond.clone())),
-                Directive::Else => (Some("else"), None),
-                _ => {
-                    i += 1;
-                    continue;
-                }
-            };
-
-            if let Some(block_type) = condition_type {
-                // Look for the next script directive
-                let mut found_script = false;
-                for j in (i + 1)..directives.len() {
-                    if let Directive::Script(script) | Directive::ScriptHide(script) =
-                        &directives[j]
-                    {
-                        match block_type {
-                            "if" => {
-                                blocks.push(ConditionalBlock::If(
-                                    condition_value.unwrap(),
-                                    script.clone(),
-                                ));
-                            }
-                            "elif" => {
-                                blocks.push(ConditionalBlock::Elif(
-                                    condition_value.unwrap(),
-                                    script.clone(),
-                                ));
-                            }
-                            "else" => {
-                                blocks.push(ConditionalBlock::Else(script.clone()));
-                            }
-                            _ => {}
-                        }
-                        found_script = true;
-                        i = j + 1;
-                        break;
-                    }
-                    // If we encounter another conditional directive before script, it's an error
-                    // but we'll handle it gracefully by skipping
-                    if matches!(
-                        &directives[j],
-                        Directive::If(_) | Directive::Elif(_) | Directive::Else
-                    ) {
-                        break;
-                    }
-                }
-
-                if !found_script {
-                    // No script found for this conditional, skip it
-                    i += 1;
-                }
-            } else {
-                i += 1;
-            }
-        }
-
-        blocks
-    }
 
     /// Validates command parameters according to validation directives.
     ///
@@ -2561,94 +2484,10 @@ impl CliGenerator {
             }
         }
 
-        // Execute main script with conditional logic
-        // Check if there are conditional directives (if/elif/else)
-        let conditional_blocks = Self::parse_conditional_blocks(&command.directives);
-
-        let script = if !conditional_blocks.is_empty() {
-            // Find the first matching condition
-            let mut matched_script = None;
-
-            'condition_loop: for block in &conditional_blocks {
-                match block {
-                    ConditionalBlock::If(condition, script) => {
-                        if matched_script.is_none() {
-                            match condition::evaluate_condition(
-                                condition,
-                                args,
-                                &self.variables,
-                                &self.constants,
-                                &command.local_variables,
-                                &command.local_constants,
-                                &parent_variables,
-                                &parent_constants,
-                                &merged_parent_args,
-                                &env_vars,
-                            ) {
-                                Ok(true) => {
-                                    matched_script = Some(script.clone());
-                                    break 'condition_loop;
-                                }
-                                Ok(false) => {}
-                                Err(e) => {
-                                    return Err(format!(
-                                        "Error evaluating condition '{}': {}",
-                                        condition, e
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    ConditionalBlock::Elif(condition, script) => {
-                        if matched_script.is_none() {
-                            match condition::evaluate_condition(
-                                condition,
-                                args,
-                                &self.variables,
-                                &self.constants,
-                                &command.local_variables,
-                                &command.local_constants,
-                                &parent_variables,
-                                &parent_constants,
-                                &merged_parent_args,
-                                &env_vars,
-                            ) {
-                                Ok(true) => {
-                                    matched_script = Some(script.clone());
-                                    break 'condition_loop;
-                                }
-                                Ok(false) => {}
-                                Err(e) => {
-                                    return Err(format!(
-                                        "Error evaluating condition '{}': {}",
-                                        condition, e
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    ConditionalBlock::Else(script) => {
-                        if matched_script.is_none() {
-                            matched_script = Some(script.clone());
-                            break 'condition_loop;
-                        }
-                    }
-                }
-            }
-
-            matched_script.ok_or_else(|| {
-                "No matching condition found and no else block provided".to_string()
-            })?
-        } else {
-            // No conditional directives, use regular script
-            Self::get_directive_value(&command.directives, "script")
-                .ok_or_else(|| "Command has no script directive".to_string())?
-        };
-
-        // Check if script output should be hidden
-        let hide_script = Self::get_directive_value_with_hide(&command.directives, "script")
-            .map(|(_, hide)| hide)
-            .unwrap_or(false);
+        // Execute main script
+        // Note: if/else/elif support has been removed, so we only look for 'script'
+        let (script, hide_script) = Self::get_directive_value_with_hide(&command.directives, "script")
+            .ok_or_else(|| "Command has no script directive".to_string())?;
 
         let processed_script = TemplateProcessor::process(
             &script,

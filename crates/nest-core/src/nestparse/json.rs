@@ -98,15 +98,7 @@ pub enum JsonDirective {
     /// Logs directive
     #[serde(rename = "logs")]
     Logs { path: String, format: String },
-    /// If conditional directive
-    #[serde(rename = "if")]
-    If(String),
-    /// Elif conditional directive
-    #[serde(rename = "elif")]
-    Elif(String),
-    /// Else conditional directive
-    #[serde(rename = "else")]
-    Else,
+
     /// Require confirmation directive
     #[serde(rename = "require_confirm")]
     RequireConfirm(String),
@@ -192,9 +184,7 @@ impl From<&Directive> for JsonDirective {
                 path: path.clone(),
                 format: format.clone(),
             },
-            Directive::If(condition) => JsonDirective::If(condition.clone()),
-            Directive::Elif(condition) => JsonDirective::Elif(condition.clone()),
-            Directive::Else => JsonDirective::Else,
+
             Directive::RequireConfirm(message) => JsonDirective::RequireConfirm(message.clone()),
             Directive::Watch(patterns) => JsonDirective::Watch(patterns.clone()),
         }
