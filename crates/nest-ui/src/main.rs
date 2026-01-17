@@ -63,10 +63,11 @@ struct App {
     state: ListState,
     arg_state: ListState,
     should_quit: bool,
+    nestfile_path: std::path::PathBuf,
 }
 
 impl App {
-    fn new(commands: Vec<Command>) -> App {
+    fn new(commands: Vec<Command>, nestfile_path: std::path::PathBuf) -> App {
         let history_path = dirs::data_local_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join("nest")
@@ -94,6 +95,7 @@ impl App {
             state: ListState::default(),
             arg_state: ListState::default(),
             should_quit: false,
+            nestfile_path,
         };
         app.load_history();
         app.flatten_commands();
@@ -457,13 +459,53 @@ impl App {
 fn main() -> Result<(), Box<dyn Error>> {
     // 1. Load Nestfile
     // Logic similar to nest-cli/main.rs but simplified for now
-    let current_dir = std::env::current_dir().map_err(|e| format!("Could not get current directory: {}", e))?;
-    let nestfile_path = match find_nestfile(&current_dir) {
-        Some(path) => path,
-        None => {
-            println!("nestfile not found");
-            println!("Run 'nest --init' to create one.");
+    // 1. Parse arguments for --config / -c, --version, --help
+    let args: Vec<String> = std::env::args().collect();
+    let mut config_path_arg: Option<String> = None;
+    
+    // Check for flags that don't need config
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("nest-ui v{}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("Nest UI - TUI for Nest task runner");
+        println!("");
+        println!("Usage: nestui [OPTIONS]");
+        println!("");
+        println!("Options:");
+        println!("  -c, --config <PATH>    Path to Nestfile");
+        println!("  -V, --version          Show version information");
+        println!("  -h, --help             Show this help message");
+        println!("");
+        return Ok(());
+    }
+
+    for (idx, arg) in args.iter().enumerate().skip(1) {
+        if arg == "--config" || arg == "-c" {
+            if let Some(path) = args.get(idx + 1) {
+                config_path_arg = Some(path.clone());
+            }
+            break;
+        }
+    }
+
+    let nestfile_path = if let Some(path_str) = config_path_arg {
+        let path = Path::new(&path_str).to_path_buf();
+        if !path.exists() {
+            nest_core::nestparse::output::OutputFormatter::error(&format!("Configuration file not found: {}", path_str));
             process::exit(1);
+        }
+        path
+    } else {
+        match nest_core::nestparse::path::find_config_file() {
+            Some(path) => path,
+            None => {
+                println!("nestfile not found in current directory");
+                println!("Run 'nest --init' to create one, or use '--config <path>'.");
+                process::exit(1);
+            }
         }
     };
     
@@ -537,7 +579,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create App
-    let mut app = App::new(parse_result.commands);
+    let mut app = App::new(parse_result.commands, nestfile_path);
 
     // Run loop
     let res = run_app(&mut terminal, &mut app);
@@ -609,16 +651,6 @@ fn resolve_scope(
     }
 }
 
-fn find_nestfile(dir: &Path) -> Option<std::path::PathBuf> {
-    let filenames = ["nestfile", "Nestfile", "nest", "Nest"];
-    for name in filenames {
-        let path = dir.join(name);
-        if path.exists() {
-            return Some(path);
-        }
-    }
-    None
-}
 
 use std::io::Write;
 
@@ -626,6 +658,7 @@ use std::io::Write;
 fn execute_shell_command<B: Backend + Write>(
     terminal: &mut Terminal<B>,
     command_str: &str,
+    nestfile_path: &Path,
 ) -> io::Result<()> {
     // Suspend TUI
     disable_raw_mode()?;
@@ -636,13 +669,20 @@ fn execute_shell_command<B: Backend + Write>(
     )?;
     terminal.show_cursor()?;
 
-    println!("Executing: nest {}", command_str);
+    let absolute_config = nestfile_path.canonicalize().unwrap_or_else(|_| nestfile_path.to_path_buf());
+    let working_dir = absolute_config.parent().unwrap_or(Path::new("."));
+
+    println!("Executing: nest --config {} {}", absolute_config.display(), command_str);
     
     // Run command
     let parts: Vec<&str> = command_str.split_whitespace().collect();
     if !parts.is_empty() {
+        let mut final_args = vec!["--config", absolute_config.to_str().unwrap_or("")];
+        final_args.extend_from_slice(&parts);
+
         let status = std::process::Command::new("nest")
-            .args(&parts)
+            .current_dir(working_dir)
+            .args(&final_args)
             .status();
 
         match status {
@@ -830,7 +870,7 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                                 let full_cmd = app.input_buffer.clone();
                                                 
                                                 app.add_history(full_cmd.clone());
-                                                execute_shell_command(terminal, &full_cmd)?;
+                                                execute_shell_command(terminal, &full_cmd, &app.nestfile_path)?;
                                             }
                                          }
                                     }
@@ -839,7 +879,7 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                         if let Some(idx) = app.history_state.selected() {
                                             if let Some(cmd_str) = app.history.get(idx).cloned() {
                                                 app.add_history(cmd_str.clone());
-                                                execute_shell_command(terminal, &cmd_str)?;
+                                                execute_shell_command(terminal, &cmd_str, &app.nestfile_path)?;
                                             }
                                         }
                                     }
@@ -893,7 +933,7 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                             KeyCode::Enter => {
                                 let cmd = app.input_buffer.clone();
                                 app.add_history(cmd.clone());
-                                execute_shell_command(terminal, &cmd)?;
+                                execute_shell_command(terminal, &cmd, &app.nestfile_path)?;
                                 app.mode = InputMode::Normal;
                             }
                             KeyCode::Esc => {

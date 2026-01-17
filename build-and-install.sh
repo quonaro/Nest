@@ -40,7 +40,7 @@ cd "$SCRIPT_DIR"
 
 # File paths
 CARGO_TOML="Cargo.toml"
-INSTALL_DIR="${HOME}/.local/bin"
+INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="nest"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
@@ -51,6 +51,23 @@ CUSTOM_INSTALL_DIR=""
 STATIC_BUILD=false
 
 OS_NAME="$(uname -s)"
+
+# Function to run command with sudo if needed
+run_elevated() {
+    local target_path="$1"
+    shift
+    local target_dir="$(dirname "$target_path")"
+    
+    # We need sudo if:
+    # 1. The directory is not writable (for creating/renaming files)
+    # 2. OR the file exists and is not writable
+    if [ ! -w "$target_dir" ] || ([ -e "$target_path" ] && [ ! -w "$target_path" ]); then
+        echo "   ${YELLOW}Elevation required to access ${target_path}${RESET}"
+        sudo "$@"
+    else
+        "$@"
+    fi
+}
 
 # Function to show usage
 show_usage() {
@@ -231,7 +248,9 @@ fi
 # Create install directory if it doesn't exist
 echo ""
 echo "${INFO} ${BOLD}Preparing installation...${RESET}"
-mkdir -p "$INSTALL_DIR"
+if [ ! -d "$INSTALL_DIR" ]; then
+    run_elevated "$INSTALL_DIR" mkdir -p "$INSTALL_DIR"
+fi
 echo "   ${CHECK} Install directory ready: ${BOLD}${INSTALL_DIR}${RESET}"
 
 # Install binary
@@ -244,11 +263,11 @@ if [ ! -f "$RELEASE_BINARY" ]; then
 fi
 
 if command -v install >/dev/null 2>&1; then
-    install -m 755 "$RELEASE_BINARY" "$BINARY_PATH"
+    run_elevated "$BINARY_PATH" install -m 755 "$RELEASE_BINARY" "$BINARY_PATH"
 else
     # Fallback if install is missing (rare)
-    cp -f "$RELEASE_BINARY" "$BINARY_PATH"
-    chmod +x "$BINARY_PATH"
+    run_elevated "$BINARY_PATH" cp -f "$RELEASE_BINARY" "$BINARY_PATH"
+    run_elevated "$BINARY_PATH" chmod +x "$BINARY_PATH"
 fi
 echo "   ${CHECK} Binary installed to ${BOLD}${BINARY_PATH}${RESET}"
 
@@ -260,10 +279,10 @@ if [ -f "$RELEASE_NESTUI" ]; then
     echo ""
     echo "${INFO} ${BOLD}Installing nestui binary...${RESET}"
     if command -v install >/dev/null 2>&1; then
-        install -m 755 "$RELEASE_NESTUI" "$NESTUI_BINARY_PATH"
+        run_elevated "$NESTUI_BINARY_PATH" install -m 755 "$RELEASE_NESTUI" "$NESTUI_BINARY_PATH"
     else
-        cp -f "$RELEASE_NESTUI" "$NESTUI_BINARY_PATH"
-        chmod +x "$NESTUI_BINARY_PATH"
+        run_elevated "$NESTUI_BINARY_PATH" cp -f "$RELEASE_NESTUI" "$NESTUI_BINARY_PATH"
+        run_elevated "$NESTUI_BINARY_PATH" chmod +x "$NESTUI_BINARY_PATH"
     fi
     echo "   ${CHECK} Nest UI installed to ${BOLD}${NESTUI_BINARY_PATH}${RESET}"
 else
