@@ -15,9 +15,7 @@ const DIRECTIVES = [
   { name: "finaly", description: "Script always executed (finally)" },
   { name: "depends", description: "Command dependencies (comma-separated)" },
   { name: "validate", description: "Parameter validation rules" },
-  { name: "if", description: "Conditional execution" },
-  { name: "elif", description: "Else-if conditional execution" },
-  { name: "else", description: "Else branch for conditional execution" },
+
   { name: "logs:json", description: "Log command execution as JSON" },
   { name: "logs:txt", description: "Log command execution as text" },
   { name: "privileged", description: "Require privileged access (root/admin)" },
@@ -364,9 +362,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
             item.insertText = new vscode.SnippetString(indentSpaces + "> validate: ${1:param} matches /${2:regex}/");
           } else if (directive.name === "cwd") {
             item.insertText = new vscode.SnippetString(indentSpaces + "> cwd: ${1:./path}");
-          } else if (directive.name === "if" || directive.name === "elif") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> " + directive.name + ": ${1:condition}");
-          } else if (directive.name === "else" || directive.name === "privileged" || directive.name === "require_confirm") {
+          } else if (directive.name === "privileged" || directive.name === "require_confirm") {
             item.insertText = indentSpaces + "> " + directive.name;
           } else {
             item.insertText = new vscode.SnippetString(indentSpaces + "> " + directive.name + ": ${1:value}");
@@ -565,9 +561,7 @@ export class NestfileCompletionProvider implements vscode.CompletionItemProvider
             item.insertText = new vscode.SnippetString(indentSpaces + "> validate: ${1:param} matches /${2:regex}/");
           } else if (directive.name === "cwd") {
             item.insertText = new vscode.SnippetString(indentSpaces + "> cwd: ${1:./path}");
-          } else if (directive.name === "if" || directive.name === "elif") {
-            item.insertText = new vscode.SnippetString(indentSpaces + "> " + directive.name + ": ${1:condition}");
-          } else if (directive.name === "else" || directive.name === "privileged" || directive.name === "require_confirm") {
+          } else if (directive.name === "privileged" || directive.name === "require_confirm") {
             item.insertText = indentSpaces + "> " + directive.name;
           } else {
             item.insertText = new vscode.SnippetString(indentSpaces + "> " + directive.name + ": ${1:value}");

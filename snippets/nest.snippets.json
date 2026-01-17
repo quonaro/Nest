@@ -93,20 +93,5 @@
       "> logs:json ${1:./logs/{{now}}.json}"
     ],
     "description": "Logging directive"
-  },
-  "IfElifElse": {
-    "prefix": "nest-if",
-    "body": [
-      "> if: ${1:condition}",
-      "> script: |",
-      "    ${2:echo \"If\"}",
-      "> elif: ${3:other_condition}",
-      "> script: |",
-      "    ${4:echo \"Elif\"}",
-      "> else:",
-      "> script: |",
-      "    ${5:echo \"Else\"}"
-    ],
-    "description": "Conditional execution (if/elif/else)"
   }
 }

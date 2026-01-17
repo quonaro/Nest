@@ -40,9 +40,7 @@ const VALID_DIRECTIVES = new Set([
   "finaly",
   "depends",
   "validate",
-  "if",
-  "elif",
-  "else",
+
   "logs",
   "privileged",
   "require_confirm",
@@ -205,9 +203,7 @@ export function validateNestfileDocument(
       // Unknown directive
       const directiveBase = name.startsWith("logs")
         ? "logs"
-        : name === "else"
-          ? "else"
-          : name;
+        : name;
       if (!VALID_DIRECTIVES.has(directiveBase)) {
         // Find the position of the directive name after ">"
         const directiveMatch = trimmed.match(/^>\s*([a-zA-Z_]+(?:\[[^\]]+\])?)/);

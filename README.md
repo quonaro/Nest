@@ -26,12 +26,12 @@ The extension understands the main Nestfile constructs:
 - Parameters and types: `str`, `bool`, `num`, `arr`, positional and named (`!name|n`)
 - Directives: `> desc:`, `> cwd:`, `> env:`, `> script:`, `> script[hide]:`, `> before:`, `> before[hide]:`,
   `> after:`, `> after[hide]:`, `> fallback:`, `> fallback[hide]:`, `> finaly:`, `> finaly[hide]:`,
-  `> depends:`, `> depends[parallel]:`, `> validate:`, `> if:`, `> elif:`, `> else:`,
+  `> depends:`, `> depends[parallel]:`, `> validate:`,
   `> logs:json`, `> logs:txt`, `> privileged`, `> require_confirm:`, `> watch:`
 - Meta directives: `@var`, `@const`, `@function`, `@include`, `@include ... into ...`
 - Templates and substitutions: `{{...}}`, `$(...)` in values and scripts
 
-For a full language reference see the main CLI README in the Nest repository.
+For a full language reference see the [official documentation](https://quonaro.github.io/Nest).
 
 ### Validation in the editor
 
@@ -66,7 +66,7 @@ The extension contributes snippets for:
 - Group with `default` subcommand
 - Global `@var` / `@const`
 - `@include` and `@function`
-- `> depends:`, `> depends[parallel]:`, `> validate:`, `> logs:json`, `> watch:`, `> require_confirm:`, conditional `if/elif/else` block
+- `> depends:`, `> depends[parallel]:`, `> validate:`, `> logs:json`, `> watch:`, `> require_confirm:`
 
 Type the snippet prefix (for example `nest-command`, `nest-group`, `nest-var`, `nest-include`)
 and accept the suggestion to insert a template.

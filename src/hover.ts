@@ -13,9 +13,7 @@ const DIRECTIVES = [
   { name: "finaly", description: "Script always executed (finally)" },
   { name: "depends", description: "Command dependencies (comma-separated)" },
   { name: "validate", description: "Parameter validation rules" },
-  { name: "if", description: "Conditional execution" },
-  { name: "elif", description: "Else-if conditional execution" },
-  { name: "else", description: "Else branch for conditional execution" },
+
   { name: "logs:json", description: "Log command execution as JSON" },
   { name: "logs:txt", description: "Log command execution as text" },
   { name: "privileged", description: "Require privileged access (root/admin)" },
@@ -243,9 +241,7 @@ export class NestfileHoverProvider implements vscode.HoverProvider {
         // Handle logs:json and logs:txt
         const directiveBase = name.startsWith("logs")
           ? "logs"
-          : name === "else"
-            ? "else"
-            : name;
+          : name;
 
         const directive = DIRECTIVES.find(d =>
           d.name === directiveBase ||
