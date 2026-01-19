@@ -278,7 +278,7 @@
                                 },
                                 {
                                     "name": "keyword.control.flow.shell",
-                                    "match": "\\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in)\\b"
+                                    "match": "\\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function)\\b"
                                 },
                                 {
                                     "name": "support.function.builtin.shell",

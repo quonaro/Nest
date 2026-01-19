@@ -73,6 +73,8 @@ export function validateNestfileDocument(
   }
 
   const stack: StackItem[] = [];
+  let inScriptBlock = false;
+  let scriptBlockBaseIndent = 0;
 
   const getIndent = (line: string): number => {
     let spaces = 0;
@@ -105,6 +107,16 @@ export function validateNestfileDocument(
     }
 
     const indent = getIndent(rawLine);
+
+    // Skip validation for lines inside a script block
+    if (inScriptBlock) {
+      if (indent > scriptBlockBaseIndent) {
+        continue;
+      } else {
+        // Block ended (indentation dropped back to base level or less)
+        inScriptBlock = false;
+      }
+    }
 
     // Check for directives (must be checked before commands if they conflict, but directives are reserved)
     // We check if the line starts with a known directive name
@@ -263,7 +275,11 @@ export function validateNestfileDocument(
       if (multilineDirectives.has(directiveBase)) {
         const baseIndentSpaces = rawLine.match(/^(\s*)/)?.[1]?.length || 0;
 
-        if (value === "|") {
+        if (value === "|" || value.startsWith("| #")) {
+          // Enter script block mode
+          inScriptBlock = true;
+          scriptBlockBaseIndent = indent;
+
           // Check if the multiline block is empty
           let hasContent = false;
           const expectedIndentSpaces = baseIndentSpaces + 4; // One level deeper (4 spaces)
