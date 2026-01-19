@@ -24,8 +24,8 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
         "bool" => {
             // Bool should already be handled by clap flags, but validate anyway
             let lower = value.to_lowercase();
-            if lower == "true" || lower == "false" || lower == "1" || lower == "0" {
-                Ok(lower)
+            if lower == "true" || lower == "false" || lower == "1" || lower == "0" || value.starts_with("--") {
+                Ok(value.to_string())
             } else {
                 Err(format!(
                     "Invalid boolean value '{}' for parameter '{}'. Expected 'true' or 'false'.",
