@@ -757,17 +757,7 @@ function validateCommandTree(
     );
   }
 
-  if (hasScript && cmd.children.length > 0) {
-    diagnostics.push(
-      createDiagnostic(
-        cmd.line,
-        0,
-        lines[cmd.line]?.length ?? 0,
-        `Group command "${cmd.name}" has a script directive. Group commands typically do not need scripts.`,
-        vscode.DiagnosticSeverity.Information
-      )
-    );
-  }
+
 
   for (const child of cmd.children) {
     validateCommandTree(child, diagnostics, lines);
