@@ -213,6 +213,10 @@
                         "1": {
                             "patterns": [
                                 {
+                                    "match": "#.*$",
+                                    "name": "comment.line.number-sign.shell"
+                                },
+                                {
                                     "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
                                     "name": "entity.name.function.nestfile"
                                 },
@@ -278,7 +282,7 @@
                                 },
                                 {
                                     "name": "keyword.control.flow.shell",
-                                    "match": "\\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function)\\b"
+                                    "match": "\\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in)\\b"
                                 },
                                 {
                                     "name": "support.function.builtin.shell",
