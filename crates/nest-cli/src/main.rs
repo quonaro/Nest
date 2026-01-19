@@ -39,7 +39,7 @@ fn main() {
             #[cfg(unix)]
                 let _ = std::process::Command::new("kill")
                     .arg("-TERM")
-                    .arg(format!("-{}", pid))
+                    .arg(format!("{}", pid))
                     .output();
             #[cfg(windows)]
             {

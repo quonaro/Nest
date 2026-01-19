@@ -8,8 +8,7 @@ use super::ast::Command;
 use std::collections::HashMap;
 use std::process::{Command as ProcessCommand, Stdio};
 use std::env;
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
+
 
 /// Executes shell scripts for commands.
 ///
@@ -133,9 +132,6 @@ impl CommandExecutor {
             cmd.current_dir(cwd_path);
         }
 
-        #[cfg(unix)]
-        cmd.process_group(0);
-
         // Set environment variables from directives
         for (key, value) in env_vars {
             cmd.env(key, value);
@@ -147,11 +143,12 @@ impl CommandExecutor {
             cmd.env(key, value);
         }
 
-        // Capture output for error reporting
-        cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::piped());
+        // Inherit stdin/stdout/stderr to allow interactive commands
+        cmd.stdin(Stdio::inherit());
+        cmd.stdout(Stdio::inherit());
+        cmd.stderr(Stdio::inherit());
 
-        let child = cmd
+        let mut child = cmd
             .spawn()
             .map_err(|e| format!("Failed to start script execution: {}", e))?;
 
@@ -159,15 +156,16 @@ impl CommandExecutor {
             callback(child.id());
         }
 
-        let output = child
-            .wait_with_output()
+        // Wait for command to finish
+        let status = child
+            .wait()
             .map_err(|e| format!("Failed to wait for script execution: {}", e))?;
 
-        if !output.status.success() {
-            let exit_code = output.status.code().unwrap_or(-1);
-            let stderr_str = String::from_utf8_lossy(&output.stderr);
-
+        if !status.success() {
+            let exit_code = status.code().unwrap_or(-1);
+            
             // Build beautiful formatted error message
+            // Note: we don't have the stderr output since it was inherited directly to terminal
             let error_msg = format_error_message(
                 command,
                 command_path,
@@ -175,18 +173,10 @@ impl CommandExecutor {
                 cwd,
                 script,
                 exit_code,
-                &stderr_str,
+                "(See output above)",
             );
 
             return Err(error_msg);
-        }
-
-        // Print stdout and stderr only on success
-        if !output.stdout.is_empty() {
-            print!("{}", String::from_utf8_lossy(&output.stdout));
-        }
-        if !output.stderr.is_empty() {
-            eprint!("{}", String::from_utf8_lossy(&output.stderr));
         }
 
         Ok(())
