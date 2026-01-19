@@ -35,17 +35,20 @@ fn main() {
     let _ = ctrlc::set_handler(move || {
         let pid = CHILD_PID.load(Ordering::SeqCst);
         if pid != 0 {
-            // Try to kill the child process
+            // Try to kill the child process group (if it exists)
             #[cfg(unix)]
-                let _ = std::process::Command::new("kill")
+            {
+                 // We don't wait for output here to avoid hanging the signal handler
+                 let _ = std::process::Command::new("kill")
                     .arg("-TERM")
                     .arg(format!("{}", pid))
-                    .output();
+                    .spawn();
+            }
             #[cfg(windows)]
             {
                 let _ = std::process::Command::new("taskkill")
                     .args(&["/F", "/PID", &pid.to_string()])
-                    .output();
+                    .spawn();
             }
         }
         std::process::exit(130);
@@ -234,8 +237,6 @@ fn main() {
                 if let Ok(_) = completion_manager.generate_all_completions(&mut cli, &config_path) {
                      if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {}
                 }
-            } else {
-                 if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {}
             }
         }
     }

@@ -1509,8 +1509,7 @@ impl CliGenerator {
         pid_callback: Option<&(dyn Fn(u32) + Send + Sync)>,
     ) -> Result<(), String> {
         use std::process::{Command as ProcessCommand, Stdio};
-        #[cfg(unix)]
-        use std::os::unix::process::CommandExt;
+
 
         // Trim only leading/trailing whitespace to avoid issues, but preserve internal structure
         let script_to_execute = script.trim();
@@ -1527,9 +1526,6 @@ impl CliGenerator {
             cmd.current_dir(cwd_path);
         }
 
-        #[cfg(unix)]
-        cmd.process_group(0);
-
         // Set environment variables
         for (key, value) in env_vars {
             cmd.env(key, value);
@@ -1543,9 +1539,11 @@ impl CliGenerator {
 
         // Capture output - hide if requested
         if hide_output {
+            cmd.stdin(Stdio::null());
             cmd.stdout(Stdio::null());
             cmd.stderr(Stdio::null());
         } else {
+            cmd.stdin(Stdio::inherit());
             cmd.stdout(Stdio::inherit());
             cmd.stderr(Stdio::inherit());
         }
