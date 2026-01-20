@@ -74,6 +74,18 @@ export function validateNestfileDocument(
 
   const stack: StackItem[] = [];
 
+  const getIndentSize = (lines: string[]): number => {
+    for (const line of lines) {
+      const match = line.match(/^(\s+)/);
+      if (match && !line.trim().startsWith("#")) {
+        return match[1].length;
+      }
+    }
+    return 4; // Default
+  };
+
+  const indentSize = getIndentSize(lines);
+
   const getIndent = (line: string): number => {
     let spaces = 0;
     for (const ch of line) {
@@ -83,7 +95,7 @@ export function validateNestfileDocument(
         break;
       }
     }
-    return Math.floor(spaces / 4);
+    return Math.floor(spaces / indentSize);
   };
 
   const currentParent = (indent: number): NestfileCommand | null => {
@@ -118,7 +130,12 @@ export function validateNestfileDocument(
       const directiveBase = dotIndex !== -1 ? name.substring(0, dotIndex) : name;
 
       if (VALID_DIRECTIVES.has(directiveBase)) {
-        isDirective = true;
+        // Special case: "logs" can be a command name too.
+        // If it looks like a command e.g. "logs(*):" or "logs:", it's NOT a directive.
+        const isCommandSyntax = trimmed.match(/^([A-Za-z0-9_]+)\s*(\(.*\))?\s*:\s*$/);
+        if (!isCommandSyntax) {
+          isDirective = true;
+        }
       }
     }
 
@@ -266,7 +283,7 @@ export function validateNestfileDocument(
         if (value === "|") {
           // Check if the multiline block is empty
           let hasContent = false;
-          const expectedIndentSpaces = baseIndentSpaces + 4; // One level deeper (4 spaces)
+          const expectedIndentSpaces = baseIndentSpaces + indentSize; // One level deeper
 
           // Look ahead to find content in the multiline block
           for (let j = i + 1; j < lines.length; j++) {
@@ -311,7 +328,7 @@ export function validateNestfileDocument(
             const nextLine = lines[i + 1];
             const nextTrimmed = nextLine.trim();
             const nextIndentSpaces = nextLine.match(/^(\s*)/)?.[1]?.length || 0;
-            const expectedIndentSpaces = baseIndentSpaces + 4; // One level deeper (4 spaces)
+            const expectedIndentSpaces = baseIndentSpaces + indentSize; // One level deeper
 
             // If next line has greater indent and is not empty/comment/directive, it looks like multiline without |
             if (nextIndentSpaces >= expectedIndentSpaces &&
@@ -424,13 +441,13 @@ export function validateNestfileDocument(
         );
       }
     } else if (trimmed.startsWith("function ")) {
-      if (!trimmed.includes(":")) {
+      if (!trimmed.includes(":") && !trimmed.includes("{")) {
         diagnostics.push(
           createDiagnostic(
             lineNumber,
             0,
             rawLine.length,
-            "Invalid function definition. Expected format: function name(params):",
+            "Invalid function definition. Expected format: function name(params): or function name(params) {",
             vscode.DiagnosticSeverity.Error
           )
         );
@@ -758,15 +775,18 @@ function validateCommandTree(
   }
 
   if (hasScript && cmd.children.length > 0) {
-    diagnostics.push(
-      createDiagnostic(
-        cmd.line,
-        0,
-        lines[cmd.line]?.length ?? 0,
-        `Group command "${cmd.name}" has a script directive. Group commands typically do not need scripts.`,
-        vscode.DiagnosticSeverity.Information
-      )
-    );
+    // Only warn if there are NO parameters. If there are parameters, it's often used as a template or custom logic group.
+    if (cmd.parameters.length === 0) {
+      diagnostics.push(
+        createDiagnostic(
+          cmd.line,
+          0,
+          lines[cmd.line]?.length ?? 0,
+          `Group command "${cmd.name}" has a script directive. Group commands typically do not need scripts.`,
+          vscode.DiagnosticSeverity.Information
+        )
+      );
+    }
   }
 
   for (const child of cmd.children) {
