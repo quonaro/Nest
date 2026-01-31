@@ -1243,6 +1243,10 @@ impl Parser {
                 let value = self.parse_value(value_str)?.to_string();
                 Ok(Directive::Desc(value))
             }
+            "cwd" => {
+                let value = self.parse_value(value_str)?.to_string();
+                Ok(Directive::Cwd(value))
+            }
             "script" => {
                 let script = if value_str == "|" {
                     self.parse_multiline_block(indent)?
