@@ -12,6 +12,9 @@ pub mod cli;
 pub mod codegen;
 pub mod command_handler;
 pub mod completion;
+pub mod directives;
+pub mod runtime_validator;
+
 pub mod standard_commands;
 
 pub mod display;

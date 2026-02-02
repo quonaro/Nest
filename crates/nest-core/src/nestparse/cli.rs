@@ -445,6 +445,7 @@ impl CliGenerator {
             Value::Bool(b) => Some(b.to_string()),
             Value::Number(n) => Some(n.to_string()),
             Value::Array(a) => Some(a.join(" ")),
+            Value::Dynamic(s) => Some(format!("$({})", s)),
         }
     }
 

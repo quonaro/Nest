@@ -18,6 +18,8 @@ pub enum Value {
     Number(f64),
     /// An array of string values
     Array(Vec<String>),
+    /// A dynamic value that needs execution (e.g., $(command))
+    Dynamic(String),
 }
 
 impl fmt::Display for Value {
@@ -27,6 +29,19 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::Array(a) => write!(f, "[{}]", a.join(", ")),
+            Value::Dynamic(s) => write!(f, "$({})", s),
+        }
+    }
+}
+
+impl Value {
+    pub fn to_string_unquoted(&self) -> String {
+        match self {
+            Value::String(s) => s.clone(),
+            Value::Bool(b) => b.to_string(),
+            Value::Number(n) => n.to_string(),
+            Value::Array(a) => a.join(" "),
+            Value::Dynamic(s) => format!("$({})", s),
         }
     }
 }
@@ -142,7 +157,7 @@ pub struct Variable {
     /// The variable name
     pub name: String,
     /// The variable value
-    pub value: String,
+    pub value: Value,
 }
 
 /// Represents a constant that cannot be redefined.
@@ -151,7 +166,7 @@ pub struct Constant {
     /// The constant name
     pub name: String,
     /// The constant value
-    pub value: String,
+    pub value: Value,
 }
 
 /// Represents a function that can be reused in scripts.

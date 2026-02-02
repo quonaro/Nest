@@ -63,10 +63,10 @@ impl EnvironmentManager {
         constants: &[super::ast::Constant],
     ) {
         for var in variables {
-            env_vars.insert(var.name.clone(), var.value.clone());
+            env_vars.insert(var.name.clone(), var.value.to_string_unquoted());
         }
         for constant in constants {
-            env_vars.insert(constant.name.clone(), constant.value.clone());
+            env_vars.insert(constant.name.clone(), constant.value.to_string_unquoted());
         }
     }
 

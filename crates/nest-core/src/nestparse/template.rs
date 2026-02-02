@@ -26,6 +26,15 @@ pub struct TemplateContext<'a> {
     pub parent_constants: &'a [Constant],
 }
 
+/// Trait for resolving function calls in templates.
+pub trait FunctionResolver {
+    fn resolve(
+        &self,
+        func_name: &str,
+        args: &HashMap<String, String>,
+    ) -> Result<Option<String>, String>;
+}
+
 /// Processes templates by replacing placeholders with actual values.
 ///
 /// This is a utility struct with static methods for template processing.
@@ -93,32 +102,32 @@ impl TemplateProcessor {
 
         // 1. Add global constants first (lowest priority for constants)
         for constant in context.global_constants {
-            var_map.insert(constant.name.clone(), constant.value.clone());
+            var_map.insert(constant.name.clone(), constant.value.to_string_unquoted());
         }
 
         // 2. Add global variables (can override global constants)
         for variable in context.global_variables {
-            var_map.insert(variable.name.clone(), variable.value.clone());
+            var_map.insert(variable.name.clone(), variable.value.to_string_unquoted());
         }
 
         // 3. Add parent constants (override global constants/variables)
         for constant in context.parent_constants {
-            var_map.insert(constant.name.clone(), constant.value.clone());
+            var_map.insert(constant.name.clone(), constant.value.to_string_unquoted());
         }
 
         // 4. Add parent variables (override parent constants and global variables)
         for variable in context.parent_variables {
-            var_map.insert(variable.name.clone(), variable.value.clone());
+            var_map.insert(variable.name.clone(), variable.value.to_string_unquoted());
         }
 
         // 5. Add local constants (override parent and global constants/variables)
         for constant in context.local_constants {
-            var_map.insert(constant.name.clone(), constant.value.clone());
+            var_map.insert(constant.name.clone(), constant.value.to_string_unquoted());
         }
 
         // 6. Add local variables (highest priority for variables, override everything)
         for variable in context.local_variables {
-            var_map.insert(variable.name.clone(), variable.value.clone());
+            var_map.insert(variable.name.clone(), variable.value.to_string_unquoted());
         }
 
         // Build combined map for all replacements (args + parent_args)
@@ -329,7 +338,7 @@ impl TemplateProcessor {
 
     /// Parses rep modifier in format "from"=>"to".
     /// Returns Some((from, to)) if successful, None otherwise.
-    fn parse_rep_modifier(modifier: &str) -> Option<(String, String)> {
+    pub fn parse_rep_modifier(modifier: &str) -> Option<(String, String)> {
         // Look for => separator
         if let Some(arrow_pos) = modifier.find("=>") {
             let from_part = modifier[..arrow_pos].trim();
@@ -342,5 +351,76 @@ impl TemplateProcessor {
         } else {
             None
         }
+    }
+
+    /// Processes function calls in templates like {{ func() }} or {{ func(arg="value") }}.
+    ///
+    /// # Arguments
+    ///
+    /// * `script` - The script containing template function calls
+    /// * `resolver` - Function resolver implementation
+    pub fn process_function_calls<R: FunctionResolver>(
+        script: &str,
+        resolver: &R,
+    ) -> Result<String, String> {
+        let mut result = String::with_capacity(script.len());
+        let mut chars = script.chars().peekable();
+        let mut buffer = String::new();
+
+        while let Some(ch) = chars.next() {
+            if ch == '{' {
+                // Check if it's {{ (double curly brace)
+                if let Some(&'{') = chars.peek() {
+                    chars.next(); // consume second '{'
+                    buffer.clear();
+
+                    // Collect content until }}
+                    let mut found_close = false;
+                    while let Some(ch) = chars.next() {
+                        if ch == '}' {
+                            if let Some(&'}') = chars.peek() {
+                                chars.next(); // consume second '}'
+                                found_close = true;
+                                break;
+                            } else {
+                                buffer.push(ch);
+                            }
+                        } else {
+                            buffer.push(ch);
+                        }
+                    }
+
+                    if found_close {
+                        let template_expr = buffer.trim();
+
+                        // Check if it's a function call (contains parentheses)
+                        if template_expr.contains('(') && template_expr.contains(')') {
+                            // Try to parse as function call
+                            if let Some((func_name, func_args)) =
+                                super::executor::CommandExecutor::parse_command_call(template_expr)
+                            {
+                                // Resolve and execute function via resolver
+                                let return_value = resolver.resolve(&func_name, &func_args)?;
+
+                                // Replace template with return value
+                                let replacement = return_value.unwrap_or_else(String::new);
+                                result.push_str(&replacement);
+                                continue;
+                            }
+                        }
+
+                        // Not a function call or function not found - keep original template
+                        result.push_str("{{");
+                        result.push_str(template_expr);
+                        result.push_str("}}");
+                        continue;
+                    }
+                }
+            }
+
+            result.push(ch);
+        }
+
+        Ok(result)
     }
 }

@@ -3,10 +3,13 @@
 //! This module handles the execution phase of the CLI, separating it from
 //! the build/generation phase.
 
-use super::ast::{Command, Constant, Directive, Function, Variable};
+use super::ast::{Command, Constant, Function, Variable};
+use super::directives::DirectiveResolver;
 use super::env::EnvironmentManager;
-use super::template::{TemplateContext, TemplateProcessor};
+use super::runtime_validator::RuntimeValidator;
+use super::template::{FunctionResolver, TemplateContext, TemplateProcessor};
 use crate::constants::{DEFAULT_SUBCOMMAND, ENV_NEST_CALL_STACK};
+
 use std::collections::HashMap;
 
 /// Context for script execution within the Runtime.
@@ -47,6 +50,43 @@ pub struct Runtime {
     pid_callback: Option<Box<dyn Fn(u32) + Send + Sync>>,
 }
 
+/// Internal helper for resolving function calls during template processing.
+struct RuntimeFunctionResolver<'a> {
+    runtime: &'a Runtime,
+    context: &'a ScriptExecutionContext<'a>,
+}
+
+impl<'a> FunctionResolver for RuntimeFunctionResolver<'a> {
+    fn resolve(
+        &self,
+        func_name: &str,
+        args: &HashMap<String, String>,
+    ) -> Result<Option<String>, String> {
+        // Resolve function from the runtime
+        if let Some(func) = self.runtime.find_function(func_name) {
+            // Functions called from templates use the current context's environment
+            // but their own arguments.
+            let mut merged_env = self.context.env_vars.clone();
+            use std::env;
+            for (key, value) in env::vars() {
+                merged_env.insert(key, value);
+            }
+
+            let func_context = ScriptExecutionContext {
+                args,
+                env_vars: &merged_env,
+                ..*self.context
+            };
+
+            self.runtime.execute_function(func, &func_context)
+        } else {
+            // Function not found - returning Ok(None) allows TemplateProcessor
+            // to keep the original {{ func() }} tag if it wasn't a valid function call.
+            Ok(None)
+        }
+    }
+}
+
 impl Runtime {
     pub fn new(
         commands: Vec<Command>,
@@ -64,330 +104,14 @@ impl Runtime {
         }
     }
 
-    /// Checks if the directive's OS requirement matches the current system.
-    fn check_os_match(os: &Option<String>) -> bool {
-        match os {
-            Some(required_os) => {
-                let current_os = std::env::consts::OS;
-                if required_os.eq_ignore_ascii_case(current_os) {
-                    return true;
-                }
-                if required_os.eq_ignore_ascii_case("unix") && cfg!(unix) {
-                    return true;
-                }
-                if required_os.eq_ignore_ascii_case("bsd") && current_os.contains("bsd") {
-                    return true;
-                }
-                false
-            }
-            None => true,
-        }
-    }
-
-    fn get_directive_value(directives: &[Directive], name: &str) -> Option<String> {
-        let mut best_match: Option<String> = None;
-        let mut best_score = 0;
-
-        for d in directives {
-            let (val, os, target_name) = match d {
-                Directive::Desc(s) => (Some(s.clone()), &None, "desc"),
-                Directive::Cwd(s) => (Some(s.clone()), &None, "cwd"),
-                Directive::Env(k, v, _) => (Some(format!("{}={}", k, v)), &None, "env"),
-                Directive::EnvFile(s, _) => (Some(s.clone()), &None, "env"),
-
-                Directive::Script(s, os, _) => (Some(s.clone()), os, "script"),
-                Directive::Before(s, os, _) => (Some(s.clone()), os, "before"),
-                Directive::After(s, os, _) => (Some(s.clone()), os, "after"),
-                Directive::Fallback(s, os, _) => (Some(s.clone()), os, "fallback"),
-                Directive::Finally(s, os, _) => (Some(s.clone()), os, "finally"),
-                Directive::Validate(_, _) => (None, &None, "validate"), // validation handled separately
-                _ => (None, &None, ""),
-            };
-
-            if target_name == name && Self::check_os_match(os) {
-                let score = if os.is_some() { 2 } else { 1 };
-                if score > best_score {
-                    best_score = score;
-                    best_match = val;
-                }
-            }
-        }
-        best_match
-    }
-
-    /// Gets directive value and checks if output should be hidden.
-    /// Returns (value, hide_output) tuple.
-    fn get_directive_value_with_hide(
-        directives: &[Directive],
-        name: &str,
-    ) -> Option<(String, bool)> {
-        let mut best_match: Option<(String, bool)> = None;
-        let mut best_score = 0;
-
-        for d in directives {
-            let (val, os, hide, target_name) = match d {
-                Directive::Env(k, v, hide) => (Some(format!("{}={}", k, v)), &None, *hide, "env"),
-                Directive::EnvFile(s, hide) => (Some(s.clone()), &None, *hide, "env"),
-
-                Directive::Script(s, os, hide) => (Some(s.clone()), os, *hide, "script"),
-                Directive::Before(s, os, hide) => (Some(s.clone()), os, *hide, "before"),
-                Directive::After(s, os, hide) => (Some(s.clone()), os, *hide, "after"),
-                Directive::Fallback(s, os, hide) => (Some(s.clone()), os, *hide, "fallback"),
-                Directive::Finally(s, os, hide) => (Some(s.clone()), os, *hide, "finally"),
-                _ => (None, &None, false, ""),
-            };
-
-            if target_name == name && Self::check_os_match(os) {
-                let score = if os.is_some() { 2 } else { 1 };
-                if score > best_score {
-                    best_score = score;
-                    // Unwrap is safe because we checked val is Some in match arms if target_name matches
-                    if let Some(v) = val {
-                        best_match = Some((v, hide));
-                    }
-                }
-            }
-        }
-        best_match
-    }
-
-    fn get_depends_directive(directives: &[Directive]) -> (Vec<super::ast::Dependency>, bool) {
-        directives
-            .iter()
-            .find_map(|d| match d {
-                Directive::Depends(deps, parallel) => Some((deps.clone(), *parallel)),
-                _ => None,
-            })
-            .unwrap_or((Vec::new(), false))
-    }
-
-    pub fn get_privileged_directive(directives: &[Directive]) -> bool {
-        directives
-            .iter()
-            .find_map(|d| match d {
-                Directive::Privileged(value) => Some(*value),
-                _ => None,
-            })
-            .unwrap_or(false)
-    }
-
-    fn get_require_confirm_directive(directives: &[Directive]) -> Option<String> {
-        directives.iter().find_map(|d| match d {
-            Directive::RequireConfirm(message) => Some(message.clone()),
-            _ => None,
-        })
-    }
-
-    fn get_logs_directive(directives: &[Directive]) -> Option<(String, String)> {
-        directives.iter().find_map(|d| match d {
-            Directive::Logs(path, format) => Some((path.clone(), format.clone())),
-            _ => None,
-        })
-    }
-
-    fn get_validate_directives(directives: &[Directive]) -> Vec<(String, String)> {
-        directives
-            .iter()
-            .filter_map(|d| match d {
-                Directive::Validate(target, rule) => Some((target.clone(), rule.clone())),
-                _ => None,
-            })
-            .collect()
-    }
+    // / Checks if directives are valid
+    // removed directive getters in favor of DirectiveResolver
 
     // Insert execute_script, execute_command, etc. next
 }
 impl Runtime {
-    /// Validates command parameters according to validation directives.
-    ///
-    /// Supports format: "param_name matches /regex/"
-    ///
-    /// # Arguments
-    ///
-    /// * `validate_directives` - List of validation rules
-    /// * `args` - Arguments to validate
-    /// * `command_path` - Command path for error messages
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if all validations pass,
-    /// `Err(message)` if validation fails.
-    fn validate_parameters(
-        &self,
-        validate_directives: &[(String, String)],
-        args: &HashMap<String, String>,
-        env_vars: &HashMap<String, String>,
-        tpl_context: &TemplateContext,
-        command_path: &[String],
-        parent_args: &HashMap<String, String>,
-    ) -> Result<(), String> {
-        use regex::Regex;
-
-        for (param_name, rule) in validate_directives {
-            // Process templates in the pattern part (allows dynamic rules)
-            let processed_pattern =
-                TemplateProcessor::process(rule, args, tpl_context, parent_args);
-            let pattern_part = processed_pattern.trim();
-
-            // Determine the target value (either from args or environment)
-            let target_value_result = if let Some(env_name) = param_name.strip_prefix('$') {
-                // Check in Nest-defined session env vars first, then system env,
-                // and finally in Nest variables (since root-level 'env' directives are stored as variables)
-                env_vars
-                    .get(env_name)
-                    .cloned()
-                    .or_else(|| std::env::var(env_name).ok())
-                    .or_else(|| {
-                        tpl_context
-                            .parent_variables
-                            .iter()
-                            .find(|v| v.name == env_name)
-                            .map(|v| v.value.clone())
-                    })
-                    .or_else(|| {
-                        tpl_context
-                            .global_variables
-                            .iter()
-                            .find(|v| v.name == env_name)
-                            .map(|v| v.value.clone())
-                    })
-            } else {
-                args.get(param_name).cloned()
-            };
-
-            let target_value = target_value_result.ok_or_else(|| {
-                format!(
-                    "Validation error: target '{}' not found in arguments or environment",
-                    param_name
-                )
-            })?;
-
-            // Check if it's a membership validation (in ["a", "b"])
-            if let Some(list_part) = pattern_part.strip_prefix("in ") {
-                let list_part = list_part.trim();
-                if (list_part.starts_with('[') && list_part.ends_with(']'))
-                    || (list_part.starts_with('(') && list_part.ends_with(')'))
-                {
-                    let content = &list_part[1..list_part.len() - 1];
-                    let allowed_values: Vec<String> = content
-                        .split(',')
-                        .map(|s| {
-                            let s = s.trim();
-                            if (s.starts_with('"') && s.ends_with('"'))
-                                || (s.starts_with('\'') && s.ends_with('\''))
-                            {
-                                s[1..s.len() - 1].to_string()
-                            } else {
-                                s.to_string()
-                            }
-                        })
-                        .filter(|s| !s.is_empty())
-                        .collect();
-
-                    if !allowed_values.contains(&target_value) {
-                        let command_str = command_path.join(" ");
-                        return Err(format!(
-                            "❌ Validation error in command 'nest {}':\n   Target '{}' with value '{}' is not in allowed list: [{}]",
-                            command_str,
-                            param_name,
-                            target_value,
-                            allowed_values.join(", ")
-                        ));
-                    }
-                    continue; // Validation passed for this directive
-                }
-            }
-
-            // Extract regex pattern from /pattern/ or /pattern/flags
-            let pattern = if pattern_part.starts_with('/') && pattern_part.len() > 1 {
-                // Find closing /
-                let mut end_pos = None;
-                let mut escaped = false;
-                for (i, ch) in pattern_part[1..].char_indices() {
-                    if escaped {
-                        escaped = false;
-                        continue;
-                    }
-                    if ch == '\\' {
-                        escaped = true;
-                        continue;
-                    }
-                    if ch == '/' {
-                        end_pos = Some(i + 1);
-                        break;
-                    }
-                }
-
-                if let Some(end) = end_pos {
-                    // Extract pattern (without leading /)
-                    let pattern_str = &pattern_part[1..end - 1];
-                    // Unescape the pattern
-                    let unescaped = pattern_str.replace("\\/", "/");
-
-                    // Check for flags after closing /
-                    let flags = pattern_part[end..].trim();
-                    let regex = if flags.is_empty() {
-                        Regex::new(&unescaped)
-                    } else {
-                        // Parse flags (e.g., "i" for case-insensitive)
-                        let mut regex_builder = regex::RegexBuilder::new(&unescaped);
-                        if flags.contains('i') {
-                            regex_builder.case_insensitive(true);
-                        }
-                        regex_builder.build()
-                    };
-
-                    match regex {
-                        Ok(re) => re,
-                        Err(e) => {
-                            return Err(format!(
-                                "Invalid regex pattern in validation rule for '{}': '{}'. Error: {}",
-                                param_name, pattern_part, e
-                            ));
-                        }
-                    }
-                } else {
-                    // No closing slash found - treat whole string as regex
-                    match Regex::new(pattern_part) {
-                        Ok(re) => re,
-                        Err(e) => {
-                            return Err(format!(
-                                "Invalid regex pattern: {}. Error: {}",
-                                pattern_part, e
-                            ))
-                        }
-                    }
-                }
-            } else {
-                // simple pattern, try to compile as is
-                match Regex::new(pattern_part) {
-                    Ok(re) => re,
-                    Err(e) => {
-                        return Err(format!(
-                            "Invalid regex pattern: {}. Error: {}",
-                            pattern_part, e
-                        ))
-                    }
-                }
-            };
-
-            // Validate
-            if !pattern.is_match(&target_value) {
-                let command_str = command_path.join(" ");
-                let target_type = if param_name.starts_with('$') {
-                    "Environment variable"
-                } else {
-                    "Parameter"
-                };
-                return Err(format!(
-                    "❌ Validation error in command 'nest {}':\n   {} '{}' with value '{}' does not match pattern '{}'",
-                    command_str, target_type, param_name, target_value, pattern_part
-                ));
-            }
-        }
-
-        Ok(())
-    }
+    // / Validates command parameters according to validation directives.
+    // Logic moved to RuntimeValidator
 
     /// Executes a script with the given environment and working directory.
     ///
@@ -694,82 +418,11 @@ impl Runtime {
         script: &str,
         context: &ScriptExecutionContext,
     ) -> Result<String, String> {
-        let mut merged_env = context.env_vars.clone();
-        use std::env;
-        for (key, value) in env::vars() {
-            merged_env.insert(key, value);
-        }
-
-        let mut result = String::with_capacity(script.len());
-        let mut chars = script.chars().peekable();
-        let mut buffer = String::new();
-
-        while let Some(ch) = chars.next() {
-            if ch == '{' {
-                // Check if it's {{ (double curly brace)
-                if let Some(&'{') = chars.peek() {
-                    chars.next(); // consume second '{'
-                    buffer.clear();
-
-                    // Collect content until }}
-                    let mut found_close = false;
-                    while let Some(ch) = chars.next() {
-                        if ch == '}' {
-                            if let Some(&'}') = chars.peek() {
-                                chars.next(); // consume second '}'
-                                found_close = true;
-                                break;
-                            } else {
-                                buffer.push(ch);
-                            }
-                        } else {
-                            buffer.push(ch);
-                        }
-                    }
-
-                    if found_close {
-                        let template_expr = buffer.trim();
-
-                        // Check if it's a function call (contains parentheses)
-                        if template_expr.contains('(') && template_expr.contains(')') {
-                            // Try to parse as function call
-                            if let Some((func_name, func_args)) =
-                                super::executor::CommandExecutor::parse_command_call(template_expr)
-                            {
-                                // Check if it's a function (no colons, exists in functions list)
-                                if !func_name.contains(':') {
-                                    if let Some(func) = self.find_function(&func_name) {
-                                        // Execute function
-                                        let func_context = ScriptExecutionContext {
-                                            args: &func_args,
-                                            env_vars: &merged_env,
-                                            ..*context
-                                        };
-                                        let return_value =
-                                            self.execute_function(func, &func_context)?;
-
-                                        // Replace template with return value
-                                        let replacement = return_value.unwrap_or_else(String::new);
-                                        result.push_str(&replacement);
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-
-                        // Not a function call or function not found - keep original template
-                        result.push_str("{{");
-                        result.push_str(template_expr);
-                        result.push_str("}}");
-                        continue;
-                    }
-                }
-            }
-
-            result.push(ch);
-        }
-
-        Ok(result)
+        let resolver = RuntimeFunctionResolver {
+            runtime: self,
+            context,
+        };
+        TemplateProcessor::process_function_calls(script, &resolver)
     }
 
     /// Finds a command by its path.
@@ -836,26 +489,26 @@ impl Runtime {
         for name in command_path.iter().take(command_path.len() - 1) {
             if let Some(cmd) = current.iter().find(|c| &c.name == name) {
                 // Collect inheritable directives from this parent command
-                if let Some(cwd) = Self::get_directive_value(&cmd.directives, "cwd") {
+                if let Some(cwd) = DirectiveResolver::get_directive_value(&cmd.directives, "cwd") {
                     parent_directives.insert("cwd".to_string(), (cwd, false));
                 }
                 if let Some((after, hide_after)) =
-                    Self::get_directive_value_with_hide(&cmd.directives, "after")
+                    DirectiveResolver::get_directive_value_with_hide(&cmd.directives, "after")
                 {
                     parent_directives.insert("after".to_string(), (after, hide_after));
                 }
                 if let Some((before, hide_before)) =
-                    Self::get_directive_value_with_hide(&cmd.directives, "before")
+                    DirectiveResolver::get_directive_value_with_hide(&cmd.directives, "before")
                 {
                     parent_directives.insert("before".to_string(), (before, hide_before));
                 }
                 if let Some((fallback, hide_fallback)) =
-                    Self::get_directive_value_with_hide(&cmd.directives, "fallback")
+                    DirectiveResolver::get_directive_value_with_hide(&cmd.directives, "fallback")
                 {
                     parent_directives.insert("fallback".to_string(), (fallback, hide_fallback));
                 }
                 if let Some((finally, hide_finally)) =
-                    Self::get_directive_value_with_hide(&cmd.directives, "finally")
+                    DirectiveResolver::get_directive_value_with_hide(&cmd.directives, "finally")
                 {
                     parent_directives.insert("finally".to_string(), (finally, hide_finally));
                 }
@@ -942,17 +595,17 @@ impl Runtime {
 
         // Add global constants
         for constant in &self.constants {
-            var_map.insert(constant.name.clone(), constant.value.clone());
+            var_map.insert(constant.name.clone(), constant.value.to_string_unquoted());
         }
 
         // Add global variables
         for variable in &self.variables {
-            var_map.insert(variable.name.clone(), variable.value.clone());
+            var_map.insert(variable.name.clone(), variable.value.to_string_unquoted());
         }
 
         // Add function local variables (override global)
         for variable in &function.local_variables {
-            var_map.insert(variable.name.clone(), variable.value.clone());
+            var_map.insert(variable.name.clone(), variable.value.to_string_unquoted());
         }
 
         // Process function body with template substitution
@@ -1288,7 +941,7 @@ impl Runtime {
         }
 
         // Validate parameters
-        let validate_directives = Self::get_validate_directives(&command.directives);
+        let validate_directives = DirectiveResolver::get_validate_directives(&command.directives);
         if !validate_directives.is_empty() {
             let (parent_vars, parent_consts) =
                 self.collect_parent_variables(command_path_unwrapped);
@@ -1313,7 +966,7 @@ impl Runtime {
                 parent_constants: &parent_consts,
             };
 
-            self.validate_parameters(
+            RuntimeValidator::validate(
                 &validate_directives,
                 args,
                 &env_vars,
@@ -1324,7 +977,7 @@ impl Runtime {
         }
 
         // Execute dependencies first
-        let (depends, parallel) = Self::get_depends_directive(&command.directives);
+        let (depends, parallel) = DirectiveResolver::get_depends_directive(&command.directives);
         if !depends.is_empty() {
             if verbose {
                 use super::output::OutputFormatter;
@@ -1356,7 +1009,8 @@ impl Runtime {
 
         // Check if confirmation is required
         if !dry_run {
-            if let Some(confirm_message) = Self::get_require_confirm_directive(&command.directives)
+            if let Some(confirm_message) =
+                DirectiveResolver::get_require_confirm_directive(&command.directives)
             {
                 match super::input::prompt_confirmation(Some(&confirm_message), command_path) {
                     Ok(true) => {
@@ -1397,7 +1051,7 @@ impl Runtime {
             std::collections::HashMap::new()
         };
 
-        let cwd = Self::get_directive_value(&command.directives, "cwd")
+        let cwd = DirectiveResolver::get_directive_value(&command.directives, "cwd")
             .or_else(|| parent_directives.get("cwd").map(|(s, _)| s.clone()))
             .or_else(|| {
                 command
@@ -1406,8 +1060,8 @@ impl Runtime {
                     .and_then(|p| p.parent())
                     .map(|p| p.to_string_lossy().to_string())
             });
-        let privileged = Self::get_privileged_directive(&command.directives);
-        let logs = Self::get_logs_directive(&command.directives);
+        let privileged = DirectiveResolver::get_privileged_directive(&command.directives);
+        let logs = DirectiveResolver::get_logs_directive(&command.directives);
 
         let (parent_variables, parent_constants) = if let Some(path) = command_path {
             self.collect_parent_variables(path)
@@ -1482,8 +1136,9 @@ impl Runtime {
             hide_output: false,
         };
 
-        let before_info = Self::get_directive_value_with_hide(&command.directives, "before")
-            .or_else(|| parent_directives.get("before").cloned());
+        let before_info =
+            DirectiveResolver::get_directive_value_with_hide(&command.directives, "before")
+                .or_else(|| parent_directives.get("before").cloned());
         if let Some((before_script, hide_before)) = before_info {
             let processed_before =
                 TemplateProcessor::process(&before_script, args, &tpl_context, &merged_parent_args);
@@ -1500,7 +1155,7 @@ impl Runtime {
         }
 
         let (script, hide_script) =
-            Self::get_directive_value_with_hide(&command.directives, "script")
+            DirectiveResolver::get_directive_value_with_hide(&command.directives, "script")
                 .ok_or_else(|| "Command has no script directive".to_string())?;
 
         let processed_script =
@@ -1556,8 +1211,9 @@ impl Runtime {
 
         let result = match main_result {
             Ok(()) => {
-                let after_info = Self::get_directive_value_with_hide(&command.directives, "after")
-                    .or_else(|| parent_directives.get("after").cloned());
+                let after_info =
+                    DirectiveResolver::get_directive_value_with_hide(&command.directives, "after")
+                        .or_else(|| parent_directives.get("after").cloned());
                 if let Some((after_script, hide_after)) = after_info {
                     let processed_after = TemplateProcessor::process(
                         &after_script,
@@ -1579,9 +1235,11 @@ impl Runtime {
                 Ok(())
             }
             Err(error_msg) => {
-                let fallback_info =
-                    Self::get_directive_value_with_hide(&command.directives, "fallback")
-                        .or_else(|| parent_directives.get("fallback").cloned());
+                let fallback_info = DirectiveResolver::get_directive_value_with_hide(
+                    &command.directives,
+                    "fallback",
+                )
+                .or_else(|| parent_directives.get("fallback").cloned());
                 if let Some((fallback_script, hide_fallback)) = fallback_info {
                     let mut fallback_args = args.clone();
                     fallback_args.insert("SYSTEM_ERROR_MESSAGE".to_string(), error_msg.clone());
@@ -1631,8 +1289,9 @@ impl Runtime {
             }
         }
 
-        let finally_info = Self::get_directive_value_with_hide(&command.directives, "finally")
-            .or_else(|| parent_directives.get("finally").cloned());
+        let finally_info =
+            DirectiveResolver::get_directive_value_with_hide(&command.directives, "finally")
+                .or_else(|| parent_directives.get("finally").cloned());
         if let Some((finally_script, hide_finally)) = finally_info {
             let original_result = match &result {
                 Ok(_) => Ok(()),
