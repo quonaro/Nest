@@ -4,7 +4,7 @@
 //! command structure. It handles nested commands, parameters, flags, and
 //! special cases like default subcommands.
 
-use super::ast::{Command, Constant, Directive, Function, Parameter, Value, Variable};
+use super::ast::{Command, Directive, Parameter, Value};
 
 use crate::constants::{
     APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_COMPLETE, FLAG_CONFIG, FLAG_DRY_RUN,
@@ -31,42 +31,26 @@ use clap::{Arg, ArgAction, Command as ClapCommand};
 /// argument IDs and names.
 pub struct CliGenerator {
     /// The parsed commands from the configuration file
+    /// The parsed commands from the configuration file
     commands: Vec<Command>,
-    /// The parsed variables (can be redefined)
-    variables: Vec<Variable>,
-    /// The parsed constants (cannot be redefined)
-    constants: Vec<Constant>,
-    /// The parsed functions (reusable scripts)
-    functions: Vec<Function>,
     /// Pre-allocated static strings for default command parameters
     default_param_ids: std::collections::HashMap<String, &'static str>,
 }
 
 impl CliGenerator {
-    /// Creates a new CLI generator from parsed commands, variables, constants, and functions.
+    /// Creates a new CLI generator from parsed commands.
     ///
     /// # Arguments
     ///
     /// * `commands` - The list of commands parsed from the configuration file
-    /// * `variables` - The list of variables (can be redefined)
-    /// * `constants` - The list of constants (cannot be redefined)
-    /// * `functions` - The list of functions (reusable scripts)
     ///
     /// # Returns
     ///
     /// Returns a new `CliGenerator` instance ready to build CLI interfaces.
-    pub fn new(
-        commands: Vec<Command>,
-        variables: Vec<Variable>,
-        constants: Vec<Constant>,
-        functions: Vec<Function>,
-    ) -> Self {
+    pub fn new(commands: Vec<Command>) -> Self {
         let default_param_ids = Self::preallocate_default_param_ids(&commands);
         Self {
             commands,
-            variables,
-            constants,
-            functions,
             default_param_ids,
         }
     }

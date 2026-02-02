@@ -197,12 +197,7 @@ fn main() {
         }
     }
 
-    let generator = CliGenerator::new(
-        parse_result.commands.clone(),
-        parse_result.variables.clone(),
-        parse_result.constants.clone(),
-        parse_result.functions.clone(),
-    );
+    let generator = CliGenerator::new(parse_result.commands.clone());
 
     let runtime = nest_core::nestparse::runtime::Runtime::new(
         parse_result.commands.clone(),
