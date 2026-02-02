@@ -9,14 +9,12 @@ use super::ast::{Command, Constant, Directive, Function, Parameter, Value, Varia
 use super::env::EnvironmentManager;
 use super::template::TemplateProcessor;
 use crate::constants::{
-    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, FLAG_COMPLETE, FLAG_CONFIG, FLAG_DRY_RUN,
-    FLAG_EXAMPLE, FLAG_SHOW, FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION, FORMAT_AST, FORMAT_JSON,
-    SHORT_VERSION, ENV_NEST_CALL_STACK,
+    APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, ENV_NEST_CALL_STACK, FLAG_COMPLETE,
+    FLAG_CONFIG, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW, FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION,
+    FORMAT_AST, FORMAT_JSON, SHORT_VERSION,
 };
 use clap::{Arg, ArgAction, Command as ClapCommand};
 use std::collections::HashMap;
-
-
 
 // Removed: ShortAliasConflict - validation is now done in validator module
 
@@ -503,7 +501,7 @@ impl CliGenerator {
                 Directive::Cwd(s) => (Some(s.clone()), &None, "cwd"),
                 Directive::Env(k, v, _) => (Some(format!("{}={}", k, v)), &None, "env"),
                 Directive::EnvFile(s, _) => (Some(s.clone()), &None, "env"),
-                
+
                 Directive::Script(s, os, _) => (Some(s.clone()), os, "script"),
                 Directive::Before(s, os, _) => (Some(s.clone()), os, "before"),
                 Directive::After(s, os, _) => (Some(s.clone()), os, "after"),
@@ -534,10 +532,10 @@ impl CliGenerator {
         let mut best_score = 0;
 
         for d in directives {
-             let (val, os, hide, target_name) = match d {
+            let (val, os, hide, target_name) = match d {
                 Directive::Env(k, v, hide) => (Some(format!("{}={}", k, v)), &None, *hide, "env"),
                 Directive::EnvFile(s, hide) => (Some(s.clone()), &None, *hide, "env"),
-                
+
                 Directive::Script(s, os, hide) => (Some(s.clone()), os, *hide, "script"),
                 Directive::Before(s, os, hide) => (Some(s.clone()), os, *hide, "before"),
                 Directive::After(s, os, hide) => (Some(s.clone()), os, *hide, "after"),
@@ -552,7 +550,7 @@ impl CliGenerator {
                     best_score = score;
                     // Unwrap is safe because we checked val is Some in match arms if target_name matches
                     if let Some(v) = val {
-                         best_match = Some((v, hide));
+                        best_match = Some((v, hide));
                     }
                 }
             }
@@ -765,8 +763,6 @@ impl CliGenerator {
         Ok(())
     }
 
-
-
     /// Validates command parameters according to validation directives.
     ///
     /// Supports format: "param_name matches /regex/"
@@ -807,8 +803,8 @@ impl CliGenerator {
         parent_args: &HashMap<String, String>,
         command_path: &[String],
     ) -> Result<(), String> {
-        use regex::Regex;
         use super::template::TemplateProcessor;
+        use regex::Regex;
 
         for (param_name, pattern_part) in validate_directives {
             // Process templates in the pattern part (allows dynamic rules)
@@ -830,10 +826,22 @@ impl CliGenerator {
                 let env_name = &param_name[1..];
                 // Check in Nest-defined session env vars first, then system env,
                 // and finally in Nest variables (since root-level 'env' directives are stored as variables)
-                env_vars.get(env_name).cloned()
+                env_vars
+                    .get(env_name)
+                    .cloned()
                     .or_else(|| std::env::var(env_name).ok())
-                    .or_else(|| parent_variables.iter().find(|v| v.name == env_name).map(|v| v.value.clone()))
-                    .or_else(|| global_variables.iter().find(|v| v.name == env_name).map(|v| v.value.clone()))
+                    .or_else(|| {
+                        parent_variables
+                            .iter()
+                            .find(|v| v.name == env_name)
+                            .map(|v| v.value.clone())
+                    })
+                    .or_else(|| {
+                        global_variables
+                            .iter()
+                            .find(|v| v.name == env_name)
+                            .map(|v| v.value.clone())
+                    })
             } else {
                 args.get(param_name).cloned()
             };
@@ -909,7 +917,7 @@ impl CliGenerator {
 
                     // Check for flags after closing /
                     let flags = pattern_part[end..].trim();
-                     let regex = if flags.is_empty() {
+                    let regex = if flags.is_empty() {
                         Regex::new(&unescaped)
                     } else {
                         // Parse flags (e.g., "i" for case-insensitive)
@@ -930,24 +938,38 @@ impl CliGenerator {
                         }
                     }
                 } else {
-                     // No closing slash found - treat whole string as regex
-                     match Regex::new(pattern_part) {
+                    // No closing slash found - treat whole string as regex
+                    match Regex::new(pattern_part) {
                         Ok(re) => re,
-                        Err(e) => return Err(format!("Invalid regex pattern: {}. Error: {}", pattern_part, e))
+                        Err(e) => {
+                            return Err(format!(
+                                "Invalid regex pattern: {}. Error: {}",
+                                pattern_part, e
+                            ))
+                        }
                     }
                 }
             } else {
                 // simple pattern, try to compile as is
-                 match Regex::new(pattern_part) {
+                match Regex::new(pattern_part) {
                     Ok(re) => re,
-                    Err(e) => return Err(format!("Invalid regex pattern: {}. Error: {}", pattern_part, e))
+                    Err(e) => {
+                        return Err(format!(
+                            "Invalid regex pattern: {}. Error: {}",
+                            pattern_part, e
+                        ))
+                    }
                 }
             };
 
             // Validate
             if !pattern.is_match(&target_value) {
                 let command_str = command_path.join(" ");
-                let target_type = if param_name.starts_with('$') { "Environment variable" } else { "Parameter" };
+                let target_type = if param_name.starts_with('$') {
+                    "Environment variable"
+                } else {
+                    "Parameter"
+                };
                 return Err(format!(
                     "❌ Validation error in command 'nest {}':\n   {} '{}' with value '{}' does not match pattern '{}'",
                     command_str, target_type, param_name, target_value, pattern_part
@@ -1239,7 +1261,15 @@ impl CliGenerator {
                     );
                     // Execute immediately - store in variable to ensure it lives long enough
                     let cmd = processed_command;
-                    Self::execute_shell_script(&cmd, env_vars, cwd, args, verbose, hide_output, self.pid_callback.as_deref())?;
+                    Self::execute_shell_script(
+                        &cmd,
+                        env_vars,
+                        cwd,
+                        args,
+                        verbose,
+                        hide_output,
+                        self.pid_callback.as_deref(),
+                    )?;
                 }
                 continue;
             }
@@ -1509,7 +1539,6 @@ impl CliGenerator {
         pid_callback: Option<&(dyn Fn(u32) + Send + Sync)>,
     ) -> Result<(), String> {
         use std::process::{Command as ProcessCommand, Stdio};
-
 
         // Trim only leading/trailing whitespace to avoid issues, but preserve internal structure
         let script_to_execute = script.trim();
@@ -2187,7 +2216,15 @@ impl CliGenerator {
         // Execute any remaining shell commands
         if !current_shell_block.is_empty() {
             let shell_script = current_shell_block.join("\n");
-            Self::execute_shell_script(&shell_script, env_vars, cwd, args, verbose, hide_output, self.pid_callback.as_deref())?;
+            Self::execute_shell_script(
+                &shell_script,
+                env_vars,
+                cwd,
+                args,
+                verbose,
+                hide_output,
+                self.pid_callback.as_deref(),
+            )?;
         }
 
         // Function completed without @return - return None
@@ -2294,21 +2331,21 @@ impl CliGenerator {
                     dep_path.join(" ")
                 ));
             }
-            
+
             tasks.push((dep, dep_path));
         }
 
         if parallel {
-            use std::thread;
             use std::sync::{Arc, Mutex};
-            
+            use std::thread;
+
             let errors = Arc::new(Mutex::new(Vec::new()));
-            
+
             thread::scope(|s| {
                 for (dep, dep_path) in tasks {
                     let mut thread_visited = visited.clone();
                     let errors_clone = Arc::clone(&errors);
-                    
+
                     s.spawn(move || {
                         if let Some(dep_command) = self.find_command(&dep_path) {
                             let empty_parent_args = HashMap::new();
@@ -2322,7 +2359,10 @@ impl CliGenerator {
                                 &empty_parent_args,
                             ) {
                                 let mut errs = errors_clone.lock().unwrap();
-                                errs.push(format!("Dependency '{}' failed: {}", dep.command_path, e));
+                                errs.push(format!(
+                                    "Dependency '{}' failed: {}",
+                                    dep.command_path, e
+                                ));
                             }
                         } else {
                             let mut errs = errors_clone.lock().unwrap();
@@ -2335,7 +2375,7 @@ impl CliGenerator {
                     });
                 }
             });
-            
+
             let errors = errors.lock().unwrap();
             if !errors.is_empty() {
                 return Err(errors.join("\n"));
@@ -2363,7 +2403,7 @@ impl CliGenerator {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -2397,15 +2437,15 @@ impl CliGenerator {
         // This detects cycles across process boundaries (e.g. script calling `nest command`)
         let command_id = command_path_unwrapped.join(":");
         if !command_id.is_empty() {
-             if let Ok(stack_str) = std::env::var(ENV_NEST_CALL_STACK) {
+            if let Ok(stack_str) = std::env::var(ENV_NEST_CALL_STACK) {
                 let stack: Vec<&str> = stack_str.split(',').collect();
                 if stack.contains(&command_id.as_str()) {
-                     return Err(format!(
+                    return Err(format!(
                          "Circular dependency detected: Command '{}' is already in the call stack.\nCall stack: {}", 
                          command_id, stack_str
                      ));
                 }
-             }
+            }
         }
 
         // NOTE: recursive command-call detection is temporarily disabled here because it
@@ -2418,8 +2458,9 @@ impl CliGenerator {
         if !validate_directives.is_empty() {
             // Collect all variables for template processing in validation rules
             let (global_vars, global_consts) = (self.variables.clone(), self.constants.clone());
-            let (parent_vars, parent_consts) = self.collect_parent_variables(command_path_unwrapped);
-            
+            let (parent_vars, parent_consts) =
+                self.collect_parent_variables(command_path_unwrapped);
+
             // Collect environment variables (some might be targets for validation)
             let mut all_env_directives = self.collect_parent_env_directives(command_path_unwrapped);
             for directive in &command.directives {
@@ -2431,17 +2472,17 @@ impl CliGenerator {
                 }
             }
             let env_vars = EnvironmentManager::extract_env_vars(&all_env_directives);
-            
+
             if let Err(e) = self.validate_parameters(
-                &validate_directives, 
-                args, 
+                &validate_directives,
+                args,
                 &env_vars,
                 &global_vars,
                 &global_consts,
                 &parent_vars,
                 &parent_consts,
                 parent_args,
-                command_path_unwrapped
+                command_path_unwrapped,
             ) {
                 return Err(e);
             }
@@ -2475,7 +2516,14 @@ impl CliGenerator {
                     deps_str.join(", ")
                 ));
             }
-            self.execute_dependencies(&depends, command_path_unwrapped, dry_run, verbose, visited, parallel)?;
+            self.execute_dependencies(
+                &depends,
+                command_path_unwrapped,
+                dry_run,
+                verbose,
+                visited,
+                parallel,
+            )?;
         }
 
         // Check if confirmation is required
@@ -2531,7 +2579,9 @@ impl CliGenerator {
         let cwd = Self::get_directive_value(&command.directives, "cwd")
             .or_else(|| parent_directives.get("cwd").map(|(s, _)| s.clone()))
             .or_else(|| {
-                command.source_file.as_ref()
+                command
+                    .source_file
+                    .as_ref()
                     .and_then(|p| p.parent())
                     .map(|p| p.to_string_lossy().to_string())
             });
@@ -2553,15 +2603,27 @@ impl CliGenerator {
         // Process environment variables through template processor to resolve Nest templates (e.g., {{type}})
         // This allows parent command arguments to be used in environment variables
         let mut processed_env_vars = std::collections::HashMap::new();
-        
+
         // 1. Export global variables and constants
-        EnvironmentManager::export_all_vars(&mut processed_env_vars, &self.variables, &self.constants);
-        
+        EnvironmentManager::export_all_vars(
+            &mut processed_env_vars,
+            &self.variables,
+            &self.constants,
+        );
+
         // 2. Export parent variables and constants
-        EnvironmentManager::export_all_vars(&mut processed_env_vars, &parent_variables, &parent_constants);
-        
+        EnvironmentManager::export_all_vars(
+            &mut processed_env_vars,
+            &parent_variables,
+            &parent_constants,
+        );
+
         // 3. Export local variables and constants
-        EnvironmentManager::export_all_vars(&mut processed_env_vars, &command.local_variables, &command.local_constants);
+        EnvironmentManager::export_all_vars(
+            &mut processed_env_vars,
+            &command.local_variables,
+            &command.local_constants,
+        );
 
         // 4. Merge direct env directives (they have highest priority among Nest variables)
         for (key, value) in &env_vars {
@@ -2582,7 +2644,7 @@ impl CliGenerator {
                 &merged_parent_args,
             );
         }
-        
+
         // Update NEST_CALL_STACK for child processes
         if !command_id.is_empty() {
             let new_stack = if let Ok(stack_str) = std::env::var(ENV_NEST_CALL_STACK) {
@@ -2596,7 +2658,7 @@ impl CliGenerator {
             };
             processed_env_vars.insert(ENV_NEST_CALL_STACK.to_string(), new_stack);
         }
-        
+
         let env_vars = processed_env_vars;
 
         // Execute before script (if present in command or inherited from parent)
@@ -2637,8 +2699,9 @@ impl CliGenerator {
 
         // Execute main script
         // Note: if/else/elif support has been removed, so we only look for 'script'
-        let (script, hide_script) = Self::get_directive_value_with_hide(&command.directives, "script")
-            .ok_or_else(|| "Command has no script directive".to_string())?;
+        let (script, hide_script) =
+            Self::get_directive_value_with_hide(&command.directives, "script")
+                .ok_or_else(|| "Command has no script directive".to_string())?;
 
         let processed_script = TemplateProcessor::process(
             &script,
@@ -3643,16 +3706,21 @@ pub fn handle_update() {
         platform.clone()
     };
 
-    // Determine binary name
+    // Determine binary name and installation path
     let binary_name = "nest";
-    let install_dir = match env::var("HOME") {
-        Ok(home) => PathBuf::from(home).join(".local").join("bin"),
-        Err(_) => {
-            OutputFormatter::error("HOME environment variable is not set");
-            std::process::exit(1);
-        }
-    };
-    let binary_path = install_dir.join(binary_name);
+    let current_exe = env::current_exe().ok();
+
+    let install_dir = current_exe
+        .as_ref()
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| {
+            env::var("HOME")
+                .map(|home| PathBuf::from(home).join(".local").join("bin"))
+                .unwrap_or_else(|_| PathBuf::from("/usr/local/bin"))
+        });
+
+    let binary_path = current_exe.unwrap_or_else(|| install_dir.join(binary_name));
 
     // GitHub repository
     let repo = "quonaro/nest";
