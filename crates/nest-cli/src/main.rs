@@ -5,10 +5,9 @@
 //! and executes commands based on user input.
 
 use nest_core::constants::{
-    CMD_CHECK, CMD_LIST, FLAG_COMPLETE, FLAG_SHOW, FLAG_STD,
-    FLAG_VERBOSE, FORMAT_AST, FORMAT_JSON,
-    FLAG_UPDATE, FLAG_DOCTOR, FLAG_CLEAN, FLAG_UNINSTALL,
-    FLAG_INIT, FLAG_CHECK, FLAG_LIST, FLAG_EXAMPLE,
+    CMD_CHECK, CMD_LIST, FLAG_CHECK, FLAG_CLEAN, FLAG_COMPLETE, FLAG_DOCTOR, FLAG_EXAMPLE,
+    FLAG_INIT, FLAG_LIST, FLAG_SHOW, FLAG_STD, FLAG_UNINSTALL, FLAG_UPDATE, FLAG_VERBOSE,
+    FORMAT_AST, FORMAT_JSON,
 };
 use nest_core::nestparse::cli::{
     handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version,
@@ -38,8 +37,8 @@ fn main() {
             // Try to kill the child process group (if it exists)
             #[cfg(unix)]
             {
-                 // We don't wait for output here to avoid hanging the signal handler
-                 let _ = std::process::Command::new("kill")
+                // We don't wait for output here to avoid hanging the signal handler
+                let _ = std::process::Command::new("kill")
                     .arg("-TERM")
                     .arg(format!("{}", pid))
                     .spawn();
@@ -157,16 +156,16 @@ fn main() {
         Err(e) => {
             // User request: simplify error message for missing config
             if config_path_arg.is_none() && e.contains("Configuration file not found") {
-                 println!("nestfile not found");
-                 println!("Run 'nest --init' to create one.");
-                 println!("Run 'nest --std' to see standard commands.");
-                 process::exit(1);
+                println!("nestfile not found");
+                println!("Run 'nest --init' to create one.");
+                println!("Run 'nest --std' to see standard commands.");
+                process::exit(1);
             }
 
             nest_core::nestparse::output::OutputFormatter::error(&e.to_string());
             if config_path_arg.is_none() {
                 nest_core::nestparse::output::OutputFormatter::info(
-                    "Tip: You can specify a custom config file path using --config <path>"
+                    "Tip: You can specify a custom config file path using --config <path>",
                 );
             }
             process::exit(1);
@@ -218,12 +217,14 @@ fn main() {
     // Handle --complete flag
     if let Some(shell_name) = matches.get_one::<String>(FLAG_COMPLETE) {
         let verbose = matches.get_flag(FLAG_VERBOSE);
-        if let Err(e) = nest_core::nestparse::completion::CompletionManager::handle_completion_request(
-            &mut cli,
-            shell_name,
-            verbose,
-            &config_path,
-        ) {
+        if let Err(e) =
+            nest_core::nestparse::completion::CompletionManager::handle_completion_request(
+                &mut cli,
+                shell_name,
+                verbose,
+                &config_path,
+            )
+        {
             nest_core::nestparse::output::OutputFormatter::error(&e);
             process::exit(1);
         }
@@ -235,7 +236,7 @@ fn main() {
         if let Ok(needs_regeneration) = completion_manager.needs_regeneration(&config_path) {
             if needs_regeneration {
                 if let Ok(_) = completion_manager.generate_all_completions(&mut cli, &config_path) {
-                     if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {}
+                    if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {}
                 }
             }
         }
@@ -249,7 +250,10 @@ fn main() {
 
     if command_path.is_empty() {
         if let Err(e) = cli.print_help() {
-            nest_core::nestparse::output::OutputFormatter::error(&format!("Failed to print help: {}", e));
+            nest_core::nestparse::output::OutputFormatter::error(&format!(
+                "Failed to print help: {}",
+                e
+            ));
             process::exit(1);
         }
         process::exit(0);
@@ -257,15 +261,21 @@ fn main() {
 
     if let Some(command) = generator.find_command(&command_path) {
         // Check for --watch flag in root args
-        let watch_pattern = args.iter().position(|a| a == "--watch").and_then(|i| args.get(i + 1).cloned());
-        
+        let watch_pattern = args
+            .iter()
+            .position(|a| a == "--watch")
+            .and_then(|i| args.get(i + 1).cloned());
+
         // Also check if command has > watch: directive
-        let directive_watch_patterns = command.directives.iter().filter_map(|d| {
-             match d {
-                 nest_core::nestparse::ast::Directive::Watch(patterns) => Some(patterns.clone()),
-                 _ => None,
-             }
-        }).flatten().collect::<Vec<_>>();
+        let directive_watch_patterns = command
+            .directives
+            .iter()
+            .filter_map(|d| match d {
+                nest_core::nestparse::ast::Directive::Watch(patterns) => Some(patterns.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>();
 
         let should_watch = watch_pattern.is_some() || !directive_watch_patterns.is_empty();
 
@@ -281,8 +291,8 @@ fn main() {
             patterns.dedup();
 
             if patterns.is_empty() {
-                 nest_core::nestparse::output::OutputFormatter::error("Watch mode enabled but no patterns specified via --watch or > watch: directive.");
-                 process::exit(1);
+                nest_core::nestparse::output::OutputFormatter::error("Watch mode enabled but no patterns specified via --watch or > watch: directive.");
+                process::exit(1);
             }
 
             let config = nest_core::nestparse::watcher::WatcherConfig {
@@ -300,20 +310,29 @@ fn main() {
                 // For now, let's assume we can't easily change CommandHandler's exit behavior without big refactor.
                 // Wait, CommandHandler::handle_regular_command returns Result<(), String>.
                 // It only exits on error inside main.rs logic below.
-                
+
                 // Let's create a wrapper that doesn't exit process
-                handle_command_execution_no_exit(&matches, command, &command_path, &generator, &matches)
+                handle_command_execution_no_exit(
+                    &matches,
+                    command,
+                    &command_path,
+                    &generator,
+                    &matches,
+                )
             };
 
             if let Err(e) = nest_core::nestparse::watcher::run_watch_loop(config, exec_closure) {
-                 nest_core::nestparse::output::OutputFormatter::error(&format!("Watch loop error: {}", e));
-                 process::exit(1);
+                nest_core::nestparse::output::OutputFormatter::error(&format!(
+                    "Watch loop error: {}",
+                    e
+                ));
+                process::exit(1);
             }
         } else {
             handle_command_execution(&matches, command, &command_path, &generator, &matches);
         }
     } else {
-         nest_core::nestparse::output::OutputFormatter::error(&format!(
+        nest_core::nestparse::output::OutputFormatter::error(&format!(
             "Command not found: {}",
             command_path.join(" ")
         ));
@@ -329,16 +348,12 @@ fn handle_command_execution_no_exit(
     generator: &CliGenerator,
     root_matches: &clap::ArgMatches,
 ) -> Result<(), String> {
-      if !command.children.is_empty() {
+    if !command.children.is_empty() {
         if !generator.has_default_command(command) {
-            CommandHandler::handle_group_without_default(command, command_path).map_err(|_| "Failed to handle group command".to_string())
+            CommandHandler::handle_group_without_default(command, command_path)
+                .map_err(|_| "Failed to handle group command".to_string())
         } else {
-            CommandHandler::handle_default_command(
-                matches,
-                command_path,
-                generator,
-                root_matches,
-            )
+            CommandHandler::handle_default_command(matches, command_path, generator, root_matches)
         }
     } else {
         // We need to extract the subcommand matches again
@@ -360,7 +375,9 @@ fn handle_command_execution_no_exit(
     }
 }
 
-fn load_and_parse_config(config_path_arg: Option<&str>) -> Result<(ParseResult, std::path::PathBuf), String> {
+fn load_and_parse_config(
+    config_path_arg: Option<&str>,
+) -> Result<(ParseResult, std::path::PathBuf), String> {
     let config_path = if let Some(path_str) = config_path_arg {
         let path = std::path::PathBuf::from(path_str);
         if !path.exists() {
@@ -390,32 +407,31 @@ fn load_and_parse_config(config_path_arg: Option<&str>) -> Result<(ParseResult, 
     content_with_source.push_str(&processed_content);
 
     let mut parser = Parser::new(&content_with_source);
-    let mut parse_result = parser
-        .parse()
-        .map_err(|e| {
-            match e {
-                ParseError::UnexpectedEndOfFile(line) => {
-                    format!("Parse error at line {}: Unexpected end of file.", line)
-                }
-                ParseError::InvalidSyntax(msg, line) => {
-                    format!("Parse error at line {}: {}", line, msg)
-                }
-                ParseError::InvalidIndent(line) => {
-                    format!("Parse error at line {}: Invalid indentation.", line)
-                }
-                ParseError::DeprecatedSyntax(msg, line) => {
-                    format!("Deprecated syntax error at line {}:\n{}", line, msg)
-                }
-            }
-        })?;
+    let mut parse_result = parser.parse().map_err(|e| match e {
+        ParseError::UnexpectedEndOfFile(line) => {
+            format!("Parse error at line {}: Unexpected end of file.", line)
+        }
+        ParseError::InvalidSyntax(msg, line) => {
+            format!("Parse error at line {}: {}", line, msg)
+        }
+        ParseError::InvalidIndent(line) => {
+            format!("Parse error at line {}: Invalid indentation.", line)
+        }
+        ParseError::DeprecatedSyntax(msg, line) => {
+            format!("Deprecated syntax error at line {}:\n{}", line, msg)
+        }
+    })?;
 
     // Merge duplicate commands
-    parse_result.commands = nest_core::nestparse::merger::merge_commands(parse_result.commands);
+    parse_result.commands = nest_core::nestparse::merge::merge_commands(parse_result.commands);
 
     Ok((parse_result, config_path))
 }
 
-fn handle_special_flags(matches: &clap::ArgMatches, commands: &[nest_core::nestparse::ast::Command]) -> bool {
+fn handle_special_flags(
+    matches: &clap::ArgMatches,
+    commands: &[nest_core::nestparse::ast::Command],
+) -> bool {
     // --version handled manually
     // if matches.get_flag(FLAG_VERSION) ...
 
@@ -427,13 +443,19 @@ fn handle_special_flags(matches: &clap::ArgMatches, commands: &[nest_core::nestp
             }
             FORMAT_JSON => {
                 if let Err(e) = handle_json(commands) {
-                    nest_core::nestparse::output::OutputFormatter::error(&format!("JSON generation failed: {}", e));
+                    nest_core::nestparse::output::OutputFormatter::error(&format!(
+                        "JSON generation failed: {}",
+                        e
+                    ));
                     process::exit(1);
                 }
                 return true;
             }
             _ => {
-                nest_core::nestparse::output::OutputFormatter::error(&format!("Unknown format: {}", format));
+                nest_core::nestparse::output::OutputFormatter::error(&format!(
+                    "Unknown format: {}",
+                    format
+                ));
                 process::exit(1);
             }
         }

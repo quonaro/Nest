@@ -41,25 +41,25 @@ struct App {
     view_mode: ViewMode,
     focus: Focus,
     input_buffer: String,
-    
+
     // Tree Navigation State
     root_commands: Vec<Command>,
     flat_commands: Vec<(String, Command)>, // Cache for Flat View
-    breadcrumbs: Vec<String>, // Function/Command names path
-    selection_history: Vec<usize>, // To restore selection when going up
+    breadcrumbs: Vec<String>,              // Function/Command names path
+    selection_history: Vec<usize>,         // To restore selection when going up
     args_map: std::collections::HashMap<String, String>,
-    
+
     // Feature States
     show_source: bool,
     source_code: Option<String>,
     search_query: String,
     filtered_commands: Vec<(String, Command)>,
-    
+
     // History State
     history: Vec<String>,
     history_state: ListState,
     history_path: std::path::PathBuf,
-    
+
     state: ListState,
     arg_state: ListState,
     should_quit: bool,
@@ -72,7 +72,7 @@ impl App {
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join("nest")
             .join("history");
-            
+
         let mut app = App {
             mode: InputMode::Normal,
             view_mode: ViewMode::Tree,
@@ -87,11 +87,11 @@ impl App {
             source_code: None,
             search_query: String::new(),
             filtered_commands: Vec::new(),
-            
+
             history: Vec::new(),
             history_state: ListState::default(),
             history_path,
-            
+
             state: ListState::default(),
             arg_state: ListState::default(),
             should_quit: false,
@@ -117,11 +117,11 @@ impl App {
     fn flatten_recursive(&mut self, cmd: &Command, parent_path: &[String]) {
         let mut current_path = parent_path.to_vec();
         current_path.push(cmd.name.clone());
-        
-        // Only add leaf commands to flat view? Or all? 
+
+        // Only add leaf commands to flat view? Or all?
         // Typically flat view is for running commands, so mostly leafs.
         // But if groups have scripts attached, they are also commands.
-        // Let's add everything that is runnable. 
+        // Let's add everything that is runnable.
         // For simplicity, let's add everything for now, or just leafs if user prefers "all commands at once".
         // Let's add everything.
         let display_path = current_path.join(" ");
@@ -131,11 +131,11 @@ impl App {
             self.flatten_recursive(child, &current_path);
         }
     }
-    
+
     fn load_history(&mut self) {
         if let Ok(content) = std::fs::read_to_string(&self.history_path) {
             self.history = content.lines().map(|s| s.to_string()).collect();
-            // Reverse to show newest at top? Or standard? 
+            // Reverse to show newest at top? Or standard?
             // Usually history file is append, so newest at bottom.
             // But UI might want newest at top.
             // Let's keep order as file (oldest first) but render or scrolling properly.
@@ -143,7 +143,7 @@ impl App {
             self.history.reverse();
         }
     }
-    
+
     fn add_history(&mut self, cmd: String) {
         // Remove duplicates
         if let Some(pos) = self.history.iter().position(|x| x == &cmd) {
@@ -155,7 +155,7 @@ impl App {
         }
         self.save_history();
     }
-    
+
     fn save_history(&self) {
         if let Some(parent) = self.history_path.parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -170,7 +170,7 @@ impl App {
     /// Returns the list of commands at the current depth
     fn get_current_items(&self) -> Vec<&Command> {
         let mut current_level = &self.root_commands;
-        
+
         for step in &self.breadcrumbs {
             if let Some(cmd) = current_level.iter().find(|c| &c.name == step) {
                 current_level = &cmd.children;
@@ -186,7 +186,7 @@ impl App {
         let parts: Vec<&str> = cmd_str.split_whitespace().collect();
         let mut best_match: Option<&Command> = None;
         let mut current_level = &self.root_commands;
-        
+
         for part in parts {
             if let Some(cmd) = current_level.iter().find(|c| c.name == part) {
                 best_match = Some(cmd);
@@ -202,12 +202,12 @@ impl App {
     fn get_selected_command(&self) -> Option<&Command> {
         // If searching, use filtered commands
         if !self.search_query.is_empty() {
-             if let Some(idx) = self.state.selected() {
-                 if let Some((_, cmd)) = self.filtered_commands.get(idx) {
-                     return Some(cmd);
-                 }
-             }
-             return None;
+            if let Some(idx) = self.state.selected() {
+                if let Some((_, cmd)) = self.filtered_commands.get(idx) {
+                    return Some(cmd);
+                }
+            }
+            return None;
         }
 
         match self.view_mode {
@@ -227,12 +227,12 @@ impl App {
                 }
             }
             ViewMode::History => {
-                 if let Some(idx) = self.history_state.selected() {
-                     if let Some(cmd_str) = self.history.get(idx) {
-                         return self.resolve_command_from_string(cmd_str);
-                     }
-                 }
-                 return None;
+                if let Some(idx) = self.history_state.selected() {
+                    if let Some(cmd_str) = self.history.get(idx) {
+                        return self.resolve_command_from_string(cmd_str);
+                    }
+                }
+                return None;
             }
         }
         None
@@ -241,34 +241,34 @@ impl App {
     fn load_selected_source(&mut self) {
         if let Some(cmd) = self.get_selected_command().cloned() {
             if let Some(path) = &cmd.source_file {
-                 if let Ok(content) = std::fs::read_to_string(path) {
-                     // Heuristic extraction: find line with "name:" or "name("
-                     // This is simple and improves later.
-                     // For now, let's just show the first 20 lines matching the command pattern or just the whole file?
-                     // Whole file is too big. 
-                     // Let's try to find the start line.
-                     let lines: Vec<&str> = content.lines().collect();
-                     let mut start_line = 0;
-                     let mut found = false;
-                     
-                     // Search pattern: "command_name" followed by various potential chars
-                     for (i, line) in lines.iter().enumerate() {
-                         let trimmed = line.trim();
-                         if trimmed.starts_with(&cmd.name) {
-                             start_line = i;
-                             found = true;
-                             break;
-                         }
-                     }
-                     
-                     if found {
-                         // Take ~20 lines
-                         let end_line = std::cmp::min(start_line + 20, lines.len());
-                         self.source_code = Some(lines[start_line..end_line].join("\n"));
-                     } else {
-                         self.source_code = Some("Could not find definition in file.".to_string());
-                     }
-                 }
+                if let Ok(content) = std::fs::read_to_string(path) {
+                    // Heuristic extraction: find line with "name:" or "name("
+                    // This is simple and improves later.
+                    // For now, let's just show the first 20 lines matching the command pattern or just the whole file?
+                    // Whole file is too big.
+                    // Let's try to find the start line.
+                    let lines: Vec<&str> = content.lines().collect();
+                    let mut start_line = 0;
+                    let mut found = false;
+
+                    // Search pattern: "command_name" followed by various potential chars
+                    for (i, line) in lines.iter().enumerate() {
+                        let trimmed = line.trim();
+                        if trimmed.starts_with(&cmd.name) {
+                            start_line = i;
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if found {
+                        // Take ~20 lines
+                        let end_line = std::cmp::min(start_line + 20, lines.len());
+                        self.source_code = Some(lines[start_line..end_line].join("\n"));
+                    } else {
+                        self.source_code = Some("Could not find definition in file.".to_string());
+                    }
+                }
             } else {
                 self.source_code = Some("No source file information available.".to_string());
             }
@@ -283,58 +283,60 @@ impl App {
 
     fn update_input_buffer(&mut self) {
         if let Some(cmd) = self.get_selected_command() {
-             let mut full_cmd = if self.view_mode != ViewMode::History {
-                 self.breadcrumbs.join(" ")
-             } else {
-                 // In History mode, we might want to respect the history command string base?
-                 // But for now, let's treat it as rebuilding from the resolved command.
-                 // Actually, if we are in History mode, get_selected_command resolves the command struct.
-                 // We should probably reconstruct the path from the resolved command if possible,
-                 // or just use the history string? 
-                 // Issue: History string has args. args_map might be empty initially.
-                 // Simple approach: Always rebuild from scratch using breadcrumbs if available? 
-                 // But History command might not match current breadcrumbs.
-                 // Let's assume breadcrumbs are correct for Tree/Flat. 
-                 // For History, we might need a way to get the full path of the resolved command.
-                 // Since we don't store parent pointers, we can't easily walk up.
-                 // Fallback: Use cmd.name.
-                 cmd.name.clone()
-             };
-             
-             if self.view_mode != ViewMode::History {
-                 if !full_cmd.is_empty() { full_cmd.push(' '); }
-                 full_cmd.push_str(&cmd.name);
-             }
+            let mut full_cmd = if self.view_mode != ViewMode::History {
+                self.breadcrumbs.join(" ")
+            } else {
+                // In History mode, we might want to respect the history command string base?
+                // But for now, let's treat it as rebuilding from the resolved command.
+                // Actually, if we are in History mode, get_selected_command resolves the command struct.
+                // We should probably reconstruct the path from the resolved command if possible,
+                // or just use the history string?
+                // Issue: History string has args. args_map might be empty initially.
+                // Simple approach: Always rebuild from scratch using breadcrumbs if available?
+                // But History command might not match current breadcrumbs.
+                // Let's assume breadcrumbs are correct for Tree/Flat.
+                // For History, we might need a way to get the full path of the resolved command.
+                // Since we don't store parent pointers, we can't easily walk up.
+                // Fallback: Use cmd.name.
+                cmd.name.clone()
+            };
 
-             // Append arguments from args_map
-             for param in &cmd.parameters {
-                 if let Some(val) = self.args_map.get(&param.name) {
-                     // Check if bool flag
-                     if param.param_type == "bool" {
-                         if val == "true" {
-                             full_cmd.push(' ');
-                             if param.is_named {
-                                 full_cmd.push_str("--");
-                                 full_cmd.push_str(&param.name);
-                             }
-                         }
-                     } else {
-                         // String/Num/etc
-                         if !val.is_empty() {
-                             full_cmd.push(' ');
-                             if param.is_named {
-                                 full_cmd.push_str("--");
-                                 full_cmd.push_str(&param.name);
-                                 full_cmd.push(' ');
-                                 full_cmd.push_str(val);
-                             } else {
-                                 full_cmd.push_str(val);
-                             }
-                         }
-                     }
-                 }
-             }
-             self.input_buffer = full_cmd;
+            if self.view_mode != ViewMode::History {
+                if !full_cmd.is_empty() {
+                    full_cmd.push(' ');
+                }
+                full_cmd.push_str(&cmd.name);
+            }
+
+            // Append arguments from args_map
+            for param in &cmd.parameters {
+                if let Some(val) = self.args_map.get(&param.name) {
+                    // Check if bool flag
+                    if param.param_type == "bool" {
+                        if val == "true" {
+                            full_cmd.push(' ');
+                            if param.is_named {
+                                full_cmd.push_str("--");
+                                full_cmd.push_str(&param.name);
+                            }
+                        }
+                    } else {
+                        // String/Num/etc
+                        if !val.is_empty() {
+                            full_cmd.push(' ');
+                            if param.is_named {
+                                full_cmd.push_str("--");
+                                full_cmd.push_str(&param.name);
+                                full_cmd.push(' ');
+                                full_cmd.push_str(val);
+                            } else {
+                                full_cmd.push_str(val);
+                            }
+                        }
+                    }
+                }
+            }
+            self.input_buffer = full_cmd;
         }
     }
 
@@ -362,8 +364,10 @@ impl App {
                 ViewMode::History => 0,
             }
         };
-        if count == 0 { return; }
-        
+        if count == 0 {
+            return;
+        }
+
         let i = match self.state.selected() {
             Some(i) => {
                 if i >= count - 1 {
@@ -379,16 +383,18 @@ impl App {
     }
 
     fn previous(&mut self) {
-         let count = if !self.search_query.is_empty() {
+        let count = if !self.search_query.is_empty() {
             self.filtered_commands.len()
-         } else {
-             match self.view_mode {
+        } else {
+            match self.view_mode {
                 ViewMode::Tree => self.get_current_items().len(),
                 ViewMode::Flat => self.flat_commands.len(),
                 ViewMode::History => 0,
-             }
-         };
-         if count == 0 { return; }
+            }
+        };
+        if count == 0 {
+            return;
+        }
 
         let i = match self.state.selected() {
             Some(i) => {
@@ -409,7 +415,9 @@ impl App {
             self.filtered_commands.clear();
         } else {
             let query = self.search_query.to_lowercase();
-            self.filtered_commands = self.flat_commands.iter()
+            self.filtered_commands = self
+                .flat_commands
+                .iter()
                 .filter(|(path, _)| path.to_lowercase().contains(&query))
                 .cloned()
                 .collect();
@@ -423,8 +431,10 @@ impl App {
 
     fn next_arg(&mut self) {
         let args_len = self.current_args().len();
-        if args_len == 0 { return; }
-        
+        if args_len == 0 {
+            return;
+        }
+
         let i = match self.arg_state.selected() {
             Some(i) => {
                 if i >= args_len - 1 {
@@ -440,7 +450,9 @@ impl App {
 
     fn previous_arg(&mut self) {
         let args_len = self.current_args().len();
-        if args_len == 0 { return; }
+        if args_len == 0 {
+            return;
+        }
 
         let i = match self.arg_state.selected() {
             Some(i) => {
@@ -462,7 +474,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // 1. Parse arguments for --config / -c, --version, --help
     let args: Vec<String> = std::env::args().collect();
     let mut config_path_arg: Option<String> = None;
-    
+
     // Check for flags that don't need config
     if args.iter().any(|a| a == "--version" || a == "-V") {
         println!("nest-ui v{}", env!("CARGO_PKG_VERSION"));
@@ -494,7 +506,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let nestfile_path = if let Some(path_str) = config_path_arg {
         let path = Path::new(&path_str).to_path_buf();
         if !path.exists() {
-            nest_core::nestparse::output::OutputFormatter::error(&format!("Configuration file not found: {}", path_str));
+            nest_core::nestparse::output::OutputFormatter::error(&format!(
+                "Configuration file not found: {}",
+                path_str
+            ));
             process::exit(1);
         }
         path
@@ -508,21 +523,31 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     };
-    
+
     let content = match nest_core::nestparse::file::read_file_unchecked(&nestfile_path) {
         Ok(c) => c,
         Err(e) => {
-            nest_core::nestparse::output::OutputFormatter::error(&format!("Error reading file: {}", e));
+            nest_core::nestparse::output::OutputFormatter::error(&format!(
+                "Error reading file: {}",
+                e
+            ));
             process::exit(1);
         }
     };
-    
+
     // Process includes logic
     let mut visited = std::collections::HashSet::new();
-    let processed_content = match nest_core::nestparse::include::process_includes(&content, &nestfile_path, &mut visited) {
+    let processed_content = match nest_core::nestparse::include::process_includes(
+        &content,
+        &nestfile_path,
+        &mut visited,
+    ) {
         Ok(c) => c,
         Err(e) => {
-            nest_core::nestparse::output::OutputFormatter::error(&format!("Error processing includes: {}", e));
+            nest_core::nestparse::output::OutputFormatter::error(&format!(
+                "Error processing includes: {}",
+                e
+            ));
             process::exit(1);
         }
     };
@@ -560,14 +585,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Merge duplicate commands (same as CLI)
-    parse_result.commands = nest_core::nestparse::merger::merge_commands(parse_result.commands);
+    parse_result.commands = nest_core::nestparse::merge::merge_commands(parse_result.commands);
 
     // Validate configuration using standard nest-core validator
     if let Err(validation_errors) = validate_commands(&parse_result.commands, &nestfile_path) {
         print_validation_errors(&validation_errors, &nestfile_path);
         process::exit(1);
     }
-    
+
     // Populate source file path recursively
     resolve_command_sources(&mut parse_result.commands, &full_content, &nestfile_path);
 
@@ -603,7 +628,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn resolve_command_sources(commands: &mut Vec<Command>, content: &str, initial_path: &Path) {
     let mut line_map = Vec::new();
     let mut current_path = initial_path.to_path_buf();
-    
+
     // 1. Build map of line index -> source file
     for line in content.lines() {
         if line.starts_with("# @source: ") {
@@ -612,23 +637,25 @@ fn resolve_command_sources(commands: &mut Vec<Command>, content: &str, initial_p
         }
         line_map.push(current_path.clone());
     }
-    
+
     // 2. Resolve recursively
     let indexed_lines: Vec<(usize, &str)> = content.lines().enumerate().collect();
     resolve_scope(commands, &indexed_lines, &line_map);
 }
 
 fn resolve_scope(
-    commands: &mut Vec<Command>, 
-    lines: &[(usize, &str)], 
-    line_map: &[std::path::PathBuf]
+    commands: &mut Vec<Command>,
+    lines: &[(usize, &str)],
+    line_map: &[std::path::PathBuf],
 ) {
     for cmd in commands {
         // Find definition line
         for (idx, (line_num, line)) in lines.iter().enumerate() {
             let trimmed = line.trim_start();
-            if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
-            
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+
             // Check for name match at start of line
             if trimmed.starts_with(&cmd.name) {
                 let remainder = &trimmed[cmd.name.len()..];
@@ -638,11 +665,11 @@ fn resolve_scope(
                     if let Some(path) = line_map.get(*line_num) {
                         cmd.source_file = Some(path.clone());
                     }
-                    
+
                     // Recurse children with lines AFTER definition
                     if !cmd.children.is_empty() {
-                         let next_lines = &lines[idx+1..]; 
-                         resolve_scope(&mut cmd.children, next_lines, line_map);
+                        let next_lines = &lines[idx + 1..];
+                        resolve_scope(&mut cmd.children, next_lines, line_map);
                     }
                     break; // Found this command, move to next sibling
                 }
@@ -651,9 +678,7 @@ fn resolve_scope(
     }
 }
 
-
 use std::io::Write;
-
 
 fn execute_shell_command<B: Backend + Write>(
     terminal: &mut Terminal<B>,
@@ -669,11 +694,17 @@ fn execute_shell_command<B: Backend + Write>(
     )?;
     terminal.show_cursor()?;
 
-    let absolute_config = nestfile_path.canonicalize().unwrap_or_else(|_| nestfile_path.to_path_buf());
+    let absolute_config = nestfile_path
+        .canonicalize()
+        .unwrap_or_else(|_| nestfile_path.to_path_buf());
     let working_dir = absolute_config.parent().unwrap_or(Path::new("."));
 
-    println!("Executing: nest --config {} {}", absolute_config.display(), command_str);
-    
+    println!(
+        "Executing: nest --config {} {}",
+        absolute_config.display(),
+        command_str
+    );
+
     // Run command
     let parts: Vec<&str> = command_str.split_whitespace().collect();
     if !parts.is_empty() {
@@ -708,7 +739,7 @@ fn execute_shell_command<B: Backend + Write>(
     )?;
     terminal.hide_cursor()?;
     terminal.clear()?;
-    
+
     Ok(())
 }
 
@@ -722,48 +753,52 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                     match app.mode {
                         InputMode::Normal => match key.code {
                             KeyCode::Char('q') | KeyCode::Esc => app.should_quit = true,
-                            KeyCode::Tab => {
-                                match app.focus {
-                                    Focus::CommandList => {
-                                         app.focus = Focus::History;
-                                         if app.history_state.selected().is_none() && !app.history.is_empty() {
-                                             app.history_state.select(Some(0));
-                                         }
-                                    },
-                                    Focus::History => {
-                                         app.focus = Focus::ArgumentList;
-                                         if app.arg_state.selected().is_none() && !app.current_args().is_empty() {
-                                              app.arg_state.select(Some(0));
-                                         }
-                                         app.update_input_buffer();
+                            KeyCode::Tab => match app.focus {
+                                Focus::CommandList => {
+                                    app.focus = Focus::History;
+                                    if app.history_state.selected().is_none()
+                                        && !app.history.is_empty()
+                                    {
+                                        app.history_state.select(Some(0));
                                     }
-                                    Focus::ArgumentList => app.focus = Focus::CommandList,
                                 }
-                            }
+                                Focus::History => {
+                                    app.focus = Focus::ArgumentList;
+                                    if app.arg_state.selected().is_none()
+                                        && !app.current_args().is_empty()
+                                    {
+                                        app.arg_state.select(Some(0));
+                                    }
+                                    app.update_input_buffer();
+                                }
+                                Focus::ArgumentList => app.focus = Focus::CommandList,
+                            },
                             KeyCode::Right => {
                                 if app.view_mode == ViewMode::Tree {
                                     if let Some(cmd) = app.get_selected_command() {
                                         if !cmd.children.is_empty() {
-                                             app.breadcrumbs.push(cmd.name.clone());
-                                             app.selection_history.push(app.state.selected().unwrap_or(0));
-                                             app.state.select(Some(0));
-                                             app.args_map.clear();
+                                            app.breadcrumbs.push(cmd.name.clone());
+                                            app.selection_history
+                                                .push(app.state.selected().unwrap_or(0));
+                                            app.state.select(Some(0));
+                                            app.args_map.clear();
                                         } else {
-                                             app.focus = Focus::ArgumentList;
-                                             app.update_input_buffer();
+                                            app.focus = Focus::ArgumentList;
+                                            app.update_input_buffer();
                                         }
                                     }
                                 } else {
-                                     app.focus = Focus::ArgumentList;
+                                    app.focus = Focus::ArgumentList;
                                 }
-                            },
+                            }
                             KeyCode::Left | KeyCode::Backspace => {
                                 match app.focus {
                                     Focus::CommandList => {
                                         if app.view_mode == ViewMode::Tree {
                                             if !app.breadcrumbs.is_empty() {
                                                 app.breadcrumbs.pop();
-                                                if let Some(prev_idx) = app.selection_history.pop() {
+                                                if let Some(prev_idx) = app.selection_history.pop()
+                                                {
                                                     app.state.select(Some(prev_idx));
                                                 } else {
                                                     app.state.select(Some(0));
@@ -775,10 +810,10 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                     Focus::History => app.focus = Focus::CommandList,
                                     Focus::ArgumentList => app.focus = Focus::CommandList, // command list is central
                                 }
-                            },
+                            }
                             KeyCode::Char('v') => {
                                 app.toggle_view();
-                            },
+                            }
                             KeyCode::Char('h') => {
                                 if app.view_mode == ViewMode::History {
                                     app.view_mode = ViewMode::Tree;
@@ -787,99 +822,120 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                     app.view_mode = ViewMode::History;
                                     app.focus = Focus::History;
                                     // Select first item if none selected
-                                    if app.history_state.selected().is_none() && !app.history.is_empty() {
+                                    if app.history_state.selected().is_none()
+                                        && !app.history.is_empty()
+                                    {
                                         app.history_state.select(Some(0));
                                     }
                                 }
-                            },
+                            }
                             KeyCode::Char('/') => {
                                 app.mode = InputMode::Search;
                                 app.search_query.clear();
                                 app.update_search();
-                            },
+                            }
                             KeyCode::Char('d') => {
                                 app.show_source = !app.show_source;
                                 if app.show_source {
                                     app.load_selected_source();
                                 }
-                            },
-                            KeyCode::Down => {
-                                match app.focus {
-                                    Focus::CommandList => {
-                                        app.next();
-                                        app.arg_state.select(None);
-                                    },
-                                    Focus::History => {
-                                        if !app.history.is_empty() {
-                                            let i = match app.history_state.selected() {
-                                                Some(i) => if i >= app.history.len() - 1 { 0 } else { i + 1 },
-                                                None => 0,
-                                            };
-                                            app.history_state.select(Some(i));
-                                        }
-                                    },
-                                    Focus::ArgumentList => app.next_arg(),
+                            }
+                            KeyCode::Down => match app.focus {
+                                Focus::CommandList => {
+                                    app.next();
+                                    app.arg_state.select(None);
                                 }
-                            },
-                            KeyCode::Up => {
-                                match app.focus {
-                                    Focus::CommandList => {
-                                        app.previous();
-                                        app.arg_state.select(None); 
-                                    },
-                                    Focus::History => {
-                                          if !app.history.is_empty() {
-                                            let i = match app.history_state.selected() {
-                                                Some(i) => if i == 0 { app.history.len() - 1 } else { i - 1 },
-                                                None => 0,
-                                            };
-                                            app.history_state.select(Some(i));
-                                        }
-                                    },
-                                    Focus::ArgumentList => app.previous_arg(),
+                                Focus::History => {
+                                    if !app.history.is_empty() {
+                                        let i = match app.history_state.selected() {
+                                            Some(i) => {
+                                                if i >= app.history.len() - 1 {
+                                                    0
+                                                } else {
+                                                    i + 1
+                                                }
+                                            }
+                                            None => 0,
+                                        };
+                                        app.history_state.select(Some(i));
+                                    }
                                 }
+                                Focus::ArgumentList => app.next_arg(),
+                            },
+                            KeyCode::Up => match app.focus {
+                                Focus::CommandList => {
+                                    app.previous();
+                                    app.arg_state.select(None);
+                                }
+                                Focus::History => {
+                                    if !app.history.is_empty() {
+                                        let i = match app.history_state.selected() {
+                                            Some(i) => {
+                                                if i == 0 {
+                                                    app.history.len() - 1
+                                                } else {
+                                                    i - 1
+                                                }
+                                            }
+                                            None => 0,
+                                        };
+                                        app.history_state.select(Some(i));
+                                    }
+                                }
+                                Focus::ArgumentList => app.previous_arg(),
                             },
                             KeyCode::Char('e') => {
                                 if let Some(cmd) = app.get_selected_command() {
                                     let mut full_cmd = app.breadcrumbs.join(" ");
-                                    if !full_cmd.is_empty() { full_cmd.push(' '); }
+                                    if !full_cmd.is_empty() {
+                                        full_cmd.push(' ');
+                                    }
                                     full_cmd.push_str(&cmd.name);
-                                    
+
                                     app.input_buffer = full_cmd;
                                     app.mode = InputMode::Editing;
                                 } else if app.focus == Focus::History {
-                                     // edit history item
-                                     if let Some(idx) = app.history_state.selected() {
-                                         if let Some(cmd_str) = app.history.get(idx) {
-                                             app.input_buffer = cmd_str.clone();
-                                             app.mode = InputMode::Editing;
-                                         }
-                                     }
+                                    // edit history item
+                                    if let Some(idx) = app.history_state.selected() {
+                                        if let Some(cmd_str) = app.history.get(idx) {
+                                            app.input_buffer = cmd_str.clone();
+                                            app.mode = InputMode::Editing;
+                                        }
+                                    }
                                 }
                             }
                             KeyCode::Enter => {
-                                 match app.focus {
+                                match app.focus {
                                     Focus::CommandList => {
-                                         if let Some(cmd) = app.get_selected_command().cloned() {
-                                             if !cmd.children.is_empty() {
-                                                 app.breadcrumbs.push(cmd.name.clone());
-                                                 app.selection_history.push(app.state.selected().unwrap_or(0));
-                                                 app.state.select(Some(0));
-                                             } else {
+                                        if let Some(cmd) = app.get_selected_command().cloned() {
+                                            if !cmd.children.is_empty() {
+                                                app.breadcrumbs.push(cmd.name.clone());
+                                                app.selection_history
+                                                    .push(app.state.selected().unwrap_or(0));
+                                                app.state.select(Some(0));
+                                            } else {
                                                 app.update_input_buffer();
                                                 let full_cmd = app.input_buffer.clone();
-                                                
+
                                                 app.add_history(full_cmd.clone());
-                                                execute_shell_command(terminal, &full_cmd, &app.nestfile_path)?;
+                                                execute_shell_command(
+                                                    terminal,
+                                                    &full_cmd,
+                                                    &app.nestfile_path,
+                                                )?;
                                             }
-                                         }
+                                        }
                                     }
                                     Focus::History => {
                                         // Run selected history item
                                         if let Some(idx) = app.history_state.selected() {
                                             if let Some(cmd_str) = app.history.get(idx).cloned() {
                                                 app.add_history(cmd_str.clone());
-                                                execute_shell_command(terminal, &cmd_str, &app.nestfile_path)?;
+                                                execute_shell_command(
+                                                    terminal,
+                                                    &cmd_str,
+                                                    &app.nestfile_path,
+                                                )?;
                                             }
                                         }
                                     }
@@ -890,27 +946,42 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                             if let Some(arg) = args.get(idx) {
                                                 // Check for boolean flag
                                                 if arg.param_type == "bool" {
-                                                    let current_val = app.args_map.get(&arg.name).map(|s| s.as_str()).unwrap_or("false");
-                                                    let new_val = if current_val == "true" { "false" } else { "true" };
-                                                    app.args_map.insert(arg.name.clone(), new_val.to_string());
+                                                    let current_val = app
+                                                        .args_map
+                                                        .get(&arg.name)
+                                                        .map(|s| s.as_str())
+                                                        .unwrap_or("false");
+                                                    let new_val = if current_val == "true" {
+                                                        "false"
+                                                    } else {
+                                                        "true"
+                                                    };
+                                                    app.args_map.insert(
+                                                        arg.name.clone(),
+                                                        new_val.to_string(),
+                                                    );
                                                     app.update_input_buffer();
                                                 } else {
                                                     // String/Number - enter editing mode
-                                                    let current_val = app.args_map.get(&arg.name).cloned().unwrap_or_default();
+                                                    let current_val = app
+                                                        .args_map
+                                                        .get(&arg.name)
+                                                        .cloned()
+                                                        .unwrap_or_default();
                                                     app.input_buffer = current_val;
                                                     app.mode = InputMode::EditingArg;
                                                 }
                                             }
                                         }
                                     }
-                                 }
+                                }
                             }
                             _ => {}
                         },
                         InputMode::Search => match key.code {
                             KeyCode::Enter => {
                                 app.mode = InputMode::Normal;
-                                app.view_mode = ViewMode::Flat; 
+                                app.view_mode = ViewMode::Flat;
                                 app.focus = Focus::CommandList;
                                 app.args_map.clear();
                             }
@@ -953,7 +1024,8 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                 if let Some(idx) = app.arg_state.selected() {
                                     let args = app.current_args();
                                     if let Some(arg) = args.get(idx) {
-                                        app.args_map.insert(arg.name.clone(), app.input_buffer.clone());
+                                        app.args_map
+                                            .insert(arg.name.clone(), app.input_buffer.clone());
                                     }
                                 }
                                 app.mode = InputMode::Normal;
@@ -970,14 +1042,14 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                                 app.input_buffer.pop();
                             }
                             _ => {}
-                        }
+                        },
                     }
                 }
             }
             Event::Mouse(mouse) => {
                 match mouse.kind {
                     event::MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
-                         // Placeholder for mouse click logic
+                        // Placeholder for mouse click logic
                     }
                     _ => {}
                 }
@@ -986,7 +1058,7 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
         }
 
         if app.should_quit {
-             return Ok(());
+            return Ok(());
         }
     }
 }
@@ -1010,58 +1082,80 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     // Left Column: Commands OR History
     if app.view_mode == ViewMode::History {
-        let history_items: Vec<ListItem> = app.history.iter().map(|cmd| {
-            ListItem::new(Line::from(cmd.clone()))
-        }).collect();
+        let history_items: Vec<ListItem> = app
+            .history
+            .iter()
+            .map(|cmd| ListItem::new(Line::from(cmd.clone())))
+            .collect();
 
         let history_list = List::new(history_items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("History")
-                .border_style(match app.focus {
-                    Focus::History => Style::default().fg(Color::Green),
-                    _ => Style::default(),
-                }))
-            .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("History")
+                    .border_style(match app.focus {
+                        Focus::History => Style::default().fg(Color::Green),
+                        _ => Style::default(),
+                    }),
+            )
+            .highlight_style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(Color::Yellow),
+            )
             .highlight_symbol("> ");
-        
+
         f.render_stateful_widget(history_list, main_chunks[0], &mut app.history_state);
     } else {
         // Command List
         let items: Vec<ListItem> = if !app.search_query.is_empty() {
-             app.filtered_commands.iter().map(|(path, cmd)| {
-                     let style = if !cmd.children.is_empty() {
-                         Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
-                     } else {
-                         Style::default()
-                     };
-                     ListItem::new(Line::from(Span::styled(path.clone(), style)))
-                 }).collect()
+            app.filtered_commands
+                .iter()
+                .map(|(path, cmd)| {
+                    let style = if !cmd.children.is_empty() {
+                        Style::default()
+                            .fg(Color::Blue)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                    };
+                    ListItem::new(Line::from(Span::styled(path.clone(), style)))
+                })
+                .collect()
         } else {
             match app.view_mode {
                 ViewMode::Tree => {
-                     let current_items = app.get_current_items();
-                     current_items.iter().map(|cmd| {
-                        let mut name = cmd.name.clone();
+                    let current_items = app.get_current_items();
+                    current_items
+                        .iter()
+                        .map(|cmd| {
+                            let mut name = cmd.name.clone();
+                            let style = if !cmd.children.is_empty() {
+                                name.push_str(" /");
+                                Style::default()
+                                    .fg(Color::Blue)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default()
+                            };
+                            ListItem::new(Line::from(Span::styled(name, style)))
+                        })
+                        .collect()
+                }
+                ViewMode::Flat => app
+                    .flat_commands
+                    .iter()
+                    .map(|(path, cmd)| {
                         let style = if !cmd.children.is_empty() {
-                             name.push_str(" /");
-                             Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Color::Blue)
+                                .add_modifier(Modifier::BOLD)
                         } else {
-                             Style::default()
+                            Style::default()
                         };
-                        ListItem::new(Line::from(Span::styled(name, style)))
-                    }).collect()
-                }
-                ViewMode::Flat => {
-                     app.flat_commands.iter().map(|(path, cmd)| {
-                         let style = if !cmd.children.is_empty() {
-                             Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
-                         } else {
-                             Style::default()
-                         };
-                         ListItem::new(Line::from(Span::styled(path.clone(), style)))
-                     }).collect()
-                }
+                        ListItem::new(Line::from(Span::styled(path.clone(), style)))
+                    })
+                    .collect(),
                 ViewMode::History => Vec::new(), // Should not happen in this branch
             }
         };
@@ -1080,14 +1174,20 @@ fn ui(f: &mut Frame, app: &mut App) {
         };
 
         let list = List::new(items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title(title)
-                .border_style(match app.focus {
-                    Focus::CommandList => Style::default().fg(Color::Green),
-                    _ => Style::default(),
-                }))
-            .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(match app.focus {
+                        Focus::CommandList => Style::default().fg(Color::Green),
+                        _ => Style::default(),
+                    }),
+            )
+            .highlight_style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(Color::Yellow),
+            )
             .highlight_symbol("> ");
 
         f.render_stateful_widget(list, main_chunks[0], &mut app.state);
@@ -1106,157 +1206,218 @@ fn ui(f: &mut Frame, app: &mut App) {
         } else {
             "Source".to_string()
         };
-        
-        let content = app.source_code.clone().unwrap_or("No source loaded".to_string());
+
+        let content = app
+            .source_code
+            .clone()
+            .unwrap_or("No source loaded".to_string());
         let p = Paragraph::new(content)
             .block(Block::default().borders(Borders::ALL).title(title))
             .wrap(ratatui::widgets::Wrap { trim: false }); // keep formatting
-            
+
         f.render_widget(p, main_chunks[1]);
     } else {
         // Details Pane
         if let Some(cmd) = app.get_selected_command() {
-        let mut text = Vec::new();
+            let mut text = Vec::new();
 
-        // 1. Header & Signature
-        let kind_str = if !cmd.children.is_empty() { "Group" } else { "Command" };
-        text.push(Line::from(vec![
-            Span::styled(format!("{}: ", kind_str), Style::default().fg(Color::DarkGray)),
-            Span::styled(&cmd.name, Style::default().add_modifier(Modifier::BOLD).fg(Color::Green)),
-        ]));
-        text.push(Line::from(""));
-
-        // 2. Description
-        let desc = cmd.directives.iter().find_map(|d| match d {
-            nest_core::nestparse::ast::Directive::Desc(s) => Some(s.clone()),
-            _ => None,
-        });
-        if let Some(d) = desc {
-            text.push(Line::from(Span::styled("Description:", Style::default().fg(Color::Cyan))));
-            text.push(Line::from(Span::raw(format!("  {}", d))));
+            // 1. Header & Signature
+            let kind_str = if !cmd.children.is_empty() {
+                "Group"
+            } else {
+                "Command"
+            };
+            text.push(Line::from(vec![
+                Span::styled(
+                    format!("{}: ", kind_str),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    &cmd.name,
+                    Style::default()
+                        .add_modifier(Modifier::BOLD)
+                        .fg(Color::Green),
+                ),
+            ]));
             text.push(Line::from(""));
-        }
-        
-        // Children (if group)
-        if !cmd.children.is_empty() {
-             text.push(Line::from(Span::styled("Subcommands:", Style::default().fg(Color::Cyan))));
-             let children_names: Vec<String> = cmd.children.iter().map(|c| c.name.clone()).collect();
-             text.push(Line::from(Span::raw(format!("  {}", children_names.join(", ")))));
-             text.push(Line::from(""));
-        }
 
-        // Dependencies
-        let depends: Vec<String> = cmd.directives.iter().filter_map(|d| match d {
-            nest_core::nestparse::ast::Directive::Depends(deps, parallel) => {
-                let dep_strs: Vec<String> = deps.iter().map(|dep| dep.command_path.clone()).collect();
-                    let p_str = if *parallel { " (parallel)" } else { "" };
-                    Some(format!("{}{}", dep_strs.join(", "), p_str))
-            },
-            _ => None,
-        }).collect();
-
-        if !depends.is_empty() {
-            text.push(Line::from(Span::styled("Dependencies:", Style::default().fg(Color::Cyan))));
-            for dep in depends {
-                text.push(Line::from(Span::raw(format!("  {}", dep))));
+            // 2. Description
+            let desc = cmd.directives.iter().find_map(|d| match d {
+                nest_core::nestparse::ast::Directive::Desc(s) => Some(s.clone()),
+                _ => None,
+            });
+            if let Some(d) = desc {
+                text.push(Line::from(Span::styled(
+                    "Description:",
+                    Style::default().fg(Color::Cyan),
+                )));
+                text.push(Line::from(Span::raw(format!("  {}", d))));
+                text.push(Line::from(""));
             }
-            text.push(Line::from(""));
-        }
 
-        // Variables
-        if !cmd.local_variables.is_empty() {
-             text.push(Line::from(Span::styled("Variables:", Style::default().fg(Color::Cyan))));
-             for v in &cmd.local_variables {
-                 text.push(Line::from(Span::raw(format!("  {} = {}", v.name, v.value))));
-             }
-             text.push(Line::from(""));
-        }
+            // Children (if group)
+            if !cmd.children.is_empty() {
+                text.push(Line::from(Span::styled(
+                    "Subcommands:",
+                    Style::default().fg(Color::Cyan),
+                )));
+                let children_names: Vec<String> =
+                    cmd.children.iter().map(|c| c.name.clone()).collect();
+                text.push(Line::from(Span::raw(format!(
+                    "  {}",
+                    children_names.join(", ")
+                ))));
+                text.push(Line::from(""));
+            }
 
-        // Other Info (Source, Cwd, Env)
-        let mut info = Vec::new();
-        if let Some(src) = &cmd.source_file {
+            // Dependencies
+            let depends: Vec<String> = cmd
+                .directives
+                .iter()
+                .filter_map(|d| match d {
+                    nest_core::nestparse::ast::Directive::Depends(deps, parallel) => {
+                        let dep_strs: Vec<String> =
+                            deps.iter().map(|dep| dep.command_path.clone()).collect();
+                        let p_str = if *parallel { " (parallel)" } else { "" };
+                        Some(format!("{}{}", dep_strs.join(", "), p_str))
+                    }
+                    _ => None,
+                })
+                .collect();
+
+            if !depends.is_empty() {
+                text.push(Line::from(Span::styled(
+                    "Dependencies:",
+                    Style::default().fg(Color::Cyan),
+                )));
+                for dep in depends {
+                    text.push(Line::from(Span::raw(format!("  {}", dep))));
+                }
+                text.push(Line::from(""));
+            }
+
+            // Variables
+            if !cmd.local_variables.is_empty() {
+                text.push(Line::from(Span::styled(
+                    "Variables:",
+                    Style::default().fg(Color::Cyan),
+                )));
+                for v in &cmd.local_variables {
+                    text.push(Line::from(Span::raw(format!("  {} = {}", v.name, v.value))));
+                }
+                text.push(Line::from(""));
+            }
+
+            // Other Info (Source, Cwd, Env)
+            let mut info = Vec::new();
+            if let Some(src) = &cmd.source_file {
                 info.push(format!("Source: {}", src.display()));
-        }
-        // Check other directives
-        for d in &cmd.directives {
-            match d {
-                nest_core::nestparse::ast::Directive::Cwd(p) => info.push(format!("Cwd: {}", p)),
-                nest_core::nestparse::ast::Directive::Env(k, v, hide) => {
-                    let display_val = if *hide { "********".to_string() } else { v.clone() };
-                    info.push(format!("Env: {}={}", k, display_val))
-                },
-                nest_core::nestparse::ast::Directive::Privileged(true) => info.push("Privileged: Yes".to_string()),
-                nest_core::nestparse::ast::Directive::Validate(target, rule) => info.push(format!("Validate {}: {}", target, rule)),
-                _ => {}
             }
-        }
+            // Check other directives
+            for d in &cmd.directives {
+                match d {
+                    nest_core::nestparse::ast::Directive::Cwd(p) => {
+                        info.push(format!("Cwd: {}", p))
+                    }
+                    nest_core::nestparse::ast::Directive::Env(k, v, hide) => {
+                        let display_val = if *hide {
+                            "********".to_string()
+                        } else {
+                            v.clone()
+                        };
+                        info.push(format!("Env: {}={}", k, display_val))
+                    }
+                    nest_core::nestparse::ast::Directive::Privileged(true) => {
+                        info.push("Privileged: Yes".to_string())
+                    }
+                    nest_core::nestparse::ast::Directive::Validate(target, rule) => {
+                        info.push(format!("Validate {}: {}", target, rule))
+                    }
+                    _ => {}
+                }
+            }
 
-        if !info.is_empty() {
-                text.push(Line::from(Span::styled("Info:", Style::default().fg(Color::Cyan))));
+            if !info.is_empty() {
+                text.push(Line::from(Span::styled(
+                    "Info:",
+                    Style::default().fg(Color::Cyan),
+                )));
                 for i in info {
                     text.push(Line::from(Span::raw(format!("  {}", i))));
                 }
                 text.push(Line::from(""));
-        }
+            }
 
+            let paragraph = Paragraph::new(text)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Details (d for Source)"),
+                )
+                .wrap(ratatui::widgets::Wrap { trim: true });
 
-        let paragraph = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title("Details (d for Source)"))
-            .wrap(ratatui::widgets::Wrap { trim: true });
-        
-        f.render_widget(paragraph, right_chunks[0]);
+            f.render_widget(paragraph, right_chunks[0]);
 
             // Arguments Pane (Selectable List)
             let current_args = app.current_args();
-            let arg_items: Vec<ListItem> = current_args.iter().map(|param| {
-            let mut s = String::new();
-            
-            // Check current value
-            let val = app.args_map.get(&param.name).map(|s| s.as_str());
+            let arg_items: Vec<ListItem> = current_args
+                .iter()
+                .map(|param| {
+                    let mut s = String::new();
 
-            if param.param_type == "bool" {
-                let is_checked = val == Some("true");
-                s.push_str(if is_checked { "[x] " } else { "[ ] " });
-                s.push_str("--");
-                s.push_str(&param.name);
-            } else {
-                if param.is_named {
-                    s.push_str("--");
-                    s.push_str(&param.name);
-                } else {
-                    s.push('<');
-                    s.push_str(&param.name);
-                    s.push('>');
-                }
-                
-                if let Some(v) = val {
-                    if !v.is_empty() {
-                         s.push_str(": ");
-                         s.push_str(v);
+                    // Check current value
+                    let val = app.args_map.get(&param.name).map(|s| s.as_str());
+
+                    if param.param_type == "bool" {
+                        let is_checked = val == Some("true");
+                        s.push_str(if is_checked { "[x] " } else { "[ ] " });
+                        s.push_str("--");
+                        s.push_str(&param.name);
+                    } else {
+                        if param.is_named {
+                            s.push_str("--");
+                            s.push_str(&param.name);
+                        } else {
+                            s.push('<');
+                            s.push_str(&param.name);
+                            s.push('>');
+                        }
+
+                        if let Some(v) = val {
+                            if !v.is_empty() {
+                                s.push_str(": ");
+                                s.push_str(v);
+                            }
+                        }
                     }
-                }
-            }
-            // Type hint
-            if param.param_type != "bool" {
-                s.push_str(&format!(" ({})", param.param_type));
-            }
+                    // Type hint
+                    if param.param_type != "bool" {
+                        s.push_str(&format!(" ({})", param.param_type));
+                    }
 
-            ListItem::new(Line::from(s))
-            }).collect();
+                    ListItem::new(Line::from(s))
+                })
+                .collect();
 
             let arg_list = List::new(arg_items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Arguments (Enter to add)")
-                .border_style(match app.focus {
-                    Focus::ArgumentList => Style::default().fg(Color::Green),
-                    _ => Style::default(),
-                }))
-            .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow))
-            .highlight_symbol("> ");
-        
-        f.render_stateful_widget(arg_list, right_chunks[1], &mut app.arg_state);
-    } // end if let Some(cmd)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Arguments (Enter to add)")
+                        .border_style(match app.focus {
+                            Focus::ArgumentList => Style::default().fg(Color::Green),
+                            _ => Style::default(),
+                        }),
+                )
+                .highlight_style(
+                    Style::default()
+                        .add_modifier(Modifier::BOLD)
+                        .fg(Color::Yellow),
+                )
+                .highlight_symbol("> ");
+
+            f.render_stateful_widget(arg_list, right_chunks[1], &mut app.arg_state);
+        } // end if let Some(cmd)
     } // end else (not showing source)
 
     // Input or Help Footer
@@ -1274,7 +1435,11 @@ fn ui(f: &mut Frame, app: &mut App) {
         InputMode::EditingArg => {
             let input = Paragraph::new(app.input_buffer.as_str())
                 .style(Style::default().fg(Color::Magenta))
-                .block(Block::default().borders(Borders::ALL).title("Edit Argument Value"));
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Edit Argument Value"),
+                );
             f.render_widget(input, chunks[1]);
             f.set_cursor_position(ratatui::layout::Position {
                 x: chunks[1].x + app.input_buffer.len() as u16 + 1,
@@ -1282,7 +1447,7 @@ fn ui(f: &mut Frame, app: &mut App) {
             });
         }
         InputMode::Search => {
-             let input = Paragraph::new(format!("/{}", app.search_query))
+            let input = Paragraph::new(format!("/{}", app.search_query))
                 .style(Style::default().fg(Color::Cyan))
                 .block(Block::default().borders(Borders::ALL).title("Search"));
             f.render_widget(input, chunks[1]);
@@ -1313,8 +1478,7 @@ fn ui(f: &mut Frame, app: &mut App) {
                 Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
             ];
             let help_line = Line::from(help_text);
-            let help = Paragraph::new(help_line)
-                .style(Style::default().fg(Color::DarkGray));
+            let help = Paragraph::new(help_line).style(Style::default().fg(Color::DarkGray));
             f.render_widget(help, chunks[1]);
         }
     }
