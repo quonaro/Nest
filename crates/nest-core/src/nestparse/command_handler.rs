@@ -9,6 +9,7 @@ use super::args::ArgumentExtractor;
 use super::ast::Command;
 use super::cli::CliGenerator;
 use super::help::HelpFormatter;
+use super::runtime::Runtime;
 use crate::constants::{DEFAULT_SUBCOMMAND, FLAG_DRY_RUN, FLAG_VERBOSE};
 use clap::ArgMatches;
 
@@ -51,7 +52,8 @@ impl CommandHandler {
     ///
     /// * `matches` - The parsed CLI arguments from clap
     /// * `command_path` - The path to the parent group command
-    /// * `generator` - CLI generator for finding and executing commands
+    /// * `generator` - CLI generator for finding commands
+    /// * `runtime` - Runtime for executing commands
     ///
     /// # Returns
     ///
@@ -67,6 +69,7 @@ impl CommandHandler {
         matches: &ArgMatches,
         command_path: &[String],
         generator: &CliGenerator,
+        runtime: &Runtime,
         root_matches: &ArgMatches,
     ) -> Result<(), String> {
         let default_path = {
@@ -75,6 +78,8 @@ impl CommandHandler {
             path
         };
 
+        // We can use runtime or generator to find command. Since they share AST, it doesn't matter much.
+        // But generator is used for parsing args, so let's stick with generator for lookups where consistent.
         let default_cmd = generator
             .find_command(&default_path)
             .ok_or_else(|| "Default command not found".to_string())?;
@@ -103,9 +108,8 @@ impl CommandHandler {
         let dry_run = root_matches.get_flag(FLAG_DRY_RUN);
         let verbose = root_matches.get_flag(FLAG_VERBOSE);
 
-        // Execute with parent args - we need to modify execute_command to accept parent_args
-        // For now, we'll pass empty parent args and handle it in execute_command_with_deps
-        generator.execute_command_with_parent_args(
+        // Execute with parent args using Runtime
+        runtime.execute_command_with_parent_args(
             default_cmd,
             &args,
             Some(&default_path),
@@ -125,6 +129,7 @@ impl CommandHandler {
     /// * `matches` - The parsed CLI arguments from clap
     /// * `command` - The command to execute
     /// * `generator` - CLI generator for executing commands
+    /// * `runtime` - Runtime for executing commands
     /// * `command_path` - The full path to the command
     ///
     /// # Returns
@@ -141,6 +146,7 @@ impl CommandHandler {
         matches: &ArgMatches,
         command: &Command,
         generator: &CliGenerator,
+        runtime: &Runtime,
         command_path: &[String],
         root_matches: &ArgMatches,
     ) -> Result<(), String> {
@@ -168,8 +174,8 @@ impl CommandHandler {
         let dry_run = root_matches.get_flag(FLAG_DRY_RUN);
         let verbose = root_matches.get_flag(FLAG_VERBOSE);
 
-        // Execute with parent args
-        generator.execute_command_with_parent_args(
+        // Execute with parent args using Runtime
+        runtime.execute_command_with_parent_args(
             command,
             &args,
             Some(command_path),

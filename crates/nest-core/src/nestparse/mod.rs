@@ -28,6 +28,7 @@ pub mod merge;
 pub mod output;
 pub mod parser;
 pub mod path;
+pub mod runtime;
 pub mod template;
 pub mod type_validator;
 pub mod validator;

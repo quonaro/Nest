@@ -202,10 +202,18 @@ fn main() {
         parse_result.variables.clone(),
         parse_result.constants.clone(),
         parse_result.functions.clone(),
+    );
+
+    let runtime = nest_core::nestparse::runtime::Runtime::new(
+        parse_result.commands.clone(),
+        parse_result.variables.clone(),
+        parse_result.constants.clone(),
+        parse_result.functions.clone(),
         Some(Box::new(|pid: u32| {
             CHILD_PID.store(pid, Ordering::SeqCst);
         })),
     );
+
     let mut cli = match generator.build_cli() {
         Ok(cli) => cli,
         Err(e) => {
@@ -319,6 +327,7 @@ fn main() {
                     command,
                     &command_path,
                     &generator,
+                    &runtime,
                     &matches,
                 )
             };
@@ -331,7 +340,14 @@ fn main() {
                 process::exit(1);
             }
         } else {
-            handle_command_execution(&matches, command, &command_path, &generator, &matches);
+            handle_command_execution(
+                &matches,
+                command,
+                &command_path,
+                &generator,
+                &runtime,
+                &matches,
+            );
         }
     } else {
         nest_core::nestparse::output::OutputFormatter::error(&format!(
@@ -343,11 +359,13 @@ fn main() {
 }
 
 // Wrapper that returns Result instead of exiting
+// Wrapper that returns Result instead of exiting
 fn handle_command_execution_no_exit(
     matches: &clap::ArgMatches,
     command: &nest_core::nestparse::ast::Command,
     command_path: &[String],
     generator: &CliGenerator,
+    runtime: &nest_core::nestparse::runtime::Runtime,
     root_matches: &clap::ArgMatches,
 ) -> Result<(), String> {
     if !command.children.is_empty() {
@@ -355,7 +373,13 @@ fn handle_command_execution_no_exit(
             CommandHandler::handle_group_without_default(command, command_path)
                 .map_err(|_| "Failed to handle group command".to_string())
         } else {
-            CommandHandler::handle_default_command(matches, command_path, generator, root_matches)
+            CommandHandler::handle_default_command(
+                matches,
+                command_path,
+                generator,
+                runtime,
+                root_matches,
+            )
         }
     } else {
         // We need to extract the subcommand matches again
@@ -371,6 +395,7 @@ fn handle_command_execution_no_exit(
             current_matches,
             command,
             generator,
+            runtime,
             command_path,
             root_matches,
         )
@@ -481,6 +506,7 @@ fn handle_command_execution(
     command: &nest_core::nestparse::ast::Command,
     command_path: &[String],
     generator: &CliGenerator,
+    runtime: &nest_core::nestparse::runtime::Runtime,
     root_matches: &clap::ArgMatches,
 ) {
     if !command.children.is_empty() {
@@ -494,6 +520,7 @@ fn handle_command_execution(
                 matches,
                 command_path,
                 generator,
+                runtime,
                 root_matches,
             ) {
                 eprint!("{}", e);
@@ -515,6 +542,7 @@ fn handle_command_execution(
         current_matches,
         command,
         generator,
+        runtime,
         command_path,
         root_matches,
     ) {
