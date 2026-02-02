@@ -39,7 +39,7 @@ impl RuntimeValidator {
         for (param_name, rule) in validate_directives {
             // Process templates in the pattern part (allows dynamic rules)
             let processed_pattern =
-                TemplateProcessor::process(rule, args, tpl_context, parent_args);
+                TemplateProcessor::process(rule, args, tpl_context, parent_args, None);
             let pattern_part = processed_pattern.trim();
 
             // Determine the target value (either from args or environment)

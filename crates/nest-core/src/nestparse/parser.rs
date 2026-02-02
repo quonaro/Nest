@@ -997,7 +997,12 @@ impl Parser {
         value: &str,
         _line_number: usize,
     ) -> Value {
-        if value.contains("$(") {
+        // If it's a pure dynamic value like $(command), strip the wrapper
+        if value.starts_with("$(") && value.ends_with(')') {
+            let inner = &value[2..value.len() - 1];
+            Value::Dynamic(inner.to_string())
+        } else if value.contains("$(") {
+            // Mixed dynamic value, keep it as is for now as the evaluator will handle it
             Value::Dynamic(value.to_string())
         } else {
             Value::String(value.to_string())

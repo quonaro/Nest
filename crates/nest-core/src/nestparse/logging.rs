@@ -25,6 +25,7 @@ pub fn write_log_entry(
         args,
         &TemplateContext::default(),
         &empty_parent_args,
+        None,
     );
 
     // Create parent directories if needed

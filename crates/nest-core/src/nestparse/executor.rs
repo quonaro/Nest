@@ -185,6 +185,55 @@ impl CommandExecutor {
         Ok(())
     }
 
+    /// Executes a command and captures its stdout as a string.
+    /// This is used for dynamic value evaluation $(command).
+    pub fn capture_output(script: &str, context: &ExecutionContext) -> Result<String, String> {
+        if context.dry_run {
+            return Ok(format!("[DRY RUN: output of {}]", script));
+        }
+
+        // Detect shell from shebang and remove it
+        let (shell, script_without_shebang) = Self::detect_shell_and_remove_shebang(script);
+        let script_to_execute = script_without_shebang.trim();
+
+        let mut cmd = ProcessCommand::new(shell);
+        cmd.arg("-c");
+        cmd.arg(script_to_execute);
+
+        if let Some(cwd_path) = context.cwd {
+            cmd.current_dir(cwd_path);
+        }
+
+        // Set environment variables
+        for (key, value) in context.env_vars {
+            cmd.env(key, value);
+        }
+
+        for (key, value) in context.args {
+            cmd.env(key.to_uppercase(), value);
+            cmd.env(key, value);
+        }
+
+        // Capture output
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| format!("Failed to start script execution: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "Command failed with exit code {}: {}",
+                output.status.code().unwrap_or(-1),
+                stderr.trim()
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.trim().to_string())
+    }
+
     /// Checks if the current process is running with privileged access.
     ///
     /// On Unix systems (Linux/macOS), checks if running as root (UID == 0) or via sudo.

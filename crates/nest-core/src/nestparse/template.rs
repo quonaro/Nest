@@ -7,7 +7,7 @@
 //! - {{var|sep:","}} - for arrays: replace default separator (space) with a custom one
 //! - {{var|copy}} - for boolean values: copy the argument format (flag -> "--param", true -> "true", false -> "")
 
-use super::ast::{Constant, Variable};
+use super::ast::{Constant, Value, Variable};
 use crate::constants::{
     DEFAULT_USER, ENV_VAR_USER, TEMPLATE_VAR_ERROR, TEMPLATE_VAR_NOW, TEMPLATE_VAR_USER,
 };
@@ -94,6 +94,7 @@ impl TemplateProcessor {
         args: &HashMap<String, String>,
         context: &TemplateContext,
         parent_args: &HashMap<String, String>,
+        evaluator: Option<&dyn Fn(&str) -> Result<String, String>>,
     ) -> String {
         let mut processed = script.to_string();
 
@@ -102,32 +103,50 @@ impl TemplateProcessor {
 
         // 1. Add global constants first (lowest priority for constants)
         for constant in context.global_constants {
-            var_map.insert(constant.name.clone(), constant.value.to_string_unquoted());
+            var_map.insert(
+                constant.name.clone(),
+                Self::resolve_value(&constant.value, evaluator),
+            );
         }
 
         // 2. Add global variables (can override global constants)
         for variable in context.global_variables {
-            var_map.insert(variable.name.clone(), variable.value.to_string_unquoted());
+            var_map.insert(
+                variable.name.clone(),
+                Self::resolve_value(&variable.value, evaluator),
+            );
         }
 
         // 3. Add parent constants (override global constants/variables)
         for constant in context.parent_constants {
-            var_map.insert(constant.name.clone(), constant.value.to_string_unquoted());
+            var_map.insert(
+                constant.name.clone(),
+                Self::resolve_value(&constant.value, evaluator),
+            );
         }
 
         // 4. Add parent variables (override parent constants and global variables)
         for variable in context.parent_variables {
-            var_map.insert(variable.name.clone(), variable.value.to_string_unquoted());
+            var_map.insert(
+                variable.name.clone(),
+                Self::resolve_value(&variable.value, evaluator),
+            );
         }
 
         // 5. Add local constants (override parent and global constants/variables)
         for constant in context.local_constants {
-            var_map.insert(constant.name.clone(), constant.value.to_string_unquoted());
+            var_map.insert(
+                constant.name.clone(),
+                Self::resolve_value(&constant.value, evaluator),
+            );
         }
 
         // 6. Add local variables (highest priority for variables, override everything)
         for variable in context.local_variables {
-            var_map.insert(variable.name.clone(), variable.value.to_string_unquoted());
+            var_map.insert(
+                variable.name.clone(),
+                Self::resolve_value(&variable.value, evaluator),
+            );
         }
 
         // Build combined map for all replacements (args + parent_args)
@@ -422,5 +441,19 @@ impl TemplateProcessor {
         }
 
         Ok(result)
+    }
+
+    /// Resolves a value, evaluating it if it's dynamic.
+    fn resolve_value(
+        value: &Value,
+        evaluator: Option<&dyn Fn(&str) -> Result<String, String>>,
+    ) -> String {
+        match value {
+            Value::Dynamic(cmd) => evaluator
+                .as_ref()
+                .map(|e| e(cmd).unwrap_or_else(|err| format!("<error: {}>", err)))
+                .unwrap_or_else(|| value.to_string_unquoted()),
+            _ => value.to_string_unquoted(),
+        }
     }
 }

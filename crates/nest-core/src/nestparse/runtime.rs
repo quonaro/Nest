@@ -107,7 +107,30 @@ impl Runtime {
     // / Checks if directives are valid
     // removed directive getters in favor of DirectiveResolver
 
-    // Insert execute_script, execute_command, etc. next
+    /// Evaluates a dynamic value $(command) by executing it and capturing output.
+    fn evaluate_dynamic_value(
+        &self,
+        script: &str,
+        context: &ScriptExecutionContext,
+    ) -> Result<String, String> {
+        use super::ast::Command;
+        use super::executor::{CommandExecutor, ExecutionContext};
+
+        let exec_context = ExecutionContext {
+            command: &Command::default(),
+            args: context.args,
+            env_vars: context.env_vars,
+            cwd: context.cwd,
+            command_path: context.command_path,
+            dry_run: context.dry_run,
+            verbose: context.verbose,
+            privileged: context.privileged,
+            pid_callback: None, // No PID callback for value evaluation
+            hide_output: true,  // Hide output since we capture it
+        };
+
+        CommandExecutor::capture_output(script, &exec_context)
+    }
 }
 impl Runtime {
     // / Validates command parameters according to validation directives.
@@ -126,8 +149,32 @@ impl Runtime {
             return Ok(());
         }
 
-        // Pre-process script to handle function calls in templates {{ func() }}
-        let script = self.process_function_calls_in_templates(script, context)?;
+        // Pre-process script to handle placeholders
+        let (parent_vars, parent_consts) = if let Some(path) = context.command_path {
+            self.collect_parent_variables(path)
+        } else {
+            (Vec::new(), Vec::new())
+        };
+
+        let tpl_context = TemplateContext {
+            global_variables: &self.variables,
+            global_constants: &self.constants,
+            local_variables: &[],
+            local_constants: &[],
+            parent_variables: &parent_vars,
+            parent_constants: &parent_consts,
+        };
+
+        let script = TemplateProcessor::process(
+            script,
+            context.args,
+            &tpl_context,
+            context.parent_args,
+            Some(&|cmd| self.evaluate_dynamic_value(cmd, context)),
+        );
+
+        // Process function calls {{ func() }}
+        let script = self.process_function_calls_in_templates(&script, context)?;
 
         // Process script line by line
         let lines: Vec<&str> = script.lines().collect();
@@ -171,6 +218,7 @@ impl Runtime {
                         context.args,
                         &tpl_context,
                         context.parent_args,
+                        Some(&|cmd| self.evaluate_dynamic_value(cmd, context)),
                     );
                     Self::execute_shell_script(&processed_command, context)?;
                 }
@@ -294,6 +342,7 @@ impl Runtime {
                             context.args,
                             &tpl_context,
                             &HashMap::new(),
+                            Some(&|cmd| self.evaluate_dynamic_value(cmd, context)),
                         );
                         current_shell_block.push(processed_line);
                         continue;
@@ -705,6 +754,7 @@ impl Runtime {
                         context.args,
                         &tpl_context,
                         context.parent_args,
+                        Some(&|cmd| self.evaluate_dynamic_value(cmd, context)),
                     );
                     Self::execute_shell_script(&processed_command, context)?;
                 }
@@ -1105,7 +1155,25 @@ impl Runtime {
         };
 
         for value in processed_env_vars.values_mut() {
-            *value = TemplateProcessor::process(value, args, &tpl_context, &merged_parent_args);
+            let script_context = ScriptExecutionContext {
+                env_vars: &std::collections::HashMap::new(), // Not needed for env evaluation
+                cwd: cwd.as_deref(),
+                command_path: Some(command_path_unwrapped),
+                args,
+                dry_run,
+                verbose,
+                privileged,
+                pid_callback: self.pid_callback.as_deref(),
+                parent_args: &merged_parent_args,
+                hide_output: true,
+            };
+            *value = TemplateProcessor::process(
+                value,
+                args,
+                &tpl_context,
+                &merged_parent_args,
+                Some(&|cmd| self.evaluate_dynamic_value(cmd, &script_context)),
+            );
         }
 
         if !command_id.is_empty() {
@@ -1140,8 +1208,13 @@ impl Runtime {
             DirectiveResolver::get_directive_value_with_hide(&command.directives, "before")
                 .or_else(|| parent_directives.get("before").cloned());
         if let Some((before_script, hide_before)) = before_info {
-            let processed_before =
-                TemplateProcessor::process(&before_script, args, &tpl_context, &merged_parent_args);
+            let processed_before = TemplateProcessor::process(
+                &before_script,
+                args,
+                &tpl_context,
+                &merged_parent_args,
+                Some(&|cmd| self.evaluate_dynamic_value(cmd, &script_exec_context)),
+            );
 
             if verbose {
                 use super::output::OutputFormatter;
@@ -1158,8 +1231,13 @@ impl Runtime {
             DirectiveResolver::get_directive_value_with_hide(&command.directives, "script")
                 .ok_or_else(|| "Command has no script directive".to_string())?;
 
-        let processed_script =
-            TemplateProcessor::process(&script, args, &tpl_context, &merged_parent_args);
+        let processed_script = TemplateProcessor::process(
+            &script,
+            args,
+            &tpl_context,
+            &merged_parent_args,
+            Some(&|cmd| self.evaluate_dynamic_value(cmd, &script_exec_context)),
+        );
 
         if privileged && !dry_run {
             use super::executor::CommandExecutor;
@@ -1220,6 +1298,7 @@ impl Runtime {
                         args,
                         &tpl_context,
                         &merged_parent_args,
+                        Some(&|cmd| self.evaluate_dynamic_value(cmd, &script_exec_context)),
                     );
 
                     if verbose {
@@ -1245,23 +1324,19 @@ impl Runtime {
                     fallback_args.insert("SYSTEM_ERROR_MESSAGE".to_string(), error_msg.clone());
                     fallback_args.insert("error".to_string(), error_msg.clone());
 
-                    let processed_fallback = TemplateProcessor::process(
-                        &fallback_script,
-                        &fallback_args,
-                        &tpl_context,
-                        &merged_parent_args,
-                    );
-
-                    if verbose {
-                        use super::output::OutputFormatter;
-                        OutputFormatter::info("Executing fallback script...");
-                    }
-
                     let fallback_context = ScriptExecutionContext {
                         args: &fallback_args,
                         hide_output: hide_fallback,
                         ..script_exec_context
                     };
+
+                    let processed_fallback = TemplateProcessor::process(
+                        &fallback_script,
+                        &fallback_args,
+                        &tpl_context,
+                        &merged_parent_args,
+                        Some(&|cmd| self.evaluate_dynamic_value(cmd, &fallback_context)),
+                    );
                     if let Err(e) = self.execute_script(&processed_fallback, &fallback_context) {
                         return Err(format!("Fallback script failed: {}", e));
                     }
@@ -1311,6 +1386,7 @@ impl Runtime {
                 args,
                 &tpl_context,
                 &merged_parent_args,
+                Some(&|cmd| self.evaluate_dynamic_value(cmd, &script_exec_context)),
             );
 
             if verbose {
