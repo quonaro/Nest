@@ -3642,10 +3642,9 @@ fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::
     }
 }
 
-/// Handles the update command.
+/// # Arguments
 ///
-/// Updates Nest CLI to the latest version by downloading from GitHub releases
-/// and replacing the binary in ~/.local/bin.
+/// * `recreate` - If true, run the official installation script instead of updating the current binary.
 ///
 /// # Errors
 ///
@@ -3655,7 +3654,7 @@ fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::
 /// - Download fails
 /// - Archive extraction fails
 /// - Binary replacement fails
-pub fn handle_update() {
+pub fn handle_update(recreate: bool) {
     use std::env;
     use std::fs;
     use std::path::PathBuf;
@@ -3665,6 +3664,55 @@ pub fn handle_update() {
     use std::os::unix::fs::PermissionsExt;
 
     use super::output::OutputFormatter;
+
+    let try_sudo_retry = || {
+        if !env::args().any(|a| a == "--sudo-retry") {
+            #[cfg(unix)]
+            {
+                OutputFormatter::info("Permission denied. Retrying with sudo...");
+                let current_exe = env::current_exe().unwrap_or_else(|_| PathBuf::from("nest"));
+                let mut args: Vec<String> = env::args().collect();
+                args.push("--sudo-retry".to_string());
+
+                // We use sudo to run the SAME command again.
+                // The --sudo-retry flag prevents infinite loops if sudo also fails.
+                let status = Command::new("sudo")
+                    .arg(current_exe)
+                    .args(&args[1..])
+                    .status();
+
+                if let Ok(s) = status {
+                    if s.success() {
+                        std::process::exit(0);
+                    }
+                }
+            }
+        }
+    };
+
+    // Handle --recreate
+    if recreate {
+        OutputFormatter::info("Recreating Nest... Running official installation script.");
+        if Command::new("curl").arg("--version").output().is_ok() {
+            let status = Command::new("bash")
+                .arg("-c")
+                .arg("curl -fsSL https://raw.githubusercontent.com/quonaro/nest/main/install.sh | bash")
+                .status();
+            match status {
+                Ok(s) if s.success() => {
+                    OutputFormatter::success("Nest successfully recreated.");
+                    std::process::exit(0);
+                }
+                _ => {
+                    OutputFormatter::error("Failed to run installation script.");
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            OutputFormatter::error("curl is required for --recreate.");
+            std::process::exit(1);
+        }
+    }
 
     // Detect OS and architecture
     let (platform, architecture) = match detect_platform() {
@@ -3926,6 +3974,9 @@ pub fn handle_update() {
     // This allows atomic rename operation
     let new_binary_path = binary_path.with_extension("new");
     if let Err(e) = fs::copy(&extracted_binary, &new_binary_path) {
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            try_sudo_retry();
+        }
         OutputFormatter::error(&format!("Failed to copy new binary: {}", e));
         let _ = fs::remove_dir_all(&temp_dir);
         std::process::exit(1);
@@ -3978,10 +4029,11 @@ pub fn handle_update() {
     }
 
     if !replaced {
-        OutputFormatter::error(
-            "Failed to install binary: Text file busy (binary is currently running)",
-        );
-        OutputFormatter::info("Please close this terminal session and try again.");
+        // If failed, try sudo as a last resort (if not already tried)
+        try_sudo_retry();
+
+        OutputFormatter::error("Failed to install binary: Permission denied or Text file busy");
+        OutputFormatter::info("Please try running with sudo or close running instances.");
         let _ = fs::remove_dir_all(&temp_dir);
         let _ = fs::remove_file(&new_binary_path);
         std::process::exit(1);

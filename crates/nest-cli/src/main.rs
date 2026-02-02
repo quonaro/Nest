@@ -104,7 +104,8 @@ fn main() {
 
     // --update
     if has_global_flag(FLAG_UPDATE) {
-        handle_update();
+        let recreate = global_args.iter().any(|a| a == "--recreate");
+        handle_update(recreate);
         return;
     }
 
