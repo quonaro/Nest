@@ -18,6 +18,7 @@ pub mod display;
 pub mod env;
 pub mod executor;
 pub mod file;
+pub mod handlers;
 pub mod help;
 pub mod include;
 pub mod input;

@@ -9,13 +9,13 @@ use nest_core::constants::{
     FLAG_INIT, FLAG_LIST, FLAG_SHOW, FLAG_STD, FLAG_UNINSTALL, FLAG_UPDATE, FLAG_VERBOSE,
     FORMAT_AST, FORMAT_JSON,
 };
-use nest_core::nestparse::cli::{
-    handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version,
-    CliGenerator,
-};
+use nest_core::nestparse::cli::CliGenerator;
 use nest_core::nestparse::command_handler::CommandHandler;
 use nest_core::nestparse::completion::CompletionManager;
 use nest_core::nestparse::file::read_file_unchecked;
+use nest_core::nestparse::handlers::{
+    handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version,
+};
 use nest_core::nestparse::include::process_includes;
 use nest_core::nestparse::parser::{ParseError, ParseResult, Parser};
 use nest_core::nestparse::path::find_config_file;
