@@ -27,7 +27,10 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
 
     // 2. Print constants
     for constant in &command.local_constants {
-        result.push_str(&format!("{}const {} = {}\n", indent_str, constant.name, constant.value));
+        result.push_str(&format!(
+            "{}const {} = {}\n",
+            indent_str, constant.name, constant.value
+        ));
     }
 
     // 3. Command signature
@@ -36,10 +39,16 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
 
     if !command.parameters.is_empty() {
         result.push('(');
-        let params: Vec<String> = command.parameters.iter().map(|p| {
-            match &p.kind {
+        let params: Vec<String> = command
+            .parameters
+            .iter()
+            .map(|p| match &p.kind {
                 ParamKind::Normal => {
-                    let mut s = if p.is_named { "!".to_string() } else { String::new() };
+                    let mut s = if p.is_named {
+                        "!".to_string()
+                    } else {
+                        String::new()
+                    };
                     s.push_str(&p.name);
                     if let Some(alias) = &p.alias {
                         s.push_str(&format!("|{}", alias));
@@ -61,8 +70,8 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
                     }
                     s
                 }
-            }
-        }).collect();
+            })
+            .collect();
         result.push_str(&params.join(", "));
         result.push(')');
     }
@@ -84,25 +93,38 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
             }
             Directive::Env(name, value, hide) => {
                 let suffix = if *hide { ".hide" } else { "" };
-                result.push_str(&format!("{}env{}: {}={}\n", inner_indent_str, suffix, name, value));
+                result.push_str(&format!(
+                    "{}env{}: {}={}\n",
+                    inner_indent_str, suffix, name, value
+                ));
             }
             Directive::EnvFile(path, hide) => {
                 let suffix = if *hide { ".hide" } else { "" };
                 result.push_str(&format!("{}env{}: {}\n", inner_indent_str, suffix, path));
             }
             Directive::Depends(deps, parallel) => {
-                let deps_str: Vec<String> = deps.iter().map(|dep| {
-                    if dep.args.is_empty() {
-                        dep.command_path.clone()
-                    } else {
-                        let args_str: Vec<String> = dep.args.iter()
-                            .map(|(k, v)| format!("{}=\"{}\"", k, v))
-                            .collect();
-                        format!("{}({})", dep.command_path, args_str.join(", "))
-                    }
-                }).collect();
+                let deps_str: Vec<String> = deps
+                    .iter()
+                    .map(|dep| {
+                        if dep.args.is_empty() {
+                            dep.command_path.clone()
+                        } else {
+                            let args_str: Vec<String> = dep
+                                .args
+                                .iter()
+                                .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                                .collect();
+                            format!("{}({})", dep.command_path, args_str.join(", "))
+                        }
+                    })
+                    .collect();
                 let suffix = if *parallel { ".parallel" } else { "" };
-                result.push_str(&format!("{}depends{}: {}\n", inner_indent_str, suffix, deps_str.join(", ")));
+                result.push_str(&format!(
+                    "{}depends{}: {}\n",
+                    inner_indent_str,
+                    suffix,
+                    deps_str.join(", ")
+                ));
             }
             Directive::Privileged(val) => {
                 result.push_str(&format!("{}privileged: {}\n", inner_indent_str, val));
@@ -119,42 +141,74 @@ pub fn to_nestfile_string(command: &Command, indent: usize) -> String {
             }
 
             Directive::Validate(target, rule) => {
-                result.push_str(&format!("{}validate.{}: {}\n", inner_indent_str, target, rule));
+                result.push_str(&format!(
+                    "{}validate.{}: {}\n",
+                    inner_indent_str, target, rule
+                ));
             }
             // Script directives
             Directive::Script(s, os, hide) => {
                 let mut name = String::from("script");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
                 format_script_directive(&mut result, &inner_indent_str, &name, s);
             }
             Directive::Before(s, os, hide) => {
                 let mut name = String::from("before");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
                 format_script_directive(&mut result, &inner_indent_str, &name, s);
             }
             Directive::After(s, os, hide) => {
                 let mut name = String::from("after");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
                 format_script_directive(&mut result, &inner_indent_str, &name, s);
             }
             Directive::Fallback(s, os, hide) => {
                 let mut name = String::from("fallback");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
                 format_script_directive(&mut result, &inner_indent_str, &name, s);
             }
             Directive::Finally(s, os, hide) => {
                 let mut name = String::from("finally");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
                 format_script_directive(&mut result, &inner_indent_str, &name, s);
             }
             Directive::Watch(inputs) => {
                 let formatted: Vec<String> = inputs.iter().map(|s| format!("\"{}\"", s)).collect();
-                result.push_str(&format!("{}watch: {}\n", inner_indent_str, formatted.join(", ")));
+                result.push_str(&format!(
+                    "{}watch: {}\n",
+                    inner_indent_str,
+                    formatted.join(", ")
+                ));
             }
         }
     }
@@ -176,6 +230,7 @@ fn value_to_string(v: &Value) -> String {
             let items: Vec<String> = arr.iter().map(|s| format!("\"{}\"", s)).collect();
             format!("[{}]", items.join(", "))
         }
+        Value::Dynamic(s) => format!("$({})", s),
     }
 }
 

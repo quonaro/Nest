@@ -184,9 +184,10 @@ fn validate_command_recursive(
         }
 
         // Validate that arr type can only be used in named arguments (exclude wildcard parameters)
-        if param.param_type == "arr" 
+        if param.param_type == "arr"
             && !matches!(param.kind, super::ast::ParamKind::Wildcard { .. })
-            && !param.is_named {
+            && !param.is_named
+        {
             errors.push(ValidationError {
                 line: 1,
                 column: None,
@@ -203,23 +204,21 @@ fn validate_command_recursive(
         }
 
         // Additional structural validation for wildcard parameters
-        if let super::ast::ParamKind::Wildcard { name: _, count } = &param.kind {
-            if let Some(c) = count {
-                if *c == 0 {
-                    errors.push(ValidationError {
-                        line: 1,
-                        column: None,
-                        message: format!(
-                            "Wildcard parameter '{}' must capture at least 1 argument (found [0])",
-                            param.name
-                        ),
-                        suggestion: Some(
-                            "Use a positive integer in the [N] specifier, e.g., *name[1] or *[2]"
-                                .to_string(),
-                        ),
-                        command_path: current_path.clone(),
-                    });
-                }
+        if let super::ast::ParamKind::Wildcard { count: Some(c), .. } = &param.kind {
+            if *c == 0 {
+                errors.push(ValidationError {
+                    line: 1,
+                    column: None,
+                    message: format!(
+                        "Wildcard parameter '{}' must capture at least 1 argument (found [0])",
+                        param.name
+                    ),
+                    suggestion: Some(
+                        "Use a positive integer in the [N] specifier, e.g., *name[1] or *[2]"
+                            .to_string(),
+                    ),
+                    command_path: current_path.clone(),
+                });
             }
         }
 
@@ -343,7 +342,7 @@ fn validate_command_recursive(
             Directive::Env(_, _, _) => {}
             Directive::Logs(_, _) => {}
 
-            Directive::Watch(_) => {},
+            Directive::Watch(_) => {}
         }
     }
 
@@ -453,7 +452,7 @@ fn validate_command_recursive(
         let child_source_file: Option<&std::path::Path> = child
             .source_file
             .as_deref()
-            .or_else(|| command.source_file.as_deref())
+            .or(command.source_file.as_deref())
             .or(parent_source_file);
 
         validate_command_recursive(

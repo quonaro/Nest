@@ -3,13 +3,13 @@
 //! This module handles the `@include` directive which allows including
 //! commands from other files or directories.
 
-use super::file::read_file_unchecked;
-use super::path::is_config_file;
-use super::parser::Parser;
 use super::codegen;
+use super::file::read_file_unchecked;
+use super::parser::Parser;
+use super::path::is_config_file;
 use std::fs;
-use std::path::{Path, PathBuf};
 use std::io::Read;
+use std::path::{Path, PathBuf};
 
 /// Errors that can occur during include processing.
 #[derive(Debug)]
@@ -59,9 +59,10 @@ pub fn process_includes(
     visited: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<String, IncludeError> {
     // Normalize base_path for comparison and path resolution
-    let normalized_base = base_path.canonicalize()
+    let normalized_base = base_path
+        .canonicalize()
         .map_err(|e| IncludeError::IoError(format!("Cannot canonicalize base path: {}", e)))?;
-    
+
     if visited.contains(&normalized_base) {
         return Err(IncludeError::CircularInclude(
             base_path.display().to_string(),
@@ -75,23 +76,23 @@ pub fn process_includes(
         .ok_or_else(|| IncludeError::InvalidPath("Base path has no parent".to_string()))?;
 
     let mut result = String::new();
-    let mut lines = content.lines().peekable();
+    let lines = content.lines();
 
-    while let Some(line) = lines.next() {
+    for line in lines {
         let trimmed = line.trim();
-        
+
         // Skip comments and empty lines
         if trimmed.is_empty() || trimmed.starts_with('#') {
             result.push_str(line);
             result.push('\n');
             continue;
         }
-        
+
         // Check if this is an include or import directive
-        let (is_import, rest) = if trimmed.starts_with("@include ") {
-            (false, trimmed[9..].trim())
-        } else if trimmed.starts_with("import ") {
-            (true, trimmed[7..].trim())
+        let (is_import, rest) = if let Some(rest) = trimmed.strip_prefix("@include ") {
+            (false, rest.trim())
+        } else if let Some(rest) = trimmed.strip_prefix("import ") {
+            (true, rest.trim())
         } else {
             // Regular line, add it as-is
             result.push_str(line);
@@ -109,8 +110,12 @@ pub fn process_includes(
             };
 
             // 2. Check for 'from'
-            let (symbols_part, path_part) = if let Some(from_pos) = rest_before_into.rfind(" from ") {
-                (rest_before_into[..from_pos].trim(), rest_before_into[from_pos + 6..].trim())
+            let (symbols_part, path_part) = if let Some(from_pos) = rest_before_into.rfind(" from ")
+            {
+                (
+                    rest_before_into[..from_pos].trim(),
+                    rest_before_into[from_pos + 6..].trim(),
+                )
             } else {
                 // If no 'from', it might be just 'import file' (which we treat as 'import * from file')
                 ("*", rest_before_into)
@@ -119,10 +124,13 @@ pub fn process_includes(
             let filter = if symbols_part == "*" {
                 None
             } else {
-                Some(symbols_part.split(',')
-                    .map(|s| s.trim())
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>())
+                Some(
+                    symbols_part
+                        .split(',')
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<_>>(),
+                )
             };
 
             (path_part, into_group, filter)
@@ -135,7 +143,10 @@ pub fn process_includes(
             };
 
             let (path_part, into_group) = if let Some(into_pos) = rest_before_from.find(" into ") {
-                (rest_before_from[..into_pos].trim(), Some(rest_before_from[into_pos + 6..].trim()))
+                (
+                    rest_before_from[..into_pos].trim(),
+                    Some(rest_before_from[into_pos + 6..].trim()),
+                )
             } else {
                 (rest_before_from, None)
             };
@@ -159,30 +170,40 @@ pub fn process_includes(
         // Resolve the include path (remove quotes if present)
         let include_path_str_clean = include_path_str.trim_matches('"').trim_matches('\'');
         let include_path = base_dir.join(include_path_str_clean);
-        
+
         // Process the include
-        let included_content = match resolve_and_load_include(&include_path, base_dir, visited, filter_slice)? {
-            Some(content) => content,
-            None => {
-                // Include path didn't match any files, skip this include
-                continue;
-            }
-        };
+        let included_content =
+            match resolve_and_load_include(&include_path, base_dir, visited, filter_slice)? {
+                Some(content) => content,
+                None => {
+                    // Include path didn't match any files, skip this include
+                    continue;
+                }
+            };
 
         // Add the included content
         if let Some(group_name) = into_group {
             if group_name.is_empty() {
-                return Err(IncludeError::InvalidPath("Empty group name in 'into' clause".to_string()));
+                return Err(IncludeError::InvalidPath(
+                    "Empty group name in 'into' clause".to_string(),
+                ));
             }
-            
+
             // Add group definition
-            result.push_str(line.split(if is_import { "import" } else { "@include" }).next().unwrap_or("")); // Preserve original indentation
+            result.push_str(
+                line.split(if is_import { "import" } else { "@include" })
+                    .next()
+                    .unwrap_or(""),
+            ); // Preserve original indentation
             result.push_str(group_name);
             result.push_str(":\n");
-            
+
             // Indent content
             for content_line in included_content.lines() {
-                let base_indent = line.split(if is_import { "import" } else { "@include" }).next().unwrap_or("");
+                let base_indent = line
+                    .split(if is_import { "import" } else { "@include" })
+                    .next()
+                    .unwrap_or("");
                 result.push_str(base_indent);
                 result.push_str("    "); // Add 4 spaces indentation
                 result.push_str(content_line);
@@ -191,7 +212,7 @@ pub fn process_includes(
         } else {
             // Process includes in the included content
             let processed_inc = process_includes(&included_content, &include_path, visited)?;
-            
+
             // Add marker for start of include
             result.push_str(&format!("# @source: {}\n", include_path.display()));
             result.push_str(&processed_inc);
@@ -230,7 +251,7 @@ fn resolve_and_load_include(
 ) -> Result<Option<String>, IncludeError> {
     // Check if it's a wildcard pattern
     let path_str = include_path.to_string_lossy();
-    
+
     if path_str.contains('*') {
         // Pattern matching: app2/*.nest
         return load_pattern_files(include_path, base_dir, visited, filter);
@@ -249,14 +270,14 @@ fn resolve_and_load_include(
         } else {
             base_dir.join(include_path)
         };
-        
+
         // Remove trailing slash
         let dir_path = if dir_path.to_string_lossy().ends_with('/') {
             PathBuf::from(dir_path.to_string_lossy().trim_end_matches('/'))
         } else {
             dir_path
         };
-        
+
         return load_directory_files(&dir_path, visited, filter);
     }
 
@@ -288,7 +309,7 @@ fn resolve_and_load_include(
                 }
             }
         }
-        
+
         // Try common config file names
         for config_name in ["nestfile", "Nestfile", "nest", "Nest"] {
             let config_path = file_path.join(config_name);
@@ -296,7 +317,7 @@ fn resolve_and_load_include(
                 return load_single_file(&config_path, visited, filter);
             }
         }
-        
+
         // If the path itself doesn't exist, try it as a directory
         if !file_path.exists() {
             return load_directory_files(&file_path, visited, filter);
@@ -319,7 +340,7 @@ fn load_remote_file(
     // Use the URL as the "canonical path" for cycle detection
     // We treat the URL string as a dummy PathBuf
     let url_path = PathBuf::from(url);
-    
+
     if visited.contains(&url_path) {
         return Err(IncludeError::CircularInclude(url.to_string()));
     }
@@ -329,17 +350,27 @@ fn load_remote_file(
         Ok(response) => {
             if response.status() != 200 {
                 return Err(IncludeError::IoError(format!(
-                    "Failed to fetch remote include {}: status {}", 
-                    url, 
+                    "Failed to fetch remote include {}: status {}",
+                    url,
                     response.status()
                 )));
             }
             let mut body = String::new();
-            response.into_body().as_reader().read_to_string(&mut body)
-                .map_err(|e| IncludeError::IoError(format!("Failed to read remote content: {}", e)))?;
+            response
+                .into_body()
+                .as_reader()
+                .read_to_string(&mut body)
+                .map_err(|e| {
+                    IncludeError::IoError(format!("Failed to read remote content: {}", e))
+                })?;
             body
-        },
-        Err(e) => return Err(IncludeError::IoError(format!("Failed to fetch remote include {}: {}", url, e))),
+        }
+        Err(e) => {
+            return Err(IncludeError::IoError(format!(
+                "Failed to fetch remote include {}: {}",
+                url, e
+            )))
+        }
     };
 
     // Recursively process includes in the included file
@@ -347,38 +378,42 @@ fn load_remote_file(
     // unless we track the base URL. For now, we assume remote files only have absolute includes or no includes.
     // If we want to support relative includes in remote files, we need to pass a "Base URI" instead of PathBuf.
     // Given the current architecture uses PathBuf, let's pass a dummy path but maybe warn about relative includes?
-    // Actually, process_includes takes a Path. If we pass the URL as Path, resolving relative paths will likely fail 
-    // or produce weird paths. 
+    // Actually, process_includes takes a Path. If we pass the URL as Path, resolving relative paths will likely fail
+    // or produce weird paths.
     // Ideally, we shouldn't allow relative includes in remote files unless we properly resolve URLs.
     // For simplicity: treat remote url as a "file" in current dir? No, that breaks relative paths.
     // Let's just process includes but use a dummy base path that indicates it's remote.
-    
-    // We can't really support relative includes inside remote files without a significant refactor 
-    // to separate Filesystem vs URL resolution. 
-    // For now, let's just process it with the current directory as base, which means relative includes 
+
+    // We can't really support relative includes inside remote files without a significant refactor
+    // to separate Filesystem vs URL resolution.
+    // For now, let's just process it with the current directory as base, which means relative includes
     // will look in the local file system. This is probably "safe" but maybe not what user expects.
     // Let's rely on absolute includes or remote includes inside remote files.
-    
+
     // Actually, let's just reuse the current logic, but mark visited.
     // We use a dummy path for "base_path" so process_includes doesn't crash?
     // process_includes uses canonicalize() on base_path. Attempting to canonicalize a URL or non-existent path will fail.
-    
+
     // HACK: To avoid refactoring everything, let's skip recursive include processing for remote files for now,
     // OR we can create a temporary file? No, that's messy.
     // Let's check process_includes implementation again.
     // It canonicalizes base_path.
-    
+
     // If we simply return the content without recursive processing, then `@include` inside remote file won't work.
     // This is acceptable for a first version.
-    
+
     // If a filter is provided, parse and filter the commands
     let final_content = if let Some(filter_paths) = filter {
         let mut parser = Parser::new(&content);
-        let parse_result = parser.parse()
-            .map_err(|e| IncludeError::InvalidPath(format!("Error parsing remote included file for filtering: {:?}", e)))?;
-        
+        let parse_result = parser.parse().map_err(|e| {
+            IncludeError::InvalidPath(format!(
+                "Error parsing remote included file for filtering: {:?}",
+                e
+            ))
+        })?;
+
         let filtered_commands = filter_commands(parse_result.commands, filter_paths)
-            .map_err(|e| IncludeError::InvalidPath(e))?;
+            .map_err(IncludeError::InvalidPath)?;
 
         let mut filtered_content = String::new();
         for cmd in filtered_commands {
@@ -424,11 +459,15 @@ fn load_single_file(
     // If a filter is provided, parse and filter the commands
     let final_content = if let Some(filter_paths) = filter {
         let mut parser = Parser::new(&processed_content);
-        let parse_result = parser.parse()
-            .map_err(|e| IncludeError::InvalidPath(format!("Error parsing included file for filtering: {:?}", e)))?;
-        
+        let parse_result = parser.parse().map_err(|e| {
+            IncludeError::InvalidPath(format!(
+                "Error parsing included file for filtering: {:?}",
+                e
+            ))
+        })?;
+
         let filtered_commands = filter_commands(parse_result.commands, filter_paths)
-            .map_err(|e| IncludeError::InvalidPath(e))?;
+            .map_err(IncludeError::InvalidPath)?;
 
         let mut filtered_content = String::new();
         for cmd in filtered_commands {
@@ -457,7 +496,7 @@ fn load_pattern_files(
     filter: Option<&[&str]>,
 ) -> Result<Option<String>, IncludeError> {
     let pattern_str = pattern_path.to_string_lossy();
-    
+
     // Find the directory and pattern
     let (dir_path, file_pattern) = if let Some(last_slash) = pattern_str.rfind('/') {
         let dir_part = &pattern_str[..last_slash];
@@ -478,17 +517,23 @@ fn load_pattern_files(
 
     // Use pattern as-is (matches_pattern handles * directly)
     let pattern = file_pattern;
-    
+
     let mut merged_content = String::new();
     let mut found_any = false;
 
-    let entries = fs::read_dir(&dir_path)
-        .map_err(|e| IncludeError::IoError(format!("Cannot read directory {}: {}", dir_path.display(), e)))?;
+    let entries = fs::read_dir(&dir_path).map_err(|e| {
+        IncludeError::IoError(format!(
+            "Cannot read directory {}: {}",
+            dir_path.display(),
+            e
+        ))
+    })?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| IncludeError::IoError(format!("Error reading directory entry: {}", e)))?;
+        let entry = entry
+            .map_err(|e| IncludeError::IoError(format!("Error reading directory entry: {}", e)))?;
         let file_path = entry.path();
-        
+
         if !file_path.is_file() {
             continue;
         }
@@ -496,7 +541,7 @@ fn load_pattern_files(
         if let Some(file_name) = file_path.file_name() {
             if let Some(name_str) = file_name.to_str() {
                 // Simple pattern matching (supports * wildcard)
-                if matches_pattern(name_str, &pattern) {
+                if matches_pattern(name_str, pattern) {
                     if let Some(content) = load_single_file(&file_path, visited, filter)? {
                         merged_content.push_str(&content);
                         merged_content.push('\n');
@@ -534,13 +579,19 @@ fn load_directory_files(
     let mut merged_content = String::new();
     let mut found_any = false;
 
-    let entries = fs::read_dir(dir_path)
-        .map_err(|e| IncludeError::IoError(format!("Cannot read directory {}: {}", dir_path.display(), e)))?;
+    let entries = fs::read_dir(dir_path).map_err(|e| {
+        IncludeError::IoError(format!(
+            "Cannot read directory {}: {}",
+            dir_path.display(),
+            e
+        ))
+    })?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| IncludeError::IoError(format!("Error reading directory entry: {}", e)))?;
+        let entry = entry
+            .map_err(|e| IncludeError::IoError(format!("Error reading directory entry: {}", e)))?;
         let file_path = entry.path();
-        
+
         if !file_path.is_file() {
             continue;
         }
@@ -572,9 +623,9 @@ fn matches_pattern(filename: &str, pattern: &str) -> bool {
     // Convert pattern with * to regex-like parts
     // Pattern like "*.nest" becomes ["", ".nest"]
     // Pattern like "test*.nest" becomes ["test", ".nest"]
-    
+
     let parts: Vec<&str> = pattern.split('*').collect();
-    
+
     if parts.len() == 1 {
         // No wildcard, exact match
         return filename == pattern;
@@ -633,7 +684,7 @@ impl SelectionNode {
             self.is_unpack_selection = true;
             return;
         }
-        
+
         self.children
             .entry(head.to_string())
             .or_default()
@@ -642,7 +693,7 @@ impl SelectionNode {
 }
 
 /// Filters a list of commands based on a list of selection paths.
-/// 
+///
 /// Paths can be:
 /// - "cmd" -> Selects "cmd" and all its children (deep)
 /// - "group.cmd" -> Selects "group" (structure only) then "cmd" (deep)
@@ -676,7 +727,7 @@ fn filter_commands_recursive(
         // Check if this command is selected
         if let Some(child_selection) = selection.children.get(&cmd.name) {
             // It is selected!
-            
+
             // If it's an unpack selection ("group:*"), take its children directly
             if child_selection.is_unpack_selection {
                 result.extend(cmd.children);
@@ -691,15 +742,15 @@ fn filter_commands_recursive(
                 // Union is "everything". So we just take it.
                 result.push(cmd);
             } else {
-                // It's a partial selection (branch). 
+                // It's a partial selection (branch).
                 // We need to filter its children.
-                
+
                 // Recursively filter children
                 // We must take ownership of children, filter them, and put them back.
                 let children = std::mem::take(&mut cmd.children);
                 let filtered_children = filter_commands_recursive(children, child_selection)?;
-                
-                // If no children selected but it was a branch selection, 
+
+                // If no children selected but it was a branch selection,
                 // it implies we wanted something inside but found nothing?
                 // Or maybe we want the empty group?
                 // User asked: "import a group without nested commands".
@@ -711,26 +762,25 @@ fn filter_commands_recursive(
                 // This effectively gives us "Empty Group" if we select partially but match nothing?
                 // But `filter_commands_recursive` doesn't error on "not found" except if we want strictness.
                 // Let's implement strictness check at top level if needed.
-                
+
                 cmd.children = filtered_children;
                 result.push(cmd);
             }
         }
     }
-    
+
     // Validation: Did we find everything we asked for?
-    // This is tricky with the recursive tree. 
+    // This is tricky with the recursive tree.
     // Ideally, we should validate that every path in `filter_paths` matched something.
     // For now, let's return what we found. Strict validation can be added if needed.
-    
+
     Ok(result)
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nestparse::ast::{Command, ParamKind};
+    use crate::nestparse::ast::Command;
 
     fn create_dummy_command(name: &str) -> Command {
         Command {
@@ -786,7 +836,7 @@ mod tests {
 
     #[test]
     fn test_filter_commands_nested() {
-         // defined: group1 -> nested -> deep
+        // defined: group1 -> nested -> deep
         let deep = create_dummy_command("deep");
         let nested = create_group("nested", vec![deep]);
         let group1 = create_group("group1", vec![nested]);
@@ -799,7 +849,7 @@ mod tests {
         let group1_res = &result[0];
         let nested_res = &group1_res.children[0];
         let deep_res = &nested_res.children[0];
-        
+
         assert_eq!(group1_res.name, "group1");
         assert_eq!(nested_res.name, "nested");
         assert_eq!(deep_res.name, "deep");
@@ -811,10 +861,10 @@ mod tests {
         let sub1 = create_dummy_command("sub1");
         let sub2 = create_dummy_command("sub2");
         let group1 = create_group("group1", vec![sub1, sub2]);
-        
+
         let sub3 = create_dummy_command("sub3");
         let group2 = create_group("group2", vec![sub3]);
-        
+
         let commands = vec![group1, group2];
 
         // test: from group1.sub1, group2
@@ -822,14 +872,20 @@ mod tests {
         let result = filter_commands(commands, &filter).expect("Filter failed");
 
         assert_eq!(result.len(), 2);
-        
+
         // Check group1
-        let r_group1 = result.iter().find(|c| c.name == "group1").expect("group1 missing");
+        let r_group1 = result
+            .iter()
+            .find(|c| c.name == "group1")
+            .expect("group1 missing");
         assert_eq!(r_group1.children.len(), 1);
         assert_eq!(r_group1.children[0].name, "sub1");
 
         // Check group2
-        let r_group2 = result.iter().find(|c| c.name == "group2").expect("group2 missing");
+        let r_group2 = result
+            .iter()
+            .find(|c| c.name == "group2")
+            .expect("group2 missing");
         assert_eq!(r_group2.children.len(), 1); // Full deep import
         assert_eq!(r_group2.children[0].name, "sub3");
     }

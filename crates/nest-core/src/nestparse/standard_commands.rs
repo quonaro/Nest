@@ -7,10 +7,10 @@
 //! - `clean`: Remove temporary files
 //! - `uninstall`: Remove Nest CLI
 
-use crate::constants::APP_DESCRIPTION;
 use super::ast::Command;
-use super::output::OutputFormatter;
 use super::output::colors;
+use super::output::OutputFormatter;
+use crate::constants::APP_DESCRIPTION;
 use std::process;
 
 /// Handles the `--std` flag.
@@ -20,23 +20,23 @@ pub fn handle_std_help() {
     println!("{}", APP_DESCRIPTION);
     println!();
     println!("Standard Flags (Available without nestfile):");
-    println!("  {:<19} {}", "--list", "List available commands in current nestfile");
-    println!("  {:<19} {}", "--check", "Validate configuration file");
-    println!("  {:<19} {}", "--doctor", "Diagnose environment issues");
-    println!("  {:<19} {}", "--clean", "Remove temporary files");
-    println!("  {:<19} {}", "--uninstall", "Uninstall Nest CLI");
-    println!("  {:<19} {}", "--update", "Update Nest CLI to the latest version");
-    println!("  {:<19} {}", "--init", "Initialize a new nestfile");
-    println!("  {:<19} {}", "--example", "Download example nestfiles");
-    println!("  {:<19} {}", "--show", "Show commands in different formats (requires nestfile)");
-    println!("  {:<19} {}", "--version", "Show version");
-    println!("  {:<19} {}", "--std", "Show this help message");
+    println!("  --list              List available commands in current nestfile");
+    println!("  --check             Validate configuration file");
+    println!("  --doctor            Diagnose environment issues");
+    println!("  --clean             Remove temporary files");
+    println!("  --uninstall         Remove Nest CLI");
+    println!("  --update            Update Nest CLI to the latest version");
+    println!("  --init              Initialize a new nestfile");
+    println!("  --example           Download example nestfiles");
+    println!("  --show              Show commands in different formats (requires nestfile)");
+    println!("  --version           Show version");
+    println!("  --std               Show this help message");
 }
 
 /// Handles the `check` command.
 ///
 /// Validates the configuration file and prints a success message if valid.
-/// The actual validation logic is already performed in `main.rs` before 
+/// The actual validation logic is already performed in `main.rs` before
 /// calling this, so if we reach here, it's valid.
 pub fn handle_check(config_path: &std::path::Path) {
     OutputFormatter::success("Configuration file is valid!");
@@ -69,12 +69,16 @@ fn print_command(command: &Command, indent: usize) {
     } else {
         format!("{}{}{}", colors::CYAN, command.name, colors::RESET)
     };
-    
+
     // Get description from directives
-    let desc = command.directives.iter().find_map(|d| match d {
-        super::ast::Directive::Desc(s) => Some(s.clone()),
-        _ => None,
-    }).unwrap_or_default();
+    let desc = command
+        .directives
+        .iter()
+        .find_map(|d| match d {
+            super::ast::Directive::Desc(s) => Some(s.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
 
     if !desc.is_empty() {
         println!("{}{} - {}", padding, name, desc);
@@ -97,7 +101,7 @@ pub fn handle_clean() {
     use std::fs;
 
     let mut cleaned_count = 0;
-    
+
     // Clean system temp dir for `nest-update-*`
     let temp_dir = env::temp_dir();
     if let Ok(entries) = fs::read_dir(&temp_dir) {
@@ -105,11 +109,9 @@ pub fn handle_clean() {
             if let Ok(name) = entry.file_name().into_string() {
                 if name.starts_with("nest-update-") {
                     let path = entry.path();
-                    if path.is_dir() {
-                        if let Ok(_) = fs::remove_dir_all(&path) {
-                            println!("Removed: {}", path.display());
-                            cleaned_count += 1;
-                        }
+                    if path.is_dir() && fs::remove_dir_all(&path).is_ok() {
+                        println!("Removed: {}", path.display());
+                        cleaned_count += 1;
                     }
                 }
             }
@@ -118,23 +120,25 @@ pub fn handle_clean() {
 
     // Clean current dir for `.nest_examples_temp` or `.nest_examples_temp.zip`
     if let Ok(current_dir) = env::current_dir() {
-         let targets = [".nest_examples_temp", ".nest_examples_temp.zip", ".nest_examples_temp_extract"];
-         for target in targets {
-             let path = current_dir.join(target);
-             if path.exists() {
-                 if path.is_dir() {
-                     if let Ok(_) = fs::remove_dir_all(&path) {
-                         println!("Removed: {}", path.display());
-                         cleaned_count += 1;
-                     }
-                 } else {
-                     if let Ok(_) = fs::remove_file(&path) {
-                         println!("Removed: {}", path.display());
-                         cleaned_count += 1;
-                     }
-                 }
-             }
-         }
+        let targets = [
+            ".nest_examples_temp",
+            ".nest_examples_temp.zip",
+            ".nest_examples_temp_extract",
+        ];
+        for target in targets {
+            let path = current_dir.join(target);
+            if path.exists() {
+                if path.is_dir() {
+                    if fs::remove_dir_all(&path).is_ok() {
+                        println!("Removed: {}", path.display());
+                        cleaned_count += 1;
+                    }
+                } else if fs::remove_file(&path).is_ok() {
+                    println!("Removed: {}", path.display());
+                    cleaned_count += 1;
+                }
+            }
+        }
     }
 
     if cleaned_count > 0 {
@@ -148,8 +152,6 @@ pub fn handle_clean() {
 ///
 /// Checks for common issues.
 pub fn handle_doctor() {
-
-
     println!("{}Doctor Check:{}", colors::BRIGHT_CYAN, colors::RESET);
     println!("----------------------------------------");
 
@@ -171,15 +173,22 @@ pub fn handle_doctor() {
         let local_bin = std::path::Path::new(&home).join(".local").join("bin");
         // Check if in PATH
         if let Ok(path_var) = std::env::var("PATH") {
-            if path_var.split(':').any(|p| std::path::Path::new(p) == local_bin) {
+            if path_var
+                .split(':')
+                .any(|p| std::path::Path::new(p) == local_bin)
+            {
                 println!("PATH: Includes ~/.local/bin {}", check_mark(true));
             } else {
                 println!("PATH: Missing ~/.local/bin {}", check_mark(false));
-                println!("  {}Tip: Add ~/.local/bin to your PATH{}", colors::YELLOW, colors::RESET);
+                println!(
+                    "  {}Tip: Add ~/.local/bin to your PATH{}",
+                    colors::YELLOW,
+                    colors::RESET
+                );
             }
         }
     } else {
-         println!("HOME: Not set {}", check_mark(false));
+        println!("HOME: Not set {}", check_mark(false));
     }
 }
 
@@ -200,14 +209,14 @@ fn check_mark(ok: bool) -> String {
 /// Handles the `uninstall` command.
 pub fn handle_uninstall() {
     use std::io::{self, Write};
-    
+
     // Confirm
     print!("Are you sure you want to uninstall Nest CLI? This will remove the binary. [y/N]: ");
     io::stdout().flush().unwrap();
-    
+
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
-    
+
     if !input.trim().eq_ignore_ascii_case("y") {
         println!("Aborted.");
         return;
@@ -215,16 +224,16 @@ pub fn handle_uninstall() {
 
     if let Ok(path) = std::env::current_exe() {
         println!("Removing binary: {}", path.display());
-         match std::fs::remove_file(&path) {
-             Ok(_) => {
-                 OutputFormatter::success("Nest CLI uninstalled successfully.");
-                 println!("Note: Configuration files were not removed.");
-             }
-             Err(e) => {
-                 OutputFormatter::error(&format!("Failed to remove binary: {}", e));
-                 process::exit(1);
-             }
-         }
+        match std::fs::remove_file(&path) {
+            Ok(_) => {
+                OutputFormatter::success("Nest CLI uninstalled successfully.");
+                println!("Note: Configuration files were not removed.");
+            }
+            Err(e) => {
+                OutputFormatter::error(&format!("Failed to remove binary: {}", e));
+                process::exit(1);
+            }
+        }
     } else {
         OutputFormatter::error("Could not locate executable to remove.");
         process::exit(1);

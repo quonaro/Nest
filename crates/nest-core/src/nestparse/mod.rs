@@ -12,19 +12,26 @@ pub mod cli;
 pub mod codegen;
 pub mod command_handler;
 pub mod completion;
+pub mod directives;
+pub mod runtime_validator;
+
 pub mod standard_commands;
 
 pub mod display;
 pub mod env;
 pub mod executor;
 pub mod file;
+pub mod handlers;
 pub mod help;
 pub mod include;
+pub mod input;
 pub mod json;
+pub mod logging;
 pub mod merge;
 pub mod output;
 pub mod parser;
 pub mod path;
+pub mod runtime;
 pub mod template;
 pub mod type_validator;
 pub mod validator;

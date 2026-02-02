@@ -19,6 +19,8 @@ pub enum JsonValue {
     Number(f64),
     /// An array of strings
     Array(Vec<String>),
+    /// A dynamic value
+    Dynamic(String),
 }
 
 /// JSON representation of a Dependency.
@@ -66,7 +68,11 @@ pub enum JsonDirective {
     Cwd(String),
     /// Environment variable assignment (name, value, hide)
     #[serde(rename = "env")]
-    Env { name: String, value: String, hide: bool },
+    Env {
+        name: String,
+        value: String,
+        hide: bool,
+    },
     /// Environment file path (.env, hide)
     #[serde(rename = "env_file")]
     EnvFile { path: String, hide: bool },
@@ -75,29 +81,49 @@ pub enum JsonDirective {
     EnvLegacy(String),
     /// Dependencies directive
     #[serde(rename = "depends")]
-    Depends { 
+    Depends {
         deps: Vec<JsonDependency>,
-        #[serde(skip_serializing_if = "std::ops::Not::not")] 
-        parallel: bool 
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        parallel: bool,
     },
     /// Before script directive
     #[serde(rename = "before")]
-    Before { content: String, os: Option<String>, hide: bool },
+    Before {
+        content: String,
+        os: Option<String>,
+        hide: bool,
+    },
     /// After script directive
     #[serde(rename = "after")]
-    After { content: String, os: Option<String>, hide: bool },
+    After {
+        content: String,
+        os: Option<String>,
+        hide: bool,
+    },
     /// Fallback script directive
     #[serde(rename = "fallback")]
-    Fallback { content: String, os: Option<String>, hide: bool },
+    Fallback {
+        content: String,
+        os: Option<String>,
+        hide: bool,
+    },
     /// Finally script directive
     #[serde(rename = "finally")]
-    Finally { content: String, os: Option<String>, hide: bool },
+    Finally {
+        content: String,
+        os: Option<String>,
+        hide: bool,
+    },
     /// Validation directive
     #[serde(rename = "validate")]
     Validate { target: String, rule: String },
     /// Script directive
     #[serde(rename = "script")]
-    Script { content: String, os: Option<String>, hide: bool },
+    Script {
+        content: String,
+        os: Option<String>,
+        hide: bool,
+    },
     /// Privileged access directive
     #[serde(rename = "privileged")]
     Privileged(bool),
@@ -136,6 +162,7 @@ impl From<&Value> for JsonValue {
             Value::Bool(b) => JsonValue::Bool(*b),
             Value::Number(n) => JsonValue::Number(*n),
             Value::Array(a) => JsonValue::Array(a.clone()),
+            Value::Dynamic(s) => JsonValue::Dynamic(s.clone()),
         }
     }
 }
@@ -176,18 +203,47 @@ impl From<&Directive> for JsonDirective {
                 hide: *hide,
             },
             Directive::Depends(deps, parallel) => {
-                let json_deps: Vec<JsonDependency> = deps.iter().map(|dep| JsonDependency {
-                    command_path: dep.command_path.clone(),
-                    args: dep.args.clone(),
-                }).collect();
-                JsonDirective::Depends { deps: json_deps, parallel: *parallel }
+                let json_deps: Vec<JsonDependency> = deps
+                    .iter()
+                    .map(|dep| JsonDependency {
+                        command_path: dep.command_path.clone(),
+                        args: dep.args.clone(),
+                    })
+                    .collect();
+                JsonDirective::Depends {
+                    deps: json_deps,
+                    parallel: *parallel,
+                }
+            }
+            Directive::Before(s, os, hide) => JsonDirective::Before {
+                content: s.clone(),
+                os: os.clone(),
+                hide: *hide,
             },
-            Directive::Before(s, os, hide) => JsonDirective::Before { content: s.clone(), os: os.clone(), hide: *hide },
-            Directive::After(s, os, hide) => JsonDirective::After { content: s.clone(), os: os.clone(), hide: *hide },
-            Directive::Fallback(s, os, hide) => JsonDirective::Fallback { content: s.clone(), os: os.clone(), hide: *hide },
-            Directive::Finally(s, os, hide) => JsonDirective::Finally { content: s.clone(), os: os.clone(), hide: *hide },
-            Directive::Validate(target, rule) => JsonDirective::Validate { target: target.clone(), rule: rule.clone() },
-            Directive::Script(s, os, hide) => JsonDirective::Script { content: s.clone(), os: os.clone(), hide: *hide },
+            Directive::After(s, os, hide) => JsonDirective::After {
+                content: s.clone(),
+                os: os.clone(),
+                hide: *hide,
+            },
+            Directive::Fallback(s, os, hide) => JsonDirective::Fallback {
+                content: s.clone(),
+                os: os.clone(),
+                hide: *hide,
+            },
+            Directive::Finally(s, os, hide) => JsonDirective::Finally {
+                content: s.clone(),
+                os: os.clone(),
+                hide: *hide,
+            },
+            Directive::Validate(target, rule) => JsonDirective::Validate {
+                target: target.clone(),
+                rule: rule.clone(),
+            },
+            Directive::Script(s, os, hide) => JsonDirective::Script {
+                content: s.clone(),
+                os: os.clone(),
+                hide: *hide,
+            },
             Directive::Privileged(value) => JsonDirective::Privileged(*value),
             Directive::Logs(path, format) => JsonDirective::Logs {
                 path: path.clone(),
@@ -227,4 +283,3 @@ pub fn to_json(commands: &[Command]) -> Result<String, serde_json::Error> {
     let json_commands: Vec<JsonCommand> = commands.iter().map(|c| c.into()).collect();
     serde_json::to_string_pretty(&json_commands)
 }
-

@@ -6,9 +6,22 @@
 
 use super::ast::Command;
 use std::collections::HashMap;
-use std::process::{Command as ProcessCommand, Stdio};
 use std::env;
+use std::process::{Command as ProcessCommand, Stdio};
 
+/// Context for script execution containing all necessary parameters.
+pub struct ExecutionContext<'a> {
+    pub command: &'a Command,
+    pub args: &'a HashMap<String, String>,
+    pub env_vars: &'a HashMap<String, String>,
+    pub cwd: Option<&'a str>,
+    pub command_path: Option<&'a [String]>,
+    pub dry_run: bool,
+    pub verbose: bool,
+    pub privileged: bool,
+    pub pid_callback: Option<&'a dyn Fn(u32)>,
+    pub hide_output: bool,
+}
 
 /// Executes shell scripts for commands.
 ///
@@ -24,7 +37,7 @@ impl CommandExecutor {
             // Extract shell from shebang
             let shebang_line = trimmed.lines().next().unwrap_or("");
             let shell_path = shebang_line.trim_start_matches("#!").trim();
-            
+
             // Determine shell command
             let shell = if shell_path.contains("bash") {
                 "bash"
@@ -32,19 +45,13 @@ impl CommandExecutor {
                 "zsh"
             } else if shell_path.contains("fish") {
                 "fish"
-            } else if shell_path.contains("sh") {
-                "sh"
             } else {
-                "sh" // default
+                "sh"
             };
-            
+
             // Remove shebang line from script
-            let script_without_shebang = script
-                .lines()
-                .skip(1)
-                .collect::<Vec<_>>()
-                .join("\n");
-            
+            let script_without_shebang = script.lines().skip(1).collect::<Vec<_>>().join("\n");
+
             (shell, script_without_shebang)
         } else {
             ("sh", script.to_string())
@@ -90,34 +97,24 @@ impl CommandExecutor {
     /// - Exit code
     /// - Helpful suggestions (e.g., missing commands)
     #[allow(dead_code)]
-    pub fn execute(
-        command: &Command,
-        args: &HashMap<String, String>,
-        script: &str,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        command_path: Option<&[String]>,
-        dry_run: bool,
-        verbose: bool,
-        privileged: bool,
-        pid_callback: Option<&dyn Fn(u32)>,
-    ) -> Result<(), String> {
+    pub fn execute(script: &str, context: &ExecutionContext) -> Result<(), String> {
         // Check privileged access BEFORE execution
-        if privileged && !dry_run {
-            if !Self::check_privileged_access() {
-                return Err(Self::format_privileged_error(command, command_path));
-            }
+        if context.privileged && !context.dry_run && !Self::check_privileged_access() {
+            return Err(Self::format_privileged_error(
+                context.command,
+                context.command_path,
+            ));
         }
 
         // Show dry-run preview
-        if dry_run {
-            Self::show_dry_run_preview(command, command_path, args, env_vars, cwd, script, verbose, privileged);
+        if context.dry_run {
+            Self::show_dry_run_preview(script, context);
             return Ok(());
         }
 
         // Show verbose information if requested
-        if verbose {
-            Self::show_verbose_info(command, command_path, args, env_vars, cwd, script, privileged);
+        if context.verbose {
+            Self::show_verbose_info(script, context);
         }
 
         // Detect shell from shebang and remove it
@@ -128,31 +125,37 @@ impl CommandExecutor {
         cmd.arg("-c");
         cmd.arg(script_to_execute);
 
-        if let Some(cwd_path) = cwd {
+        if let Some(cwd_path) = context.cwd {
             cmd.current_dir(cwd_path);
         }
 
         // Set environment variables from directives
-        for (key, value) in env_vars {
+        for (key, value) in context.env_vars {
             cmd.env(key, value);
         }
 
         // Set command arguments as environment variables
-        for (key, value) in args {
+        for (key, value) in context.args {
             cmd.env(key.to_uppercase(), value);
             cmd.env(key, value);
         }
 
-        // Inherit stdin/stdout/stderr to allow interactive commands
-        cmd.stdin(Stdio::inherit());
-        cmd.stdout(Stdio::inherit());
-        cmd.stderr(Stdio::inherit());
+        // Capture output - hide if requested
+        if context.hide_output {
+            cmd.stdin(Stdio::null());
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+        } else {
+            cmd.stdin(Stdio::inherit());
+            cmd.stdout(Stdio::inherit());
+            cmd.stderr(Stdio::inherit());
+        }
 
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("Failed to start script execution: {}", e))?;
 
-        if let Some(callback) = pid_callback {
+        if let Some(callback) = context.pid_callback {
             callback(child.id());
         }
 
@@ -163,14 +166,14 @@ impl CommandExecutor {
 
         if !status.success() {
             let exit_code = status.code().unwrap_or(-1);
-            
+
             // Build beautiful formatted error message
             // Note: we don't have the stderr output since it was inherited directly to terminal
             let error_msg = format_error_message(
-                command,
-                command_path,
-                args,
-                cwd,
+                context.command,
+                context.command_path,
+                context.args,
+                context.cwd,
                 script,
                 exit_code,
                 "(See output above)",
@@ -180,6 +183,55 @@ impl CommandExecutor {
         }
 
         Ok(())
+    }
+
+    /// Executes a command and captures its stdout as a string.
+    /// This is used for dynamic value evaluation $(command).
+    pub fn capture_output(script: &str, context: &ExecutionContext) -> Result<String, String> {
+        if context.dry_run {
+            return Ok(format!("[DRY RUN: output of {}]", script));
+        }
+
+        // Detect shell from shebang and remove it
+        let (shell, script_without_shebang) = Self::detect_shell_and_remove_shebang(script);
+        let script_to_execute = script_without_shebang.trim();
+
+        let mut cmd = ProcessCommand::new(shell);
+        cmd.arg("-c");
+        cmd.arg(script_to_execute);
+
+        if let Some(cwd_path) = context.cwd {
+            cmd.current_dir(cwd_path);
+        }
+
+        // Set environment variables
+        for (key, value) in context.env_vars {
+            cmd.env(key, value);
+        }
+
+        for (key, value) in context.args {
+            cmd.env(key.to_uppercase(), value);
+            cmd.env(key, value);
+        }
+
+        // Capture output
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| format!("Failed to start script execution: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "Command failed with exit code {}: {}",
+                output.status.code().unwrap_or(-1),
+                stderr.trim()
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.trim().to_string())
     }
 
     /// Checks if the current process is running with privileged access.
@@ -197,7 +249,7 @@ impl CommandExecutor {
             if env::var("SUDO_USER").is_ok() {
                 return true;
             }
-            
+
             // Check if we're running as root by checking UID
             // Use id -u command to get effective user ID
             let test_cmd = ProcessCommand::new("sh")
@@ -206,11 +258,11 @@ impl CommandExecutor {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .output();
-            
+
             if let Ok(output) = test_cmd {
                 return output.status.success();
             }
-            
+
             false
         }
 
@@ -322,17 +374,7 @@ impl CommandExecutor {
         output
     }
 
-
-    pub fn show_dry_run_preview(
-        command: &Command,
-        command_path: Option<&[String]>,
-        args: &HashMap<String, String>,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        script: &str,
-        verbose: bool,
-        privileged: bool,
-    ) {
+    pub fn show_dry_run_preview(script: &str, context: &ExecutionContext) {
         use super::output::colors;
         use std::fmt::Write;
 
@@ -364,10 +406,10 @@ impl CommandExecutor {
         .expect("Failed to format dry run footer");
 
         // Command information
-        let command_display = if let Some(path) = command_path {
+        let command_display = if let Some(path) = context.command_path {
             format!("nest {}", path.join(" "))
         } else {
-            command.name.clone()
+            context.command.name.clone()
         };
 
         writeln!(
@@ -380,8 +422,9 @@ impl CommandExecutor {
         .expect("Failed to format command in dry run");
 
         // Arguments
-        if !args.is_empty() {
-            let args_str: Vec<String> = args
+        if !context.args.is_empty() {
+            let args_str: Vec<String> = context
+                .args
                 .iter()
                 .map(|(k, v)| {
                     format!(
@@ -406,7 +449,7 @@ impl CommandExecutor {
         }
 
         // Working directory
-        if let Some(cwd_path) = cwd {
+        if let Some(cwd_path) = context.cwd {
             writeln!(
                 output,
                 "{}📁 Working directory:{} {}",
@@ -418,7 +461,7 @@ impl CommandExecutor {
         }
 
         // Privileged access requirement
-        if privileged {
+        if context.privileged {
             use std::env::consts::OS;
             let sudo_command = if OS == "windows" {
                 "Run as Administrator"
@@ -438,7 +481,7 @@ impl CommandExecutor {
         }
 
         // Environment variables (if verbose)
-        if verbose && !env_vars.is_empty() {
+        if context.verbose && !context.env_vars.is_empty() {
             writeln!(
                 output,
                 "\n{}🌍 Environment variables:{}",
@@ -446,7 +489,7 @@ impl CommandExecutor {
                 colors::RESET
             )
             .expect("Failed to format environment variables header in dry run");
-            for (key, value) in env_vars {
+            for (key, value) in context.env_vars {
                 writeln!(
                     output,
                     "  {}{}{}={}{}{}",
@@ -511,15 +554,7 @@ impl CommandExecutor {
         eprint!("{}", output);
     }
 
-    pub fn show_verbose_info(
-        command: &Command,
-        command_path: Option<&[String]>,
-        args: &HashMap<String, String>,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        script: &str,
-        privileged: bool,
-    ) {
+    pub fn show_verbose_info(script: &str, context: &ExecutionContext) {
         use super::output::colors;
 
         eprintln!(
@@ -540,10 +575,10 @@ impl CommandExecutor {
             colors::RESET
         );
 
-        let command_display = if let Some(path) = command_path {
+        let command_display = if let Some(path) = context.command_path {
             format!("nest {}", path.join(" "))
         } else {
-            command.name.clone()
+            context.command.name.clone()
         };
 
         eprintln!(
@@ -553,8 +588,9 @@ impl CommandExecutor {
             command_display
         );
 
-        if !args.is_empty() {
-            let args_str: Vec<String> = args
+        if !context.args.is_empty() {
+            let args_str: Vec<String> = context
+                .args
                 .iter()
                 .map(|(k, v)| {
                     format!(
@@ -576,7 +612,7 @@ impl CommandExecutor {
             );
         }
 
-        if let Some(cwd_path) = cwd {
+        if let Some(cwd_path) = context.cwd {
             eprintln!(
                 "{}📁 Working directory:{} {}",
                 colors::CYAN,
@@ -585,7 +621,7 @@ impl CommandExecutor {
             );
         }
 
-        if privileged {
+        if context.privileged {
             use std::env::consts::OS;
             let sudo_command = if OS == "windows" {
                 "Run as Administrator"
@@ -602,13 +638,13 @@ impl CommandExecutor {
             );
         }
 
-        if !env_vars.is_empty() {
+        if !context.env_vars.is_empty() {
             eprintln!(
                 "\n{}🌍 Environment variables:{}",
                 colors::CYAN,
                 colors::RESET
             );
-            for (key, value) in env_vars {
+            for (key, value) in context.env_vars {
                 eprintln!(
                     "  {}{}{}={}{}{}",
                     colors::YELLOW,
@@ -644,6 +680,200 @@ impl CommandExecutor {
             colors::GRAY,
             colors::RESET
         );
+    }
+
+    /// Parses a command call from a string.
+    ///
+    /// Supports formats:
+    /// - `command` - simple command
+    /// - `group:command` - nested command
+    /// - `command(arg="value")` - command with arguments
+    /// - `group:command(arg="value")` - nested command with arguments
+    ///
+    /// Returns (command_path, args) if it's a command call, None otherwise.
+    pub fn parse_command_call(line: &str) -> Option<(String, HashMap<String, String>)> {
+        let trimmed = line.trim();
+
+        // Check if line looks like a command call
+        // Command calls should start with alphanumeric or underscore, and may contain colons
+        // They should not contain shell operators like |, &&, ||, ;, >, <, etc.
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            return None;
+        }
+
+        // Check for shell operators that indicate this is not a command call
+        let shell_operators = [
+            "|", "&&", "||", ";", ">", "<", ">>", "<<", "&", "$", "`", "[", "]", "=",
+        ];
+
+        // If it looks like a potential Nest call (ends with ')'), we bypass the shell operator check
+        // because those operators are likely inside string arguments (e.g., SQL queries with ';').
+        let is_potential_call = trimmed.contains('(') && trimmed.ends_with(')');
+
+        if !is_potential_call && shell_operators.iter().any(|&op| trimmed.contains(op)) {
+            return None;
+        }
+
+        // Check for shell keywords that indicate this is not a command call
+        let shell_keywords = [
+            "if", "then", "else", "elif", "fi", "case", "esac", "for", "while", "until", "do",
+            "done", "function",
+        ];
+        let first_word = trimmed.split_whitespace().next().unwrap_or("");
+        if shell_keywords.contains(&first_word) {
+            return None;
+        }
+
+        // Try to parse as command call
+        // Pattern: [group:]command[(args)]
+        let command_path: String;
+        let mut args = HashMap::new();
+
+        // Check if there are parentheses (arguments)
+        if let Some(open_paren) = trimmed.find('(') {
+            // Extract command path (before parentheses)
+            command_path = trimmed[..open_paren].trim().to_string();
+
+            // Find matching closing parenthesis
+            let mut depth = 0;
+            let mut in_quotes = false;
+            let mut quote_char = '\0';
+            let mut close_paren = None;
+
+            for (i, ch) in trimmed[open_paren..].char_indices() {
+                match ch {
+                    '"' | '\'' if !in_quotes => {
+                        in_quotes = true;
+                        quote_char = ch;
+                    }
+                    ch if ch == quote_char && in_quotes => {
+                        in_quotes = false;
+                    }
+                    '(' if !in_quotes => {
+                        depth += 1;
+                    }
+                    ')' if !in_quotes => {
+                        depth -= 1;
+                        if depth == 0 {
+                            close_paren = Some(open_paren + i);
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            if let Some(close) = close_paren {
+                let args_str = &trimmed[open_paren + 1..close];
+                // Parse arguments using similar logic to dependency parsing
+                args = Self::parse_command_args(args_str).unwrap_or_default();
+            } else {
+                // Unclosed parentheses - not a valid command call
+                return None;
+            }
+        } else {
+            // No arguments - just command path
+            command_path = trimmed.to_string();
+        }
+
+        // Validate command path (should contain only alphanumeric, underscore, colon, hyphen)
+        if command_path.is_empty() {
+            return None;
+        }
+
+        // Check if it looks like a valid command path
+        let is_valid = command_path
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == ':' || c == '_' || c == '-')
+            && !command_path.starts_with(':')
+            && !command_path.ends_with(':');
+
+        if !is_valid {
+            return None;
+        }
+
+        Some((command_path, args))
+    }
+
+    /// Parses arguments from a command call argument string.
+    /// Format: `name="value", name2=true, name3=123`
+    fn parse_command_args(args_str: &str) -> Result<HashMap<String, String>, ()> {
+        let mut args = HashMap::new();
+
+        if args_str.trim().is_empty() {
+            return Ok(args);
+        }
+
+        // Split by comma, but respect quotes
+        let mut current = args_str.trim();
+        while !current.is_empty() {
+            let (arg_str, remainder) = Self::split_next_arg(current)?;
+
+            if arg_str.is_empty() {
+                break;
+            }
+
+            // Parse name=value
+            let equals_pos = arg_str.find('=').ok_or(())?;
+
+            let name = arg_str[..equals_pos].trim().to_string();
+            let value_str = arg_str[equals_pos + 1..].trim();
+
+            // Parse value (string, bool, or number)
+            let value = Self::parse_command_value(value_str);
+
+            args.insert(name, value);
+
+            current = remainder.trim();
+        }
+
+        Ok(args)
+    }
+
+    /// Splits the next argument from the string, handling quotes.
+    fn split_next_arg(s: &str) -> Result<(&str, &str), ()> {
+        let mut in_quotes = false;
+        let mut quote_char = '\0';
+
+        for (i, ch) in s.char_indices() {
+            match ch {
+                '"' | '\'' if !in_quotes => {
+                    in_quotes = true;
+                    quote_char = ch;
+                }
+                ch if ch == quote_char && in_quotes => {
+                    in_quotes = false;
+                }
+                ',' if !in_quotes => {
+                    return Ok((&s[..i], &s[i + 1..]));
+                }
+                _ => {}
+            }
+        }
+
+        Ok((s, ""))
+    }
+
+    /// Parses a command argument value (string, bool, or number).
+    fn parse_command_value(value_str: &str) -> String {
+        let trimmed = value_str.trim();
+
+        // String value (quoted)
+        if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        {
+            // Remove quotes
+            let unquoted = &trimmed[1..trimmed.len() - 1];
+            // Unescape quotes
+            unquoted
+                .replace("\\\"", "\"")
+                .replace("\\'", "'")
+                .replace("\\\\", "\\")
+        }
+        // Boolean or number value (keep as is)
+        else {
+            trimmed.to_string()
+        }
     }
 }
 
@@ -818,7 +1048,7 @@ fn format_error_message(
             colors::RESET
         )
         .expect("Failed to format error details header in error message");
-        
+
         // Output error as-is, line by line
         for line in stderr_str.trim().lines() {
             writeln!(

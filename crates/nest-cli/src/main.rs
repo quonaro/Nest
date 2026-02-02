@@ -9,13 +9,13 @@ use nest_core::constants::{
     FLAG_INIT, FLAG_LIST, FLAG_SHOW, FLAG_STD, FLAG_UNINSTALL, FLAG_UPDATE, FLAG_VERBOSE,
     FORMAT_AST, FORMAT_JSON,
 };
-use nest_core::nestparse::cli::{
-    handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version,
-    CliGenerator,
-};
+use nest_core::nestparse::cli::CliGenerator;
 use nest_core::nestparse::command_handler::CommandHandler;
 use nest_core::nestparse::completion::CompletionManager;
 use nest_core::nestparse::file::read_file_unchecked;
+use nest_core::nestparse::handlers::{
+    handle_example, handle_init, handle_json, handle_show_ast, handle_update, handle_version,
+};
 use nest_core::nestparse::include::process_includes;
 use nest_core::nestparse::parser::{ParseError, ParseResult, Parser};
 use nest_core::nestparse::path::find_config_file;
@@ -197,7 +197,9 @@ fn main() {
         }
     }
 
-    let generator = CliGenerator::new(
+    let generator = CliGenerator::new(parse_result.commands.clone());
+
+    let runtime = nest_core::nestparse::runtime::Runtime::new(
         parse_result.commands.clone(),
         parse_result.variables.clone(),
         parse_result.constants.clone(),
@@ -206,6 +208,7 @@ fn main() {
             CHILD_PID.store(pid, Ordering::SeqCst);
         })),
     );
+
     let mut cli = match generator.build_cli() {
         Ok(cli) => cli,
         Err(e) => {
@@ -234,11 +237,12 @@ fn main() {
 
     // Automatically generate/update completion scripts
     if let Ok(completion_manager) = CompletionManager::new() {
-        if let Ok(needs_regeneration) = completion_manager.needs_regeneration(&config_path) {
-            if needs_regeneration {
-                if let Ok(_) = completion_manager.generate_all_completions(&mut cli, &config_path) {
-                    if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {}
-                }
+        if let Ok(true) = completion_manager.needs_regeneration(&config_path) {
+            if completion_manager
+                .generate_all_completions(&mut cli, &config_path)
+                .is_ok()
+            {
+                if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {}
             }
         }
     }
@@ -318,6 +322,7 @@ fn main() {
                     command,
                     &command_path,
                     &generator,
+                    &runtime,
                     &matches,
                 )
             };
@@ -330,7 +335,14 @@ fn main() {
                 process::exit(1);
             }
         } else {
-            handle_command_execution(&matches, command, &command_path, &generator, &matches);
+            handle_command_execution(
+                &matches,
+                command,
+                &command_path,
+                &generator,
+                &runtime,
+                &matches,
+            );
         }
     } else {
         nest_core::nestparse::output::OutputFormatter::error(&format!(
@@ -342,11 +354,13 @@ fn main() {
 }
 
 // Wrapper that returns Result instead of exiting
+// Wrapper that returns Result instead of exiting
 fn handle_command_execution_no_exit(
     matches: &clap::ArgMatches,
     command: &nest_core::nestparse::ast::Command,
     command_path: &[String],
     generator: &CliGenerator,
+    runtime: &nest_core::nestparse::runtime::Runtime,
     root_matches: &clap::ArgMatches,
 ) -> Result<(), String> {
     if !command.children.is_empty() {
@@ -354,7 +368,13 @@ fn handle_command_execution_no_exit(
             CommandHandler::handle_group_without_default(command, command_path)
                 .map_err(|_| "Failed to handle group command".to_string())
         } else {
-            CommandHandler::handle_default_command(matches, command_path, generator, root_matches)
+            CommandHandler::handle_default_command(
+                matches,
+                command_path,
+                generator,
+                runtime,
+                root_matches,
+            )
         }
     } else {
         // We need to extract the subcommand matches again
@@ -370,6 +390,7 @@ fn handle_command_execution_no_exit(
             current_matches,
             command,
             generator,
+            runtime,
             command_path,
             root_matches,
         )
@@ -480,6 +501,7 @@ fn handle_command_execution(
     command: &nest_core::nestparse::ast::Command,
     command_path: &[String],
     generator: &CliGenerator,
+    runtime: &nest_core::nestparse::runtime::Runtime,
     root_matches: &clap::ArgMatches,
 ) {
     if !command.children.is_empty() {
@@ -493,6 +515,7 @@ fn handle_command_execution(
                 matches,
                 command_path,
                 generator,
+                runtime,
                 root_matches,
             ) {
                 eprint!("{}", e);
@@ -514,6 +537,7 @@ fn handle_command_execution(
         current_matches,
         command,
         generator,
+        runtime,
         command_path,
         root_matches,
     ) {

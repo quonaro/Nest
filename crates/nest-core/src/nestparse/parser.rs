@@ -6,7 +6,6 @@
 use super::ast::{Constant, Dependency, Directive, Function, Parameter, Value, Variable};
 use crate::constants::{BOOL_FALSE, BOOL_TRUE, INDENT_SIZE};
 use std::collections::HashMap;
-use std::process::Command as ProcessCommand;
 
 /// Parser state for processing Nestfile content.
 ///
@@ -517,8 +516,8 @@ impl Parser {
         let type_default = type_default_str.trim();
 
         // Check if it's a named argument (starts with !)
-        let (is_named, name_part_clean) = if name_part.starts_with('!') {
-            (true, &name_part[1..])
+        let (is_named, name_part_clean) = if let Some(clean) = name_part.strip_prefix('!') {
+            (true, clean)
         } else {
             (false, name_part)
         };
@@ -574,14 +573,14 @@ impl Parser {
         }
 
         // Expect leading '*'
-        if !s.starts_with('*') {
+        let rest = if let Some(r) = s.strip_prefix('*') {
+            r
+        } else {
             return Err(ParseError::InvalidSyntax(
                 format!("Invalid wildcard parameter syntax: {}", param_str),
                 line_number,
             ));
-        }
-
-        let rest = &s[1..];
+        };
         let (name_part, count_part) = if let Some(bracket_pos) = rest.find('[') {
             // Expect closing ']'
             if !rest.ends_with(']') {
@@ -684,9 +683,7 @@ impl Parser {
                     } else {
                         s
                     };
-                    // Command substitution in array items? 
-                    // Let's assume yes, for consistency.
-                    self.execute_command_substitutions(s, self.current_line_number()).unwrap_or_else(|_| s.to_string())
+                    self.parse_potentially_dynamic_string(s, self.current_line_number()).to_string_unquoted()
                 })
                 .filter(|s| !s.is_empty())
                 .collect();
@@ -708,9 +705,7 @@ impl Parser {
         };
 
         // Support command substitution $(...)
-        let s = self.execute_command_substitutions(s, self.current_line_number())?;
-
-        Ok(Value::String(s))
+        Ok(self.parse_potentially_dynamic_string(s, self.current_line_number()))
     }
 
 
@@ -736,18 +731,7 @@ impl Parser {
                 ));
             }
 
-            // Parse value: if start with quote, use parse_value, otherwise use as-is
-            let mut value = if (value_str.starts_with('"') && value_str.ends_with('"'))
-                || (value_str.starts_with('\'') && value_str.ends_with('\''))
-            {
-                self.parse_value(value_str)?.to_string()
-            } else {
-                value_str.to_string()
-            };
-
-            // Execute command substitutions $(...) if present
-            value = self.execute_command_substitutions(&value, self.current_line_number())?;
-
+            let value = self.parse_value(value_str)?;
             self.current_index += 1;
             Ok(Variable { name, value })
         } else {
@@ -783,18 +767,7 @@ impl Parser {
                 ));
             }
 
-            // Parse value: if start with quote, use parse_value, otherwise use as-is
-            let mut value = if (value_str.starts_with('"') && value_str.ends_with('"'))
-                || (value_str.starts_with('\'') && value_str.ends_with('\''))
-            {
-                self.parse_value(value_str)?.to_string()
-            } else {
-                value_str.to_string()
-            };
-
-            // Execute command substitutions $(...) if present
-            value = self.execute_command_substitutions(&value, self.current_line_number())?;
-
+            let value = self.parse_value(value_str)?;
             self.current_index += 1;
             Ok(Constant { name, value })
         } else {
@@ -831,17 +804,7 @@ impl Parser {
                 ));
             }
 
-            // Parse value
-            let mut value = if (value_str.starts_with('"') && value_str.ends_with('"'))
-                || (value_str.starts_with('\'') && value_str.ends_with('\''))
-            {
-                self.parse_value(value_str)?.to_string()
-            } else {
-                value_str.to_string()
-            };
-
-            // Execute command substitutions
-            value = self.execute_command_substitutions(&value, self.current_line_number())?;
+            let value = self.parse_value(value_str)?;
 
             // Add to variables (env variables are stored as variables with ENV_ prefix internally sometimes, 
             // but here we might just want to store them so execution logic can find them.
@@ -878,7 +841,7 @@ impl Parser {
             // But let's just store it as a variable with a special name for now.
             variables.push(Variable { 
                 name: format!("__env_file_{}", self.current_line_number()), 
-                value: env_part.to_string() 
+                value: Value::String(env_part.to_string()) 
             });
             self.current_index += 1;
             Ok(())
@@ -922,11 +885,7 @@ impl Parser {
             }
         } else {
             // No parameters
-            let name = if func_part.ends_with(':') {
-                func_part[..func_part.len() - 1].trim().to_string()
-            } else {
-                func_part.to_string()
-            };
+            let name = func_part.strip_suffix(':').unwrap_or(func_part).trim().to_string();
             self.current_index += 1;
             (name, Vec::new())
         };
@@ -1024,7 +983,7 @@ impl Parser {
         // Validate that multiline block is not empty
         if content.trim().is_empty() {
             return Err(ParseError::InvalidSyntax(
-                format!("Multiline script block is empty. Add script content after '|' or use single-line format without '|'."),
+                "Multiline script block is empty. Add script content after '|' or use single-line format without '|'".to_string(),
                 start_line
             ));
         }
@@ -1032,127 +991,22 @@ impl Parser {
         Ok(content)
     }
 
-    /// Executes command substitutions in the format $(command) and replaces them with command output.
-    ///
-    /// This function finds all occurrences of $(...) in the string and executes the commands,
-    /// replacing the $(...) with the command output (trimmed of whitespace).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The string value that may contain $(...) command substitutions
-    /// * `line_number` - The line number for error reporting
-    ///
-    /// # Returns
-    ///
-    /// Returns the string with all $(...) replaced by command outputs, or an error if command execution fails.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// // Input: "Path: $(which python)"
-    /// // Output: "Path: /usr/bin/python"
-    /// ```
-    fn execute_command_substitutions(
+    /// Checks if a string contains command substitutions $(...) and returns a Value.
+    fn parse_potentially_dynamic_string(
         &self,
         value: &str,
-        line_number: usize,
-    ) -> Result<String, ParseError> {
-        let mut result = String::new();
-        let mut chars = value.chars().peekable();
-        let mut in_substitution = false;
-        let mut command = String::new();
-        let mut paren_depth = 0;
-
-        while let Some(ch) = chars.next() {
-            if !in_substitution {
-                if ch == '$' {
-                    if let Some(&'(') = chars.peek() {
-                        // Found $(
-                        chars.next(); // consume '('
-                        in_substitution = true;
-                        paren_depth = 1;
-                        command.clear();
-                        continue;
-                    }
-                }
-                result.push(ch);
-            } else {
-                // We're inside $(...)
-                match ch {
-                    '(' => {
-                        paren_depth += 1;
-                        command.push(ch);
-                    }
-                    ')' => {
-                        paren_depth -= 1;
-                        if paren_depth == 0 {
-                            // End of substitution, execute command
-                            let output = self.execute_command(&command.trim(), line_number)?;
-                            result.push_str(&output);
-                            in_substitution = false;
-                            command.clear();
-                        } else {
-                            command.push(ch);
-                        }
-                    }
-                    _ => {
-                        command.push(ch);
-                    }
-                }
-            }
-        }
-
-        // If we're still in a substitution at the end, it's an error
-        if in_substitution {
-            return Err(ParseError::InvalidSyntax(
-                format!("Unclosed command substitution $(...) in value: {}", value),
-                line_number,
-            ));
-        }
-
-        Ok(result)
-    }
-
-    /// Executes a shell command and returns its output as a string.
-    ///
-    /// # Arguments
-    ///
-    /// * `command` - The shell command to execute
-    /// * `line_number` - The line number for error reporting
-    ///
-    /// # Returns
-    ///
-    /// Returns the command output (stdout) trimmed of whitespace, or an error if execution fails.
-    fn execute_command(&self, command: &str, line_number: usize) -> Result<String, ParseError> {
-        let output = if cfg!(windows) {
-            // On Windows, use cmd /c
-            ProcessCommand::new("cmd").arg("/c").arg(command).output()
+        _line_number: usize,
+    ) -> Value {
+        // If it's a pure dynamic value like $(command), strip the wrapper
+        if value.starts_with("$(") && value.ends_with(')') {
+            let inner = &value[2..value.len() - 1];
+            Value::Dynamic(inner.to_string())
+        } else if value.contains("$(") {
+            // Mixed dynamic value, keep it as is for now as the evaluator will handle it
+            Value::Dynamic(value.to_string())
         } else {
-            // On Unix-like systems, use sh -c
-            ProcessCommand::new("sh").arg("-c").arg(command).output()
+            Value::String(value.to_string())
         }
-        .map_err(|e| {
-            ParseError::InvalidSyntax(
-                format!("Failed to execute command '{}': {}", command, e),
-                line_number,
-            )
-        })?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ParseError::InvalidSyntax(
-                format!(
-                    "Command '{}' failed with exit code {}: {}",
-                    command,
-                    output.status.code().unwrap_or(-1),
-                    stderr.trim()
-                ),
-                line_number,
-            ));
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(stdout.trim().to_string())
     }
 }
 
@@ -1336,7 +1190,7 @@ impl Parser {
                     }
                     else {
                          return Err(ParseError::InvalidSyntax(
-                             format!("Invalid validate syntax. Use 'validate: target matches regex', 'validate: target in [...]' or 'validate.PARAM: regex'",),
+                             "Invalid validate syntax. Use 'validate: target matches regex', 'validate: target in [...]' or 'validate.PARAM: regex'".to_string(),
                              self.current_line_number(),
                          ));
                     }
@@ -1369,11 +1223,10 @@ impl Parser {
                     self.current_line_number(),
                 ))
             }
-        }.map(|d| {
+        }.inspect(|_d| {
             if !value_str.starts_with('|') {
                 self.current_index += 1;
             }
-            d
         })
     }
 
@@ -1587,14 +1440,6 @@ impl Parser {
             Ok(unescaped)
         }
         // Boolean value
-        else if trimmed == "true" || trimmed == "false" {
-            Ok(trimmed.to_string())
-        }
-        // Number value
-        else if trimmed.parse::<f64>().is_ok() {
-            Ok(trimmed.to_string())
-        }
-        // Unquoted string (treat as string)
         else {
             Ok(trimmed.to_string())
         }

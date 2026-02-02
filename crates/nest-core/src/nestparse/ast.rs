@@ -18,6 +18,8 @@ pub enum Value {
     Number(f64),
     /// An array of string values
     Array(Vec<String>),
+    /// A dynamic value that needs execution (e.g., $(command))
+    Dynamic(String),
 }
 
 impl fmt::Display for Value {
@@ -27,6 +29,19 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::Array(a) => write!(f, "[{}]", a.join(", ")),
+            Value::Dynamic(s) => write!(f, "$({})", s),
+        }
+    }
+}
+
+impl Value {
+    pub fn to_string_unquoted(&self) -> String {
+        match self {
+            Value::String(s) => s.clone(),
+            Value::Bool(b) => b.to_string(),
+            Value::Number(n) => n.to_string(),
+            Value::Array(a) => a.join(" "),
+            Value::Dynamic(s) => format!("$({})", s),
         }
     }
 }
@@ -134,7 +149,6 @@ pub enum Directive {
     /// Watch directive - list of file patterns to watch for changes
     /// String contains comma-separated glob patterns
     Watch(Vec<String>),
-
 }
 
 /// Represents a variable that can be redefined.
@@ -143,7 +157,7 @@ pub struct Variable {
     /// The variable name
     pub name: String,
     /// The variable value
-    pub value: String,
+    pub value: Value,
 }
 
 /// Represents a constant that cannot be redefined.
@@ -152,7 +166,7 @@ pub struct Constant {
     /// The constant name
     pub name: String,
     /// The constant value
-    pub value: String,
+    pub value: Value,
 }
 
 /// Represents a function that can be reused in scripts.
@@ -206,14 +220,35 @@ pub struct Command {
     pub source_file: Option<std::path::PathBuf>,
 }
 
+impl Default for Command {
+    fn default() -> Self {
+        Self {
+            name: "default".to_string(),
+            parameters: Vec::new(),
+            directives: Vec::new(),
+            children: Vec::new(),
+            has_wildcard: false,
+            local_variables: Vec::new(),
+            local_constants: Vec::new(),
+            source_file: None,
+        }
+    }
+}
+
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)?;
         if !self.parameters.is_empty() {
-            let params: Vec<String> = self.parameters.iter().map(|p| {
-                match &p.kind {
+            let params: Vec<String> = self
+                .parameters
+                .iter()
+                .map(|p| match &p.kind {
                     ParamKind::Normal => {
-                        let mut s = if p.is_named { "!".to_string() } else { String::new() };
+                        let mut s = if p.is_named {
+                            "!".to_string()
+                        } else {
+                            String::new()
+                        };
                         s.push_str(&p.name);
                         if let Some(alias) = &p.alias {
                             s.push_str(&format!("|{}", alias));
@@ -234,11 +269,10 @@ impl fmt::Display for Command {
                         }
                         s
                     }
-                }
-            }).collect();
+                })
+                .collect();
             write!(f, "({})", params.join(", "))?;
         }
         Ok(())
     }
 }
-

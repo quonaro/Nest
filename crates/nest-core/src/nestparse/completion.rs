@@ -65,19 +65,25 @@ pub enum Shell {
     Elvish,
 }
 
-impl Shell {
-    /// Parse shell name from string
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for Shell {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "bash" => Some(Shell::Bash),
-            "zsh" => Some(Shell::Zsh),
-            "fish" => Some(Shell::Fish),
-            "powershell" | "ps1" => Some(Shell::PowerShell),
-            "elvish" => Some(Shell::Elvish),
-            _ => None,
+            "bash" => Ok(Shell::Bash),
+            "zsh" => Ok(Shell::Zsh),
+            "fish" => Ok(Shell::Fish),
+            "powershell" | "ps1" => Ok(Shell::PowerShell),
+            "elvish" => Ok(Shell::Elvish),
+            _ => Err(format!(
+                "Unsupported shell: {}. Supported: bash, zsh, fish, powershell, elvish",
+                s
+            )),
         }
     }
+}
 
+impl Shell {
     /// Get shell name as string
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -99,7 +105,7 @@ impl CompletionManager {
     /// Create a new CompletionManager
     pub fn new() -> Result<Self, String> {
         let cache_dir = Self::get_cache_dir()?;
-        
+
         // Create cache directory if it doesn't exist
         if !cache_dir.exists() {
             fs::create_dir_all(&cache_dir)
@@ -114,12 +120,12 @@ impl CompletionManager {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .map_err(|_| "HOME or USERPROFILE environment variable not set")?;
-        
+
         let mut cache_dir = PathBuf::from(home);
         cache_dir.push(".cache");
         cache_dir.push("nest");
         cache_dir.push("completions");
-        
+
         Ok(cache_dir)
     }
 
@@ -127,11 +133,11 @@ impl CompletionManager {
     fn calculate_file_hash(file_path: &Path) -> Result<String, String> {
         let content = fs::read_to_string(file_path)
             .map_err(|e| format!("Failed to read file for hashing: {}", e))?;
-        
+
         let mut hasher = Sha256::new();
         hasher.update(content.as_bytes());
         let hash = hasher.finalize();
-        
+
         Ok(format!("{:x}", hash))
     }
 
@@ -141,7 +147,7 @@ impl CompletionManager {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("nestfile");
-        
+
         let mut hash_path = self.cache_dir.clone();
         hash_path.push(format!("{}.hash", file_name));
         hash_path
@@ -153,7 +159,7 @@ impl CompletionManager {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("nestfile");
-        
+
         let mut script_path = self.cache_dir.clone();
         script_path.push(format!("{}.{}", file_name, shell.as_str()));
         script_path
@@ -163,16 +169,16 @@ impl CompletionManager {
     pub fn needs_regeneration(&self, nestfile_path: &Path) -> Result<bool, String> {
         let current_hash = Self::calculate_file_hash(nestfile_path)?;
         let hash_file_path = self.get_hash_file_path(nestfile_path);
-        
+
         // If hash file doesn't exist, need to regenerate
         if !hash_file_path.exists() {
             return Ok(true);
         }
-        
+
         // Read stored hash
         let stored_hash = fs::read_to_string(&hash_file_path)
             .map_err(|e| format!("Failed to read hash file: {}", e))?;
-        
+
         // Need regeneration if hashes don't match
         Ok(current_hash.trim() != stored_hash.trim())
     }
@@ -185,7 +191,7 @@ impl CompletionManager {
         nestfile_path: &Path,
     ) -> Result<PathBuf, String> {
         let script_path = self.get_completion_script_path(shell, nestfile_path);
-        
+
         // Generate completion script
         let mut buffer = Vec::new();
         match shell {
@@ -199,23 +205,28 @@ impl CompletionManager {
                 clap_complete::generate(clap_complete::shells::Fish, cli, APP_NAME, &mut buffer);
             }
             Shell::PowerShell => {
-                clap_complete::generate(clap_complete::shells::PowerShell, cli, APP_NAME, &mut buffer);
+                clap_complete::generate(
+                    clap_complete::shells::PowerShell,
+                    cli,
+                    APP_NAME,
+                    &mut buffer,
+                );
             }
             Shell::Elvish => {
                 clap_complete::generate(clap_complete::shells::Elvish, cli, APP_NAME, &mut buffer);
             }
         }
-        
+
         // Write script to file
         fs::write(&script_path, buffer)
             .map_err(|e| format!("Failed to write completion script: {}", e))?;
-        
+
         // Save hash for future comparison
         let current_hash = Self::calculate_file_hash(nestfile_path)?;
         let hash_file_path = self.get_hash_file_path(nestfile_path);
         fs::write(&hash_file_path, current_hash)
             .map_err(|e| format!("Failed to write hash file: {}", e))?;
-        
+
         Ok(script_path)
     }
 
@@ -225,16 +236,22 @@ impl CompletionManager {
         cli: &mut ClapCommand,
         nestfile_path: &Path,
     ) -> Result<Vec<(Shell, PathBuf)>, String> {
-        let shells = [Shell::Bash, Shell::Zsh, Shell::Fish, Shell::PowerShell, Shell::Elvish];
+        let shells = [
+            Shell::Bash,
+            Shell::Zsh,
+            Shell::Fish,
+            Shell::PowerShell,
+            Shell::Elvish,
+        ];
         let mut generated = Vec::new();
-        
+
         for shell in &shells {
             // Clone CLI for each shell to avoid borrowing issues
             let mut cli_clone = cli.clone();
             let path = self.generate_completion(*shell, &mut cli_clone, nestfile_path)?;
             generated.push((*shell, path));
         }
-        
+
         Ok(generated)
     }
 
@@ -245,51 +262,75 @@ impl CompletionManager {
         verbose: bool,
         nestfile_path: &Path,
     ) -> Result<(), String> {
-        let shell = Shell::from_str(shell_name)
-            .ok_or_else(|| format!("Unsupported shell: {}. Supported: bash, zsh, fish, powershell, elvish", shell_name))?;
-        
+        let shell: Shell = shell_name.parse()?;
+
         let manager = CompletionManager::new()?;
-        
+
         // Generate completion script if needed
         let script_path = manager.get_completion_script_path(shell, nestfile_path);
         if !script_path.exists() || manager.needs_regeneration(nestfile_path)? {
             manager.generate_completion(shell, cli, nestfile_path)?;
         }
-        
+
         // If verbose, output the script content
         if verbose {
             match shell {
                 Shell::Bash => {
-                    clap_complete::generate(clap_complete::shells::Bash, cli, APP_NAME, &mut std::io::stdout());
+                    clap_complete::generate(
+                        clap_complete::shells::Bash,
+                        cli,
+                        APP_NAME,
+                        &mut std::io::stdout(),
+                    );
                 }
                 Shell::Zsh => {
-                    clap_complete::generate(clap_complete::shells::Zsh, cli, APP_NAME, &mut std::io::stdout());
+                    clap_complete::generate(
+                        clap_complete::shells::Zsh,
+                        cli,
+                        APP_NAME,
+                        &mut std::io::stdout(),
+                    );
                 }
                 Shell::Fish => {
-                    clap_complete::generate(clap_complete::shells::Fish, cli, APP_NAME, &mut std::io::stdout());
+                    clap_complete::generate(
+                        clap_complete::shells::Fish,
+                        cli,
+                        APP_NAME,
+                        &mut std::io::stdout(),
+                    );
                 }
                 Shell::PowerShell => {
-                    clap_complete::generate(clap_complete::shells::PowerShell, cli, APP_NAME, &mut std::io::stdout());
+                    clap_complete::generate(
+                        clap_complete::shells::PowerShell,
+                        cli,
+                        APP_NAME,
+                        &mut std::io::stdout(),
+                    );
                 }
                 Shell::Elvish => {
-                    clap_complete::generate(clap_complete::shells::Elvish, cli, APP_NAME, &mut std::io::stdout());
+                    clap_complete::generate(
+                        clap_complete::shells::Elvish,
+                        cli,
+                        APP_NAME,
+                        &mut std::io::stdout(),
+                    );
                 }
             }
             return Ok(());
         }
-        
+
         // Otherwise, show informational message and install
         Self::print_completion_info(&manager, shell, &script_path, nestfile_path)?;
-        
+
         // Try to install automatically
         if let Ok(true) = Self::install_completion(shell, &script_path) {
             // Installation successful, try to source in current terminal
             Self::source_completion_in_current_shell(shell, &script_path)?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Print informational message about completion installation
     fn print_completion_info(
         manager: &CompletionManager,
@@ -298,19 +339,25 @@ impl CompletionManager {
         nestfile_path: &Path,
     ) -> Result<(), String> {
         use crate::nestparse::output::OutputFormatter;
-        
+
         OutputFormatter::info("Shell completion information:");
         println!();
         println!("  Shell: {}", shell.as_str());
         println!("  Completion script: {}", script_path.display());
         println!("  Based on nestfile: {}", nestfile_path.display());
         println!();
-        
+
         // Show all generated completion scripts
         let cache_dir = manager.cache_dir.clone();
         if cache_dir.exists() {
             println!("  All generated completion scripts:");
-            let shells = [Shell::Bash, Shell::Zsh, Shell::Fish, Shell::PowerShell, Shell::Elvish];
+            let shells = [
+                Shell::Bash,
+                Shell::Zsh,
+                Shell::Fish,
+                Shell::PowerShell,
+                Shell::Elvish,
+            ];
             for s in &shells {
                 let path = manager.get_completion_script_path(*s, nestfile_path);
                 if path.exists() {
@@ -319,26 +366,29 @@ impl CompletionManager {
             }
             println!();
         }
-        
+
         // Show installation status
         if Self::is_completion_installed(shell, script_path) {
             let config_path = Self::get_shell_config_path(shell)
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|| "unknown".to_string());
-            OutputFormatter::info(&format!("  ✓ Completion already installed in: {}", config_path));
+            OutputFormatter::info(&format!(
+                "  ✓ Completion already installed in: {}",
+                config_path
+            ));
         } else {
             OutputFormatter::info("  → Completion will be installed automatically");
         }
         println!();
-        
+
         // Show instructions
         println!("  To view the completion script, use:");
         println!("    nest --complete {} -V", shell.as_str());
         println!();
-        
+
         Ok(())
     }
-    
+
     /// Source completion script in current shell (if possible)
     fn source_completion_in_current_shell(shell: Shell, script_path: &Path) -> Result<(), String> {
         // Only try to source for bash/zsh in interactive shells
@@ -352,8 +402,8 @@ impl CompletionManager {
                         .arg("-c")
                         .arg(&source_cmd)
                         .output();
-                    
-                    if let Ok(_) = output {
+
+                    if output.is_ok() {
                         use crate::nestparse::output::OutputFormatter;
                         OutputFormatter::info("  ✓ Completion loaded in current shell session");
                     }
@@ -362,7 +412,11 @@ impl CompletionManager {
             _ => {
                 // For other shells, just inform user
                 use crate::nestparse::output::OutputFormatter;
-                OutputFormatter::info(&format!("  → Restart your {} shell or run: source {}", shell.as_str(), script_path.display()));
+                OutputFormatter::info(&format!(
+                    "  → Restart your {} shell or run: source {}",
+                    shell.as_str(),
+                    script_path.display()
+                ));
             }
         }
         Ok(())
@@ -413,7 +467,7 @@ impl CompletionManager {
                 .file_name()
                 .and_then(|n| n.to_str())?
                 .to_lowercase();
-            
+
             if shell_name.contains("zsh") {
                 return Some(Shell::Zsh);
             } else if shell_name.contains("bash") {
@@ -424,7 +478,7 @@ impl CompletionManager {
                 return Some(Shell::Elvish);
             }
         }
-        
+
         // Try PowerShell on Windows
         #[cfg(windows)]
         {
@@ -432,7 +486,7 @@ impl CompletionManager {
                 return Some(Shell::PowerShell);
             }
         }
-        
+
         None
     }
 
@@ -441,9 +495,9 @@ impl CompletionManager {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .ok()?;
-        
+
         let home_path = PathBuf::from(home);
-        
+
         match shell {
             Shell::Bash => {
                 // Try .bashrc first, then .bash_profile
@@ -458,9 +512,7 @@ impl CompletionManager {
                 // Return .bashrc even if it doesn't exist (will be created)
                 Some(bashrc)
             }
-            Shell::Zsh => {
-                Some(home_path.join(".zshrc"))
-            }
+            Shell::Zsh => Some(home_path.join(".zshrc")),
             Shell::Fish => {
                 // Fish uses a different approach - completions go to completions directory
                 Some(home_path.join(".config/fish/completions/nest.fish"))
@@ -477,14 +529,15 @@ impl CompletionManager {
                 {
                     // On Unix, PowerShell might be installed via PowerShell Core
                     if let Ok(home) = std::env::var("HOME") {
-                        return Some(PathBuf::from(home).join(".config/powershell/Microsoft.PowerShell_profile.ps1"));
+                        return Some(
+                            PathBuf::from(home)
+                                .join(".config/powershell/Microsoft.PowerShell_profile.ps1"),
+                        );
                     }
                 }
                 None
             }
-            Shell::Elvish => {
-                Some(home_path.join(".elvish/rc.elv"))
-            }
+            Shell::Elvish => Some(home_path.join(".elvish/rc.elv")),
         }
     }
 
@@ -509,19 +562,18 @@ impl CompletionManager {
             Shell::Bash | Shell::Zsh => {
                 // Check for source command pointing to our script
                 let script_str = script_path.to_string_lossy();
-                content.contains(script_str.as_ref()) || 
-                content.contains("nest/completions") ||
-                content.contains("Nest CLI completion")
+                content.contains(script_str.as_ref())
+                    || content.contains("nest/completions")
+                    || content.contains("Nest CLI completion")
             }
             Shell::Fish => {
                 // Fish completions are separate files, check if file exists
                 config_path.exists()
             }
-            Shell::PowerShell => {
-                content.contains("nest") && content.contains("completion")
-            }
+            Shell::PowerShell => content.contains("nest") && content.contains("completion"),
             Shell::Elvish => {
-                content.contains("nest") && (content.contains("completion") || content.contains("eval"))
+                content.contains("nest")
+                    && (content.contains("completion") || content.contains("eval"))
             }
         }
     }
@@ -537,7 +589,7 @@ impl CompletionManager {
             Shell::Bash | Shell::Zsh => {
                 let config_path = Self::get_shell_config_path(shell)
                     .ok_or_else(|| "Could not determine shell config path".to_string())?;
-                
+
                 // Ensure parent directory exists
                 if let Some(parent) = config_path.parent() {
                     fs::create_dir_all(parent)
@@ -571,11 +623,12 @@ impl CompletionManager {
                 // Fish uses completions directory
                 let completion_file = Self::get_shell_config_path(shell)
                     .ok_or_else(|| "Could not determine fish completions path".to_string())?;
-                
+
                 // Ensure directory exists
                 if let Some(parent) = completion_file.parent() {
-                    fs::create_dir_all(parent)
-                        .map_err(|e| format!("Failed to create fish completions directory: {}", e))?;
+                    fs::create_dir_all(parent).map_err(|e| {
+                        format!("Failed to create fish completions directory: {}", e)
+                    })?;
                 }
 
                 // Copy completion script
@@ -587,11 +640,12 @@ impl CompletionManager {
             Shell::PowerShell => {
                 let config_path = Self::get_shell_config_path(shell)
                     .ok_or_else(|| "Could not determine PowerShell profile path".to_string())?;
-                
+
                 // Ensure parent directory exists
                 if let Some(parent) = config_path.parent() {
-                    fs::create_dir_all(parent)
-                        .map_err(|e| format!("Failed to create PowerShell profile directory: {}", e))?;
+                    fs::create_dir_all(parent).map_err(|e| {
+                        format!("Failed to create PowerShell profile directory: {}", e)
+                    })?;
                 }
 
                 // Read existing content
@@ -618,7 +672,7 @@ impl CompletionManager {
             Shell::Elvish => {
                 let config_path = Self::get_shell_config_path(shell)
                     .ok_or_else(|| "Could not determine elvish config path".to_string())?;
-                
+
                 // Ensure parent directory exists
                 if let Some(parent) = config_path.parent() {
                     fs::create_dir_all(parent)
@@ -657,14 +711,14 @@ impl CompletionManager {
         };
 
         let script_path = self.get_completion_script_path(shell, nestfile_path);
-        
+
         // Check if script exists (should be generated first)
         if !script_path.exists() {
             return Ok(None); // Script not generated yet, skip
         }
 
         match Self::install_completion(shell, &script_path) {
-            Ok(true) => Ok(Some(shell)), // Installed
+            Ok(true) => Ok(Some(shell)),  // Installed
             Ok(false) => Ok(Some(shell)), // Already installed
             Err(e) => Err(e),
         }
@@ -676,4 +730,3 @@ impl Default for CompletionManager {
         Self::new().expect("Failed to create CompletionManager")
     }
 }
-
