@@ -988,202 +988,6 @@ impl CliGenerator {
         Ok(())
     }
 
-    /// Parses a command call from a string.
-    ///
-    /// Supports formats:
-    /// - `command` - simple command
-    /// - `group:command` - nested command
-    /// - `command(arg="value")` - command with arguments
-    /// - `group:command(arg="value")` - nested command with arguments
-    ///
-    /// Returns (command_path, args) if it's a command call, None otherwise.
-    fn parse_command_call(
-        line: &str,
-    ) -> Option<(String, std::collections::HashMap<String, String>)> {
-        let trimmed = line.trim();
-
-        // Check if line looks like a command call
-        // Command calls should start with alphanumeric or underscore, and may contain colons
-        // They should not contain shell operators like |, &&, ||, ;, >, <, etc.
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            return None;
-        }
-
-        // Check for shell operators that indicate this is not a command call
-        let shell_operators = [
-            "|", "&&", "||", ";", ">", "<", ">>", "<<", "&", "$", "`", "[", "]", "=",
-        ];
-
-        // If it looks like a potential Nest call (ends with ')'), we bypass the shell operator check
-        // because those operators are likely inside string arguments (e.g., SQL queries with ';').
-        let is_potential_call = trimmed.contains('(') && trimmed.ends_with(')');
-
-        if !is_potential_call && shell_operators.iter().any(|&op| trimmed.contains(op)) {
-            return None;
-        }
-
-        // Check for shell keywords that indicate this is not a command call
-        let shell_keywords = [
-            "if", "then", "else", "elif", "fi", "case", "esac", "for", "while", "until", "do",
-            "done", "function",
-        ];
-        let first_word = trimmed.split_whitespace().next().unwrap_or("");
-        if shell_keywords.contains(&first_word) {
-            return None;
-        }
-
-        // Try to parse as command call
-        // Pattern: [group:]command[(args)]
-        let command_path: String;
-        let mut args = std::collections::HashMap::new();
-
-        // Check if there are parentheses (arguments)
-        if let Some(open_paren) = trimmed.find('(') {
-            // Extract command path (before parentheses)
-            command_path = trimmed[..open_paren].trim().to_string();
-
-            // Find matching closing parenthesis
-            let mut depth = 0;
-            let mut in_quotes = false;
-            let mut quote_char = '\0';
-            let mut close_paren = None;
-
-            for (i, ch) in trimmed[open_paren..].char_indices() {
-                match ch {
-                    '"' | '\'' if !in_quotes => {
-                        in_quotes = true;
-                        quote_char = ch;
-                    }
-                    ch if ch == quote_char && in_quotes => {
-                        in_quotes = false;
-                    }
-                    '(' if !in_quotes => {
-                        depth += 1;
-                    }
-                    ')' if !in_quotes => {
-                        depth -= 1;
-                        if depth == 0 {
-                            close_paren = Some(open_paren + i);
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            if let Some(close) = close_paren {
-                let args_str = &trimmed[open_paren + 1..close];
-                // Parse arguments using similar logic to dependency parsing
-                args = Self::parse_command_args(args_str).unwrap_or_default();
-            } else {
-                // Unclosed parentheses - not a valid command call
-                return None;
-            }
-        } else {
-            // No arguments - just command path
-            command_path = trimmed.to_string();
-        }
-
-        // Validate command path (should contain only alphanumeric, underscore, colon, hyphen)
-        if command_path.is_empty() {
-            return None;
-        }
-
-        // Check if it looks like a valid command path
-        let is_valid = command_path
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == ':' || c == '_' || c == '-')
-            && !command_path.starts_with(':')
-            && !command_path.ends_with(':');
-
-        if !is_valid {
-            return None;
-        }
-
-        Some((command_path, args))
-    }
-
-    /// Parses arguments from a command call argument string.
-    /// Format: `name="value", name2=true, name3=123`
-    fn parse_command_args(args_str: &str) -> Result<std::collections::HashMap<String, String>, ()> {
-        let mut args = std::collections::HashMap::new();
-
-        if args_str.trim().is_empty() {
-            return Ok(args);
-        }
-
-        // Split by comma, but respect quotes
-        let mut current = args_str.trim();
-        while !current.is_empty() {
-            let (arg_str, remainder) = Self::split_next_arg(current)?;
-
-            if arg_str.is_empty() {
-                break;
-            }
-
-            // Parse name=value
-            let equals_pos = arg_str.find('=').ok_or(())?;
-
-            let name = arg_str[..equals_pos].trim().to_string();
-            let value_str = arg_str[equals_pos + 1..].trim();
-
-            // Parse value (string, bool, or number)
-            let value = Self::parse_command_value(value_str);
-
-            args.insert(name, value);
-
-            current = remainder.trim();
-        }
-
-        Ok(args)
-    }
-
-    /// Splits the next argument from the string, handling quotes.
-    fn split_next_arg(s: &str) -> Result<(&str, &str), ()> {
-        let mut in_quotes = false;
-        let mut quote_char = '\0';
-
-        for (i, ch) in s.char_indices() {
-            match ch {
-                '"' | '\'' if !in_quotes => {
-                    in_quotes = true;
-                    quote_char = ch;
-                }
-                ch if ch == quote_char && in_quotes => {
-                    in_quotes = false;
-                }
-                ',' if !in_quotes => {
-                    return Ok((&s[..i], &s[i + 1..]));
-                }
-                _ => {}
-            }
-        }
-
-        Ok((s, ""))
-    }
-
-    /// Parses a command argument value (string, bool, or number).
-    fn parse_command_value(value_str: &str) -> String {
-        let trimmed = value_str.trim();
-
-        // String value (quoted)
-        if (trimmed.starts_with('"') && trimmed.ends_with('"'))
-            || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
-        {
-            // Remove quotes
-            let unquoted = &trimmed[1..trimmed.len() - 1];
-            // Unescape quotes
-            unquoted
-                .replace("\\\"", "\"")
-                .replace("\\'", "'")
-                .replace("\\\\", "\\")
-        }
-        // Boolean or number value (keep as is)
-        else {
-            trimmed.to_string()
-        }
-    }
-
     /// Executes a script with the given environment and working directory.
     ///
     /// This function supports both regular shell commands and command calls.
@@ -1249,7 +1053,9 @@ impl CliGenerator {
             }
 
             // Try to parse as command or function call
-            if let Some((call_name, call_args)) = Self::parse_command_call(trimmed_line) {
+            if let Some((call_name, call_args)) =
+                super::executor::CommandExecutor::parse_command_call(trimmed_line)
+            {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
@@ -1534,7 +1340,7 @@ impl CliGenerator {
                         if template_expr.contains('(') && template_expr.contains(')') {
                             // Try to parse as function call
                             if let Some((func_name, func_args)) =
-                                Self::parse_command_call(template_expr)
+                                super::executor::CommandExecutor::parse_command_call(template_expr)
                             {
                                 // Check if it's a function (no colons, exists in functions list)
                                 if !func_name.contains(':') {
@@ -1932,7 +1738,9 @@ impl CliGenerator {
             }
 
             // Try to parse as command or function call
-            if let Some((call_name, call_args)) = Self::parse_command_call(trimmed_line) {
+            if let Some((call_name, call_args)) =
+                super::executor::CommandExecutor::parse_command_call(trimmed_line)
+            {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
