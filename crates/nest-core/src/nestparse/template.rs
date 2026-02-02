@@ -15,6 +15,9 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::env;
 
+/// Type alias for dynamic value evaluator function
+pub type ValueEvaluator<'a> = dyn Fn(&str) -> Result<String, String> + 'a;
+
 /// Context for template processing containing variables and constants.
 #[derive(Default)]
 pub struct TemplateContext<'a> {
@@ -94,7 +97,7 @@ impl TemplateProcessor {
         args: &HashMap<String, String>,
         context: &TemplateContext,
         parent_args: &HashMap<String, String>,
-        evaluator: Option<&dyn Fn(&str) -> Result<String, String>>,
+        evaluator: Option<&ValueEvaluator>,
     ) -> String {
         let mut processed = script.to_string();
 
@@ -444,10 +447,7 @@ impl TemplateProcessor {
     }
 
     /// Resolves a value, evaluating it if it's dynamic.
-    fn resolve_value(
-        value: &Value,
-        evaluator: Option<&dyn Fn(&str) -> Result<String, String>>,
-    ) -> String {
+    fn resolve_value(value: &Value, evaluator: Option<&ValueEvaluator>) -> String {
         match value {
             Value::Dynamic(cmd) => evaluator
                 .as_ref()
