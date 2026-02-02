@@ -610,78 +610,6 @@ impl CliGenerator {
         })
     }
 
-    /// Prompts user for confirmation before executing a command.
-    ///
-    /// # Arguments
-    ///
-    /// * `message` - Optional custom confirmation message. If None or empty, uses default message.
-    /// * `command_path` - Path to the command being executed (for default message)
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(true)` if user confirmed (y), `Ok(false)` if user declined (n),
-    /// or `Err(message)` if there was an error reading input.
-    fn prompt_confirmation(
-        message: Option<&str>,
-        command_path: Option<&[String]>,
-    ) -> Result<bool, String> {
-        use std::io::{self, Write};
-
-        let prompt_text = if let Some(msg) = message {
-            if msg.trim().is_empty() {
-                // Empty message - use default
-                let command_name = if let Some(path) = command_path {
-                    path.join(" ")
-                } else {
-                    "this command".to_string()
-                };
-                format!(
-                    "Are you sure you want to execute '{}'? [y/n]: ",
-                    command_name
-                )
-            } else {
-                // Custom message
-                format!("{} [y/n]: ", msg.trim())
-            }
-        } else {
-            // No message - use default
-            let command_name = if let Some(path) = command_path {
-                path.join(" ")
-            } else {
-                "this command".to_string()
-            };
-            format!(
-                "Are you sure you want to execute '{}'? [y/n]: ",
-                command_name
-            )
-        };
-
-        // Print prompt and flush to ensure it's displayed
-        print!("{}", prompt_text);
-        io::stdout()
-            .flush()
-            .map_err(|e| format!("Failed to flush stdout: {}", e))?;
-
-        // Read user input
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .map_err(|e| format!("Failed to read input: {}", e))?;
-
-        // Parse input (trim whitespace and convert to lowercase)
-        let trimmed = input.trim().to_lowercase();
-
-        match trimmed.as_str() {
-            "y" | "yes" => Ok(true),
-            "n" | "no" => Ok(false),
-            _ => {
-                // Invalid input - ask again
-                println!("Please enter 'y' for yes or 'n' for no.");
-                Self::prompt_confirmation(message, command_path)
-            }
-        }
-    }
-
     fn get_logs_directive(directives: &[Directive]) -> Option<(String, String)> {
         directives.iter().find_map(|d| match d {
             Directive::Logs(path, format) => Some((path.clone(), format.clone())),
@@ -697,90 +625,6 @@ impl CliGenerator {
                 _ => None,
             })
             .collect()
-    }
-
-    /// Writes a log entry to a file in the specified format.
-    fn write_log_entry(
-        log_path: &str,
-        log_format: &str,
-        command_path: Option<&[String]>,
-        args: &HashMap<String, String>,
-        result: &Result<(), String>,
-    ) -> Result<(), String> {
-        use chrono::Utc;
-        use serde_json::json;
-        use std::fs::OpenOptions;
-        use std::io::Write;
-
-        // Process template in log path
-        // Log path doesn't need parent args (it's just a path)
-        let empty_parent_args: HashMap<String, String> = HashMap::new();
-        let processed_path = TemplateProcessor::process(
-            log_path,
-            args,
-            &TemplateContext::default(),
-            &empty_parent_args,
-        );
-
-        // Create parent directories if needed
-        if let Some(parent) = std::path::Path::new(&processed_path).parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create log directory: {}", e))?;
-        }
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&processed_path)
-            .map_err(|e| format!("Failed to open log file: {}", e))?;
-
-        let command_name = command_path
-            .map(|p| p.join(" "))
-            .unwrap_or_else(|| "unknown".to_string());
-
-        let timestamp = Utc::now().to_rfc3339();
-        let success = result.is_ok();
-        let error_msg = result.as_ref().err().map(|e| e.to_string());
-
-        match log_format {
-            "json" => {
-                let log_entry = json!({
-                    "timestamp": timestamp,
-                    "command": command_name,
-                    "args": args,
-                    "success": success,
-                    "error": error_msg,
-                });
-                writeln!(file, "{}", serde_json::to_string(&log_entry).unwrap())
-                    .map_err(|e| format!("Failed to write log: {}", e))?;
-            }
-            "txt" => {
-                writeln!(file, "[{}] Command: {}", timestamp, command_name)
-                    .map_err(|e| format!("Failed to write log: {}", e))?;
-                if !args.is_empty() {
-                    let args_str: Vec<String> =
-                        args.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
-                    writeln!(file, "  Args: {}", args_str.join(", "))
-                        .map_err(|e| format!("Failed to write log: {}", e))?;
-                }
-                writeln!(
-                    file,
-                    "  Status: {}",
-                    if success { "SUCCESS" } else { "FAILED" }
-                )
-                .map_err(|e| format!("Failed to write log: {}", e))?;
-                if let Some(err) = error_msg {
-                    writeln!(file, "  Error: {}", err)
-                        .map_err(|e| format!("Failed to write log: {}", e))?;
-                }
-                writeln!(file).map_err(|e| format!("Failed to write log: {}", e))?;
-            }
-            _ => {
-                return Err(format!("Unknown log format: {}", log_format));
-            }
-        }
-
-        Ok(())
     }
 
     /// Validates command parameters according to validation directives.
@@ -2111,7 +1955,7 @@ impl CliGenerator {
         if !dry_run {
             if let Some(confirm_message) = Self::get_require_confirm_directive(&command.directives)
             {
-                match Self::prompt_confirmation(Some(&confirm_message), command_path) {
+                match super::input::prompt_confirmation(Some(&confirm_message), command_path) {
                     Ok(true) => {
                         // User confirmed - continue execution
                     }
@@ -2406,7 +2250,7 @@ impl CliGenerator {
             if !dry_run {
                 // Note: For now, we'll log a summary since execute_script doesn't return output
                 // In a full implementation, we'd need to capture stdout/stderr
-                if let Err(e) = Self::write_log_entry(
+                if let Err(e) = super::logging::write_log_entry(
                     &log_path,
                     &log_format,
                     command_path_for_logging,
