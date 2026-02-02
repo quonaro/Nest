@@ -762,7 +762,10 @@ function validateCommandTree(
     (d) => d.name === "script" || d.name.startsWith("script.") || d.name === "script[hide]"
   );
 
-  if (!hasScript && cmd.children.length === 0) {
+  // Check if it has ANY directives (e.g. cwd, env, etc.) which would imply an override or config command
+  const hasAnyDirective = cmd.directives.length > 0;
+
+  if (!hasScript && cmd.children.length === 0 && !hasAnyDirective) {
     diagnostics.push(
       createDiagnostic(
         cmd.line,
