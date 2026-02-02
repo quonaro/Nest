@@ -1313,6 +1313,18 @@ fn ui(f: &mut Frame, app: &mut App) {
             if let Some(src) = &cmd.source_file {
                 info.push(format!("Source: {}", src.display()));
             }
+            let has_cwd_directive = cmd
+                .directives
+                .iter()
+                .any(|d| matches!(d, nest_core::nestparse::ast::Directive::Cwd(_)));
+            if !has_cwd_directive {
+                if let Some(source_file) = &cmd.source_file {
+                    if let Some(parent) = source_file.parent() {
+                        info.push(format!("Cwd: {} (implicit)", parent.display()));
+                    }
+                }
+            }
+
             // Check other directives
             for d in &cmd.directives {
                 match d {

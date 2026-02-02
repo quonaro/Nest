@@ -19,6 +19,18 @@ pub fn print_command(command: &Command, indent: usize) {
     println!("{}└─ {}", indent_str, command);
 
     // Print directives
+    let has_cwd = command
+        .directives
+        .iter()
+        .any(|d| matches!(d, Directive::Cwd(_)));
+    if !has_cwd {
+        if let Some(source_file) = &command.source_file {
+            if let Some(parent) = source_file.parent() {
+                println!("{}    > cwd: {} (implicit)", indent_str, parent.display());
+            }
+        }
+    }
+
     for directive in &command.directives {
         match directive {
             Directive::Desc(s) => {
@@ -36,24 +48,39 @@ pub fn print_command(command: &Command, indent: usize) {
                 println!("{}    > env{}: {}", indent_str, suffix, s);
             }
             Directive::Depends(deps, parallel) => {
-                let deps_str: Vec<String> = deps.iter().map(|dep| {
-                    if dep.args.is_empty() {
-                        dep.command_path.clone()
-                    } else {
-                        let args_str: Vec<String> = dep.args.iter()
-                            .map(|(k, v)| format!("{}=\"{}\"", k, v))
-                            .collect();
-                        format!("{}({})", dep.command_path, args_str.join(", "))
-                    }
-                }).collect();
+                let deps_str: Vec<String> = deps
+                    .iter()
+                    .map(|dep| {
+                        if dep.args.is_empty() {
+                            dep.command_path.clone()
+                        } else {
+                            let args_str: Vec<String> = dep
+                                .args
+                                .iter()
+                                .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                                .collect();
+                            format!("{}({})", dep.command_path, args_str.join(", "))
+                        }
+                    })
+                    .collect();
                 let suffix = if *parallel { ".parallel" } else { "" };
-                println!("{}    > depends{}: {}", indent_str, suffix, deps_str.join(", "));
+                println!(
+                    "{}    > depends{}: {}",
+                    indent_str,
+                    suffix,
+                    deps_str.join(", ")
+                );
             }
             Directive::Before(s, os, hide) => {
                 let mut name = String::from("before");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
-                
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
+
                 if s.contains('\n') {
                     println!("{}    > {}: |", indent_str, name);
                     for line in s.lines() {
@@ -65,8 +92,13 @@ pub fn print_command(command: &Command, indent: usize) {
             }
             Directive::After(s, os, hide) => {
                 let mut name = String::from("after");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
 
                 if s.contains('\n') {
                     println!("{}    > {}: |", indent_str, name);
@@ -79,8 +111,13 @@ pub fn print_command(command: &Command, indent: usize) {
             }
             Directive::Fallback(s, os, hide) => {
                 let mut name = String::from("fallback");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
 
                 if s.contains('\n') {
                     println!("{}    > {}: |", indent_str, name);
@@ -93,8 +130,13 @@ pub fn print_command(command: &Command, indent: usize) {
             }
             Directive::Finally(s, os, hide) => {
                 let mut name = String::from("finally");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
 
                 if s.contains('\n') {
                     println!("{}    > {}: |", indent_str, name);
@@ -113,8 +155,13 @@ pub fn print_command(command: &Command, indent: usize) {
             }
             Directive::Script(s, os, hide) => {
                 let mut name = String::from("script");
-                if let Some(os_name) = os { name.push('.'); name.push_str(os_name); }
-                if *hide { name.push_str(".hide"); }
+                if let Some(os_name) = os {
+                    name.push('.');
+                    name.push_str(os_name);
+                }
+                if *hide {
+                    name.push_str(".hide");
+                }
 
                 if s.contains('\n') {
                     println!("{}    > {}: |", indent_str, name);
@@ -148,4 +195,3 @@ pub fn print_command(command: &Command, indent: usize) {
         print_command(child, indent + 1);
     }
 }
-

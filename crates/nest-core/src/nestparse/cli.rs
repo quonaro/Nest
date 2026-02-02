@@ -2526,9 +2526,15 @@ impl CliGenerator {
             std::collections::HashMap::new()
         };
 
-        // Use directive from command if present, otherwise use inherited directive
+        // Use directive from command if present, otherwise use inherited directive,
+        // otherwise fall back to the directory of the source file.
         let cwd = Self::get_directive_value(&command.directives, "cwd")
-            .or_else(|| parent_directives.get("cwd").map(|(s, _)| s.clone()));
+            .or_else(|| parent_directives.get("cwd").map(|(s, _)| s.clone()))
+            .or_else(|| {
+                command.source_file.as_ref()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.to_string_lossy().to_string())
+            });
         let privileged = Self::get_privileged_directive(&command.directives);
         let logs = Self::get_logs_directive(&command.directives);
 
