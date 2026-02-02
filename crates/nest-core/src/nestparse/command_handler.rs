@@ -36,7 +36,7 @@ impl CommandHandler {
     pub fn handle_group_without_default(
         command: &Command,
         command_path: &[String],
-    ) -> Result<(), ()> {
+    ) -> Result<(), String> {
         HelpFormatter::print_group_help(command, command_path);
         Ok(())
     }
@@ -105,7 +105,14 @@ impl CommandHandler {
 
         // Execute with parent args - we need to modify execute_command to accept parent_args
         // For now, we'll pass empty parent args and handle it in execute_command_with_deps
-        generator.execute_command_with_parent_args(default_cmd, &args, Some(&default_path), dry_run, verbose, &parent_args)
+        generator.execute_command_with_parent_args(
+            default_cmd,
+            &args,
+            Some(&default_path),
+            dry_run,
+            verbose,
+            &parent_args,
+        )
     }
 
     /// Handles execution of a regular (non-group) command.
@@ -162,7 +169,14 @@ impl CommandHandler {
         let verbose = root_matches.get_flag(FLAG_VERBOSE);
 
         // Execute with parent args
-        generator.execute_command_with_parent_args(command, &args, Some(command_path), dry_run, verbose, &parent_args)
+        generator.execute_command_with_parent_args(
+            command,
+            &args,
+            Some(command_path),
+            dry_run,
+            verbose,
+            &parent_args,
+        )
     }
 
     fn get_group_matches(matches: &ArgMatches) -> &ArgMatches {
@@ -202,7 +216,7 @@ impl CommandHandler {
         // Navigate to each parent command's matches
         for name in command_path.iter().take(command_path.len() - 1) {
             current_path.push(name.clone());
-            
+
             // Find the parent command to get its parameters
             if let Some(parent_cmd) = generator.find_command(&current_path) {
                 // Navigate to this parent command's matches
@@ -214,15 +228,13 @@ impl CommandHandler {
                 }
 
                 // Extract arguments from parent command
-                let parent_cmd_args = match ArgumentExtractor::extract_from_matches(
+                let parent_cmd_args = ArgumentExtractor::extract_from_matches(
                     current_matches,
                     &parent_cmd.parameters,
                     generator,
                     &current_path,
-                ) {
-                    Ok(args) => args,
-                    Err(_) => std::collections::HashMap::new(), // Skip if extraction fails
-                };
+                )
+                .unwrap_or_default();
 
                 // Merge parent args (later parents override earlier ones)
                 for (key, value) in parent_cmd_args {

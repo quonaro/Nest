@@ -6,9 +6,22 @@
 
 use super::ast::Command;
 use std::collections::HashMap;
-use std::process::{Command as ProcessCommand, Stdio};
 use std::env;
+use std::process::{Command as ProcessCommand, Stdio};
 
+/// Context for script execution containing all necessary parameters.
+pub struct ExecutionContext<'a> {
+    pub command: &'a Command,
+    pub args: &'a HashMap<String, String>,
+    pub env_vars: &'a HashMap<String, String>,
+    pub cwd: Option<&'a str>,
+    pub command_path: Option<&'a [String]>,
+    pub dry_run: bool,
+    pub verbose: bool,
+    pub privileged: bool,
+    pub pid_callback: Option<&'a dyn Fn(u32)>,
+    pub hide_output: bool,
+}
 
 /// Executes shell scripts for commands.
 ///
@@ -24,7 +37,7 @@ impl CommandExecutor {
             // Extract shell from shebang
             let shebang_line = trimmed.lines().next().unwrap_or("");
             let shell_path = shebang_line.trim_start_matches("#!").trim();
-            
+
             // Determine shell command
             let shell = if shell_path.contains("bash") {
                 "bash"
@@ -32,19 +45,13 @@ impl CommandExecutor {
                 "zsh"
             } else if shell_path.contains("fish") {
                 "fish"
-            } else if shell_path.contains("sh") {
-                "sh"
             } else {
-                "sh" // default
+                "sh"
             };
-            
+
             // Remove shebang line from script
-            let script_without_shebang = script
-                .lines()
-                .skip(1)
-                .collect::<Vec<_>>()
-                .join("\n");
-            
+            let script_without_shebang = script.lines().skip(1).collect::<Vec<_>>().join("\n");
+
             (shell, script_without_shebang)
         } else {
             ("sh", script.to_string())
@@ -90,34 +97,24 @@ impl CommandExecutor {
     /// - Exit code
     /// - Helpful suggestions (e.g., missing commands)
     #[allow(dead_code)]
-    pub fn execute(
-        command: &Command,
-        args: &HashMap<String, String>,
-        script: &str,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        command_path: Option<&[String]>,
-        dry_run: bool,
-        verbose: bool,
-        privileged: bool,
-        pid_callback: Option<&dyn Fn(u32)>,
-    ) -> Result<(), String> {
+    pub fn execute(script: &str, context: &ExecutionContext) -> Result<(), String> {
         // Check privileged access BEFORE execution
-        if privileged && !dry_run {
-            if !Self::check_privileged_access() {
-                return Err(Self::format_privileged_error(command, command_path));
-            }
+        if context.privileged && !context.dry_run && !Self::check_privileged_access() {
+            return Err(Self::format_privileged_error(
+                context.command,
+                context.command_path,
+            ));
         }
 
         // Show dry-run preview
-        if dry_run {
-            Self::show_dry_run_preview(command, command_path, args, env_vars, cwd, script, verbose, privileged);
+        if context.dry_run {
+            Self::show_dry_run_preview(script, context);
             return Ok(());
         }
 
         // Show verbose information if requested
-        if verbose {
-            Self::show_verbose_info(command, command_path, args, env_vars, cwd, script, privileged);
+        if context.verbose {
+            Self::show_verbose_info(script, context);
         }
 
         // Detect shell from shebang and remove it
@@ -128,31 +125,37 @@ impl CommandExecutor {
         cmd.arg("-c");
         cmd.arg(script_to_execute);
 
-        if let Some(cwd_path) = cwd {
+        if let Some(cwd_path) = context.cwd {
             cmd.current_dir(cwd_path);
         }
 
         // Set environment variables from directives
-        for (key, value) in env_vars {
+        for (key, value) in context.env_vars {
             cmd.env(key, value);
         }
 
         // Set command arguments as environment variables
-        for (key, value) in args {
+        for (key, value) in context.args {
             cmd.env(key.to_uppercase(), value);
             cmd.env(key, value);
         }
 
-        // Inherit stdin/stdout/stderr to allow interactive commands
-        cmd.stdin(Stdio::inherit());
-        cmd.stdout(Stdio::inherit());
-        cmd.stderr(Stdio::inherit());
+        // Capture output - hide if requested
+        if context.hide_output {
+            cmd.stdin(Stdio::null());
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+        } else {
+            cmd.stdin(Stdio::inherit());
+            cmd.stdout(Stdio::inherit());
+            cmd.stderr(Stdio::inherit());
+        }
 
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("Failed to start script execution: {}", e))?;
 
-        if let Some(callback) = pid_callback {
+        if let Some(callback) = context.pid_callback {
             callback(child.id());
         }
 
@@ -163,14 +166,14 @@ impl CommandExecutor {
 
         if !status.success() {
             let exit_code = status.code().unwrap_or(-1);
-            
+
             // Build beautiful formatted error message
             // Note: we don't have the stderr output since it was inherited directly to terminal
             let error_msg = format_error_message(
-                command,
-                command_path,
-                args,
-                cwd,
+                context.command,
+                context.command_path,
+                context.args,
+                context.cwd,
                 script,
                 exit_code,
                 "(See output above)",
@@ -197,7 +200,7 @@ impl CommandExecutor {
             if env::var("SUDO_USER").is_ok() {
                 return true;
             }
-            
+
             // Check if we're running as root by checking UID
             // Use id -u command to get effective user ID
             let test_cmd = ProcessCommand::new("sh")
@@ -206,11 +209,11 @@ impl CommandExecutor {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .output();
-            
+
             if let Ok(output) = test_cmd {
                 return output.status.success();
             }
-            
+
             false
         }
 
@@ -322,17 +325,7 @@ impl CommandExecutor {
         output
     }
 
-
-    pub fn show_dry_run_preview(
-        command: &Command,
-        command_path: Option<&[String]>,
-        args: &HashMap<String, String>,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        script: &str,
-        verbose: bool,
-        privileged: bool,
-    ) {
+    pub fn show_dry_run_preview(script: &str, context: &ExecutionContext) {
         use super::output::colors;
         use std::fmt::Write;
 
@@ -364,10 +357,10 @@ impl CommandExecutor {
         .expect("Failed to format dry run footer");
 
         // Command information
-        let command_display = if let Some(path) = command_path {
+        let command_display = if let Some(path) = context.command_path {
             format!("nest {}", path.join(" "))
         } else {
-            command.name.clone()
+            context.command.name.clone()
         };
 
         writeln!(
@@ -380,8 +373,9 @@ impl CommandExecutor {
         .expect("Failed to format command in dry run");
 
         // Arguments
-        if !args.is_empty() {
-            let args_str: Vec<String> = args
+        if !context.args.is_empty() {
+            let args_str: Vec<String> = context
+                .args
                 .iter()
                 .map(|(k, v)| {
                     format!(
@@ -406,7 +400,7 @@ impl CommandExecutor {
         }
 
         // Working directory
-        if let Some(cwd_path) = cwd {
+        if let Some(cwd_path) = context.cwd {
             writeln!(
                 output,
                 "{}📁 Working directory:{} {}",
@@ -418,7 +412,7 @@ impl CommandExecutor {
         }
 
         // Privileged access requirement
-        if privileged {
+        if context.privileged {
             use std::env::consts::OS;
             let sudo_command = if OS == "windows" {
                 "Run as Administrator"
@@ -438,7 +432,7 @@ impl CommandExecutor {
         }
 
         // Environment variables (if verbose)
-        if verbose && !env_vars.is_empty() {
+        if context.verbose && !context.env_vars.is_empty() {
             writeln!(
                 output,
                 "\n{}🌍 Environment variables:{}",
@@ -446,7 +440,7 @@ impl CommandExecutor {
                 colors::RESET
             )
             .expect("Failed to format environment variables header in dry run");
-            for (key, value) in env_vars {
+            for (key, value) in context.env_vars {
                 writeln!(
                     output,
                     "  {}{}{}={}{}{}",
@@ -511,15 +505,7 @@ impl CommandExecutor {
         eprint!("{}", output);
     }
 
-    pub fn show_verbose_info(
-        command: &Command,
-        command_path: Option<&[String]>,
-        args: &HashMap<String, String>,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        script: &str,
-        privileged: bool,
-    ) {
+    pub fn show_verbose_info(script: &str, context: &ExecutionContext) {
         use super::output::colors;
 
         eprintln!(
@@ -540,10 +526,10 @@ impl CommandExecutor {
             colors::RESET
         );
 
-        let command_display = if let Some(path) = command_path {
+        let command_display = if let Some(path) = context.command_path {
             format!("nest {}", path.join(" "))
         } else {
-            command.name.clone()
+            context.command.name.clone()
         };
 
         eprintln!(
@@ -553,8 +539,9 @@ impl CommandExecutor {
             command_display
         );
 
-        if !args.is_empty() {
-            let args_str: Vec<String> = args
+        if !context.args.is_empty() {
+            let args_str: Vec<String> = context
+                .args
                 .iter()
                 .map(|(k, v)| {
                     format!(
@@ -576,7 +563,7 @@ impl CommandExecutor {
             );
         }
 
-        if let Some(cwd_path) = cwd {
+        if let Some(cwd_path) = context.cwd {
             eprintln!(
                 "{}📁 Working directory:{} {}",
                 colors::CYAN,
@@ -585,7 +572,7 @@ impl CommandExecutor {
             );
         }
 
-        if privileged {
+        if context.privileged {
             use std::env::consts::OS;
             let sudo_command = if OS == "windows" {
                 "Run as Administrator"
@@ -602,13 +589,13 @@ impl CommandExecutor {
             );
         }
 
-        if !env_vars.is_empty() {
+        if !context.env_vars.is_empty() {
             eprintln!(
                 "\n{}🌍 Environment variables:{}",
                 colors::CYAN,
                 colors::RESET
             );
-            for (key, value) in env_vars {
+            for (key, value) in context.env_vars {
                 eprintln!(
                     "  {}{}{}={}{}{}",
                     colors::YELLOW,
@@ -818,7 +805,7 @@ fn format_error_message(
             colors::RESET
         )
         .expect("Failed to format error details header in error message");
-        
+
         // Output error as-is, line by line
         for line in stderr_str.trim().lines() {
             writeln!(

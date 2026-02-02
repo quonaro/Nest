@@ -15,6 +15,17 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::env;
 
+/// Context for template processing containing variables and constants.
+#[derive(Default)]
+pub struct TemplateContext<'a> {
+    pub global_variables: &'a [Variable],
+    pub global_constants: &'a [Constant],
+    pub local_variables: &'a [Variable],
+    pub local_constants: &'a [Constant],
+    pub parent_variables: &'a [Variable],
+    pub parent_constants: &'a [Constant],
+}
+
 /// Processes templates by replacing placeholders with actual values.
 ///
 /// This is a utility struct with static methods for template processing.
@@ -51,12 +62,7 @@ impl TemplateProcessor {
     ///
     /// * `script` - The script template containing placeholders
     /// * `args` - HashMap of parameter names to values for replacement
-    /// * `global_variables` - List of global variables
-    /// * `global_constants` - List of global constants
-    /// * `local_variables` - List of local variables (from command, optional)
-    /// * `local_constants` - List of local constants (from command, optional)
-    /// * `parent_variables` - List of parent variables (from parent commands, optional)
-    /// * `parent_constants` - List of parent constants (from parent commands, optional)
+    /// * `context` - Template processing context (variables and constants)
     /// * `parent_args` - HashMap of parent command parameter names to values (from parent commands, optional)
     ///
     /// # Returns
@@ -67,21 +73,17 @@ impl TemplateProcessor {
     ///
     /// ```rust
     /// use std::collections::HashMap;
+    /// use nest_core::nestparse::template::{TemplateProcessor, TemplateContext};
     /// let mut args = HashMap::new();
     /// args.insert("name".to_string(), "world".to_string());
     /// let script = "echo Hello {{name}}!";
-    /// let processed = TemplateProcessor::process(script, &args, &[], &[], &[], &[], &[], &[], &std::collections::HashMap::new());
+    /// let processed = TemplateProcessor::process(script, &args, &TemplateContext::default(), &std::collections::HashMap::new());
     /// assert_eq!(processed, "echo Hello world!");
     /// ```
     pub fn process(
         script: &str,
         args: &HashMap<String, String>,
-        global_variables: &[Variable],
-        global_constants: &[Constant],
-        local_variables: &[Variable],
-        local_constants: &[Constant],
-        parent_variables: &[Variable],
-        parent_constants: &[Constant],
+        context: &TemplateContext,
         parent_args: &HashMap<String, String>,
     ) -> String {
         let mut processed = script.to_string();
@@ -90,32 +92,32 @@ impl TemplateProcessor {
         let mut var_map: HashMap<String, String> = HashMap::new();
 
         // 1. Add global constants first (lowest priority for constants)
-        for constant in global_constants {
+        for constant in context.global_constants {
             var_map.insert(constant.name.clone(), constant.value.clone());
         }
 
         // 2. Add global variables (can override global constants)
-        for variable in global_variables {
+        for variable in context.global_variables {
             var_map.insert(variable.name.clone(), variable.value.clone());
         }
 
         // 3. Add parent constants (override global constants/variables)
-        for constant in parent_constants {
+        for constant in context.parent_constants {
             var_map.insert(constant.name.clone(), constant.value.clone());
         }
 
         // 4. Add parent variables (override parent constants and global variables)
-        for variable in parent_variables {
+        for variable in context.parent_variables {
             var_map.insert(variable.name.clone(), variable.value.clone());
         }
 
         // 5. Add local constants (override parent and global constants/variables)
-        for constant in local_constants {
+        for constant in context.local_constants {
             var_map.insert(constant.name.clone(), constant.value.clone());
         }
 
         // 6. Add local variables (highest priority for variables, override everything)
-        for variable in local_variables {
+        for variable in context.local_variables {
             var_map.insert(variable.name.clone(), variable.value.clone());
         }
 
@@ -152,7 +154,6 @@ impl TemplateProcessor {
             }
             processed = result;
         }
-        
 
         // Replace special variables (lowest priority, only if not already defined)
         // Check if "now" is already in var_map, if not, use special variable
@@ -193,7 +194,7 @@ impl TemplateProcessor {
         var_map: &HashMap<String, String>,
     ) -> String {
         let mut combined_map = HashMap::new();
-        
+
         // Combine args and var_map (args have priority)
         for (k, v) in var_map {
             combined_map.insert(k.clone(), v.clone());
@@ -201,20 +202,20 @@ impl TemplateProcessor {
         for (k, v) in args {
             combined_map.insert(k.clone(), v.clone());
         }
-        
+
         let mut result = String::with_capacity(script.len() * 2);
         let mut chars = script.chars().peekable();
-        
+
         while let Some(ch) = chars.next() {
             if ch == '{' {
                 // Check if it's {{
                 if let Some(&'{') = chars.peek() {
                     chars.next(); // consume second {
-                    
+
                     // Collect placeholder content until }}
                     let mut placeholder_content = String::new();
                     let mut found_close = false;
-                    
+
                     while let Some(ch) = chars.next() {
                         if ch == '}' {
                             if let Some(&'}') = chars.peek() {
@@ -228,16 +229,16 @@ impl TemplateProcessor {
                             placeholder_content.push(ch);
                         }
                     }
-                    
+
                     if found_close {
                         // Parse and replace placeholder
                         let trimmed = placeholder_content.trim();
-                        
+
                         // Check if it has modifiers
                         if let Some(pipe_pos) = trimmed.find('|') {
                             let var_name = trimmed[..pipe_pos].trim();
                             let modifier_part = trimmed[pipe_pos + 1..].trim();
-                            
+
                             if let Some(value) = combined_map.get(var_name) {
                                 let modified_value = if modifier_part == "copy" {
                                     // copy modifier for boolean values: {{param|copy}}
@@ -255,14 +256,12 @@ impl TemplateProcessor {
                                     } else {
                                         value.clone()
                                     }
-                                } else if modifier_part.starts_with("sep:") {
+                                } else if let Some(sep_value) = modifier_part.strip_prefix("sep:") {
                                     // sep modifier: {{var|sep:","}}
-                                    let sep_value = &modifier_part[4..];
                                     let sep = Self::parse_modifier_value(sep_value);
                                     value.replace(" ", &sep)
-                                } else if modifier_part.starts_with("rep:") {
+                                } else if let Some(rep_value) = modifier_part.strip_prefix("rep:") {
                                     // rep modifier: {{var|rep:"from"=>"to"}}
-                                    let rep_value = &modifier_part[4..];
                                     if let Some((from, to)) = Self::parse_rep_modifier(rep_value) {
                                         value.replace(&from, &to)
                                     } else {
@@ -273,12 +272,12 @@ impl TemplateProcessor {
                                     // Unknown modifier, keep original value
                                     value.clone()
                                 };
-                                
+
                                 result.push_str(&modified_value);
                             } else {
                                 // Variable not found, keep placeholder as is
                                 result.push_str("{{");
-                                result.push_str(&trimmed);
+                                result.push_str(trimmed);
                                 result.push_str("}}");
                             }
                         } else {
@@ -311,7 +310,7 @@ impl TemplateProcessor {
                 result.push(ch);
             }
         }
-        
+
         result
     }
 
@@ -335,10 +334,10 @@ impl TemplateProcessor {
         if let Some(arrow_pos) = modifier.find("=>") {
             let from_part = modifier[..arrow_pos].trim();
             let to_part = modifier[arrow_pos + 2..].trim();
-            
+
             let from = Self::parse_modifier_value(from_part);
             let to = Self::parse_modifier_value(to_part);
-            
+
             Some((from, to))
         } else {
             None

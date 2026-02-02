@@ -483,14 +483,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("Nest UI - TUI for Nest task runner");
-        println!("");
+        println!();
         println!("Usage: nestui [OPTIONS]");
-        println!("");
+        println!();
         println!("Options:");
         println!("  -c, --config <PATH>    Path to Nestfile");
         println!("  -V, --version          Show version information");
         println!("  -h, --help             Show this help message");
-        println!("");
+        println!();
         return Ok(());
     }
 
@@ -631,9 +631,8 @@ fn resolve_command_sources(commands: &mut Vec<Command>, content: &str, initial_p
 
     // 1. Build map of line index -> source file
     for line in content.lines() {
-        if line.starts_with("# @source: ") {
-            let path_str = line[11..].trim();
-            current_path = std::path::PathBuf::from(path_str);
+        if let Some(path_str) = line.strip_prefix("# @source: ") {
+            current_path = std::path::PathBuf::from(path_str.trim());
         }
         line_map.push(current_path.clone());
     }
@@ -794,17 +793,16 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                             KeyCode::Left | KeyCode::Backspace => {
                                 match app.focus {
                                     Focus::CommandList => {
-                                        if app.view_mode == ViewMode::Tree {
-                                            if !app.breadcrumbs.is_empty() {
-                                                app.breadcrumbs.pop();
-                                                if let Some(prev_idx) = app.selection_history.pop()
-                                                {
-                                                    app.state.select(Some(prev_idx));
-                                                } else {
-                                                    app.state.select(Some(0));
-                                                }
-                                                app.args_map.clear();
+                                        if app.view_mode == ViewMode::Tree
+                                            && !app.breadcrumbs.is_empty()
+                                        {
+                                            app.breadcrumbs.pop();
+                                            if let Some(prev_idx) = app.selection_history.pop() {
+                                                app.state.select(Some(prev_idx));
+                                            } else {
+                                                app.state.select(Some(0));
                                             }
+                                            app.args_map.clear();
                                         }
                                     }
                                     Focus::History => app.focus = Focus::CommandList,
@@ -1047,11 +1045,9 @@ fn run_app<B: Backend + Write>(terminal: &mut Terminal<B>, app: &mut App) -> io:
                 }
             }
             Event::Mouse(mouse) => {
-                match mouse.kind {
-                    event::MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
-                        // Placeholder for mouse click logic
-                    }
-                    _ => {}
+                if let event::MouseEventKind::Down(crossterm::event::MouseButton::Left) = mouse.kind
+                {
+                    // Placeholder for mouse click logic
                 }
             }
             _ => {}

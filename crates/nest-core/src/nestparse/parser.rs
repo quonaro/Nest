@@ -517,8 +517,8 @@ impl Parser {
         let type_default = type_default_str.trim();
 
         // Check if it's a named argument (starts with !)
-        let (is_named, name_part_clean) = if name_part.starts_with('!') {
-            (true, &name_part[1..])
+        let (is_named, name_part_clean) = if let Some(clean) = name_part.strip_prefix('!') {
+            (true, clean)
         } else {
             (false, name_part)
         };
@@ -574,14 +574,14 @@ impl Parser {
         }
 
         // Expect leading '*'
-        if !s.starts_with('*') {
+        let rest = if let Some(r) = s.strip_prefix('*') {
+            r
+        } else {
             return Err(ParseError::InvalidSyntax(
                 format!("Invalid wildcard parameter syntax: {}", param_str),
                 line_number,
             ));
-        }
-
-        let rest = &s[1..];
+        };
         let (name_part, count_part) = if let Some(bracket_pos) = rest.find('[') {
             // Expect closing ']'
             if !rest.ends_with(']') {
@@ -922,11 +922,7 @@ impl Parser {
             }
         } else {
             // No parameters
-            let name = if func_part.ends_with(':') {
-                func_part[..func_part.len() - 1].trim().to_string()
-            } else {
-                func_part.to_string()
-            };
+            let name = func_part.strip_suffix(':').unwrap_or(func_part).trim().to_string();
             self.current_index += 1;
             (name, Vec::new())
         };
@@ -1024,7 +1020,7 @@ impl Parser {
         // Validate that multiline block is not empty
         if content.trim().is_empty() {
             return Err(ParseError::InvalidSyntax(
-                format!("Multiline script block is empty. Add script content after '|' or use single-line format without '|'."),
+                "Multiline script block is empty. Add script content after '|' or use single-line format without '|'".to_string(),
                 start_line
             ));
         }
@@ -1087,7 +1083,7 @@ impl Parser {
                         paren_depth -= 1;
                         if paren_depth == 0 {
                             // End of substitution, execute command
-                            let output = self.execute_command(&command.trim(), line_number)?;
+                            let output = self.execute_command(command.trim(), line_number)?;
                             result.push_str(&output);
                             in_substitution = false;
                             command.clear();
@@ -1336,7 +1332,7 @@ impl Parser {
                     }
                     else {
                          return Err(ParseError::InvalidSyntax(
-                             format!("Invalid validate syntax. Use 'validate: target matches regex', 'validate: target in [...]' or 'validate.PARAM: regex'",),
+                             "Invalid validate syntax. Use 'validate: target matches regex', 'validate: target in [...]' or 'validate.PARAM: regex'".to_string(),
                              self.current_line_number(),
                          ));
                     }
@@ -1369,11 +1365,10 @@ impl Parser {
                     self.current_line_number(),
                 ))
             }
-        }.map(|d| {
+        }.inspect(|_d| {
             if !value_str.starts_with('|') {
                 self.current_index += 1;
             }
-            d
         })
     }
 
@@ -1587,14 +1582,6 @@ impl Parser {
             Ok(unescaped)
         }
         // Boolean value
-        else if trimmed == "true" || trimmed == "false" {
-            Ok(trimmed.to_string())
-        }
-        // Number value
-        else if trimmed.parse::<f64>().is_ok() {
-            Ok(trimmed.to_string())
-        }
-        // Unquoted string (treat as string)
         else {
             Ok(trimmed.to_string())
         }

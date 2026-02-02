@@ -20,11 +20,16 @@ use std::collections::HashMap;
 pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, String> {
     match param.param_type.as_str() {
         "str" => Ok(value.to_string()),
-        
+
         "bool" => {
             // Bool should already be handled by clap flags, but validate anyway
             let lower = value.to_lowercase();
-            if lower == "true" || lower == "false" || lower == "1" || lower == "0" || value.starts_with("--") {
+            if lower == "true"
+                || lower == "false"
+                || lower == "1"
+                || lower == "0"
+                || value.starts_with("--")
+            {
                 Ok(value.to_string())
             } else {
                 Err(format!(
@@ -32,8 +37,8 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
                     value, param.name
                 ))
             }
-        },
-        
+        }
+
         "num" => {
             // Try to parse as number
             if let Ok(_num) = value.parse::<f64>() {
@@ -44,8 +49,8 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
                     value, param.name
                 ))
             }
-        },
-        
+        }
+
         "arr" => {
             // Arrays are passed as comma-separated strings
             // Support two formats:
@@ -56,7 +61,7 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
             //   because an empty wildcard simply means "no extra arguments"
             // - valid for normal parameters only when their default is an empty array (`[]`)
             let trimmed = value.trim();
-            
+
             // Remove outer quotes if present (handles cases where quotes weren't removed by shell)
             let unquoted = if (trimmed.starts_with('"') && trimmed.ends_with('"'))
                 || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
@@ -65,7 +70,7 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
             } else {
                 trimmed
             };
-            
+
             if unquoted.is_empty() {
                 // Allow empty value for wildcard parameters (used as splats like `*` or `*name`)
                 if matches!(param.kind, ParamKind::Wildcard { .. }) {
@@ -73,12 +78,10 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
                 }
 
                 // For non-wildcard params, empty is only allowed if default is explicitly []
-                if let Some(default) = &param.default {
-                    if let super::ast::Value::Array(arr) = default {
-                        if arr.is_empty() {
-                            // Empty array matches empty default, it's valid
-                            return Ok(String::new());
-                        }
+                if let Some(super::ast::Value::Array(arr)) = &param.default {
+                    if arr.is_empty() {
+                        // Empty array matches empty default, it's valid
+                        return Ok(String::new());
                     }
                 }
 
@@ -92,14 +95,12 @@ pub fn validate_argument_type(value: &str, param: &Parameter) -> Result<String, 
             // Check if it looks like a valid array (comma-separated or single value)
             // We'll accept any non-empty string as it will be split later
             Ok(unquoted.to_string())
-        },
-        
-        _ => {
-            Err(format!(
-                "Unknown parameter type '{}' for parameter '{}'",
-                param.param_type, param.name
-            ))
         }
+
+        _ => Err(format!(
+            "Unknown parameter type '{}' for parameter '{}'",
+            param.param_type, param.name
+        )),
     }
 }
 
@@ -149,7 +150,10 @@ pub fn validate_all_arguments(
     // Check for missing required parameters
     // Note: clap already handles required arguments, but we check here for completeness
     for param in parameters {
-        if param.default.is_none() && !args.contains_key(&param.name) && !validated_args.contains_key(&param.name) {
+        if param.default.is_none()
+            && !args.contains_key(&param.name)
+            && !validated_args.contains_key(&param.name)
+        {
             let command_str = command_path.join(" ");
             errors.push(format!(
                 "❌ Missing required parameter '{}' for command 'nest {}'",
@@ -182,7 +186,7 @@ pub fn parse_array(value: &str) -> Vec<String> {
     if value.trim().is_empty() {
         return Vec::new();
     }
-    
+
     value
         .split(',')
         .map(|s| s.trim().to_string())
@@ -199,4 +203,3 @@ pub fn format_array_for_display(items: &[String]) -> String {
         format!("[{}]", items.join(", "))
     }
 }
-

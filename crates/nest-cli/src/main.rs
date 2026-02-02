@@ -234,11 +234,12 @@ fn main() {
 
     // Automatically generate/update completion scripts
     if let Ok(completion_manager) = CompletionManager::new() {
-        if let Ok(needs_regeneration) = completion_manager.needs_regeneration(&config_path) {
-            if needs_regeneration {
-                if let Ok(_) = completion_manager.generate_all_completions(&mut cli, &config_path) {
-                    if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {}
-                }
+        if let Ok(true) = completion_manager.needs_regeneration(&config_path) {
+            if completion_manager
+                .generate_all_completions(&mut cli, &config_path)
+                .is_ok()
+            {
+                if let Ok(Some(_)) = completion_manager.auto_install_completion(&config_path) {}
             }
         }
     }

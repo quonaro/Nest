@@ -70,7 +70,6 @@ impl EnvironmentManager {
         }
     }
 
-
     fn load_from_file(file_path: &str, env_vars: &mut HashMap<String, String>) {
         if let Ok(content) = fs::read_to_string(file_path) {
             for line in content.lines() {
@@ -97,7 +96,6 @@ impl EnvironmentManager {
         })
     }
 
-
     /// Resolves environment variable references in a value string.
     ///
     /// Supports syntax:
@@ -116,16 +114,20 @@ impl EnvironmentManager {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```rust
+    /// use std::collections::HashMap;
+    /// use nest_core::nestparse::env::EnvironmentManager;
+    ///
+    /// let mut env_vars = HashMap::new();
+    /// env_vars.insert("NODE_ENV".to_string(), "production".to_string());
+    ///
     /// // If NODE_ENV is set to "production" in env_vars or system:
-    /// resolve_env_value("${NODE_ENV:-development}", env_vars) -> "production"
+    /// let res1 = EnvironmentManager::resolve_env_value("${NODE_ENV:-development}", &env_vars);
+    /// assert_eq!(res1, "production");
     ///
     /// // If NODE_ENV is not set:
-    /// resolve_env_value("${NODE_ENV:-development}", env_vars) -> "development"
-    ///
-    /// // Simple variable without fallback:
-    /// resolve_env_value("${HOME}", env_vars) -> "/home/user" (if set) or "" (if not set)
-    /// resolve_env_value("$HOME", env_vars) -> "/home/user" (if set) or "" (if not set)
+    /// let res2 = EnvironmentManager::resolve_env_value("${OTHER_VAR:-defaultValue}", &env_vars);
+    /// assert_eq!(res2, "defaultValue");
     /// ```
     /// Resolves environment variable references in a value string.
     ///
@@ -135,17 +137,17 @@ impl EnvironmentManager {
     pub fn resolve_env_value(value: &str, env_vars: &HashMap<String, String>) -> String {
         let mut result = String::new();
         let mut chars = value.chars().peekable();
-        
+
         while let Some(ch) = chars.next() {
             if ch == '$' {
                 if chars.peek() == Some(&'{') {
                     // Found ${ - start of environment variable reference with braces
                     chars.next(); // Skip '{'
-                    
+
                     let mut var_name = String::new();
                     let mut fallback = None;
                     let mut in_fallback = false;
-                    
+
                     while let Some(ch) = chars.next() {
                         match ch {
                             '}' if !in_fallback => {
@@ -169,7 +171,7 @@ impl EnvironmentManager {
                             }
                         }
                     }
-                    
+
                     // Resolve the variable: first check env_vars, then system environment
                     let resolved = if !var_name.is_empty() {
                         env_vars
@@ -181,7 +183,7 @@ impl EnvironmentManager {
                         // Invalid syntax, return as-is
                         format!("${{{}}}", var_name)
                     };
-                    
+
                     result.push_str(&resolved);
                 } else {
                     // Found $ - start of environment variable reference without braces
@@ -195,7 +197,7 @@ impl EnvironmentManager {
                             break;
                         }
                     }
-                    
+
                     // Resolve the variable: first check env_vars, then system environment
                     if !var_name.is_empty() {
                         let resolved = env_vars
@@ -213,8 +215,7 @@ impl EnvironmentManager {
                 result.push(ch);
             }
         }
-        
+
         result
     }
 }
-

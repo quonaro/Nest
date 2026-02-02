@@ -7,7 +7,7 @@
 use super::ast::{Command, Constant, Directive, Function, Parameter, Value, Variable};
 
 use super::env::EnvironmentManager;
-use super::template::TemplateProcessor;
+use super::template::{TemplateContext, TemplateProcessor};
 use crate::constants::{
     APP_NAME, BOOL_FALSE, BOOL_TRUE, DEFAULT_SUBCOMMAND, ENV_NEST_CALL_STACK, FLAG_COMPLETE,
     FLAG_CONFIG, FLAG_DRY_RUN, FLAG_EXAMPLE, FLAG_SHOW, FLAG_UPDATE, FLAG_VERBOSE, FLAG_VERSION,
@@ -45,6 +45,20 @@ pub struct CliGenerator {
     default_param_ids: std::collections::HashMap<String, &'static str>,
     /// Callback for reporting child process PIDs (for signal handling)
     pid_callback: Option<Box<dyn Fn(u32) + Send + Sync>>,
+}
+
+/// Context for script execution within the CLI generator.
+pub struct ScriptExecutionContext<'a> {
+    pub env_vars: &'a HashMap<String, String>,
+    pub cwd: Option<&'a str>,
+    pub command_path: Option<&'a [String]>,
+    pub args: &'a HashMap<String, String>,
+    pub dry_run: bool,
+    pub verbose: bool,
+    pub parent_args: &'a HashMap<String, String>,
+    pub hide_output: bool,
+    pub privileged: bool,
+    pub pid_callback: Option<&'a (dyn Fn(u32) + Send + Sync)>,
 }
 
 impl CliGenerator {
@@ -689,16 +703,11 @@ impl CliGenerator {
 
         // Process template in log path
         // Log path doesn't need parent args (it's just a path)
-        let empty_parent_args = HashMap::new();
+        let empty_parent_args: HashMap<String, String> = HashMap::new();
         let processed_path = TemplateProcessor::process(
             log_path,
             args,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
+            &TemplateContext::default(),
             &empty_parent_args,
         );
 
@@ -803,27 +812,23 @@ impl CliGenerator {
         parent_args: &HashMap<String, String>,
         command_path: &[String],
     ) -> Result<(), String> {
-        use super::template::TemplateProcessor;
         use regex::Regex;
 
-        for (param_name, pattern_part) in validate_directives {
+        for (param_name, rule) in validate_directives {
             // Process templates in the pattern part (allows dynamic rules)
-            let processed_pattern = TemplateProcessor::process(
-                pattern_part,
-                args,
+            let context = TemplateContext {
                 global_variables,
                 global_constants,
-                &[], // Local variables not applicable here as a separate list
-                &[], // Local constants not applicable here as a separate list
+                local_variables: &[],
+                local_constants: &[],
                 parent_variables,
                 parent_constants,
-                parent_args,
-            );
+            };
+            let processed_pattern = TemplateProcessor::process(rule, args, &context, parent_args);
             let pattern_part = processed_pattern.trim();
 
             // Determine the target value (either from args or environment)
-            let target_value_result = if param_name.starts_with('$') {
-                let env_name = &param_name[1..];
+            let target_value_result = if let Some(env_name) = param_name.strip_prefix('$') {
                 // Check in Nest-defined session env vars first, then system env,
                 // and finally in Nest variables (since root-level 'env' directives are stored as variables)
                 env_vars
@@ -854,8 +859,8 @@ impl CliGenerator {
             })?;
 
             // Check if it's a membership validation (in ["a", "b"])
-            if pattern_part.starts_with("in ") {
-                let list_part = pattern_part[3..].trim();
+            if let Some(list_part) = pattern_part.strip_prefix("in ") {
+                let list_part = list_part.trim();
                 if (list_part.starts_with('[') && list_part.ends_with(']'))
                     || (list_part.starts_with('(') && list_part.ends_with(')'))
                 {
@@ -1020,7 +1025,7 @@ impl CliGenerator {
             "done", "function",
         ];
         let first_word = trimmed.split_whitespace().next().unwrap_or("");
-        if shell_keywords.iter().any(|&kw| first_word == kw) {
+        if shell_keywords.contains(&first_word) {
             return None;
         }
 
@@ -1165,11 +1170,10 @@ impl CliGenerator {
             // Remove quotes
             let unquoted = &trimmed[1..trimmed.len() - 1];
             // Unescape quotes
-            let unescaped = unquoted
+            unquoted
                 .replace("\\\"", "\"")
                 .replace("\\'", "'")
-                .replace("\\\\", "\\");
-            unescaped
+                .replace("\\\\", "\\")
         }
         // Boolean or number value (keep as is)
         else {
@@ -1183,36 +1187,15 @@ impl CliGenerator {
     /// Command calls use the format: `command` or `group:command` or `command(arg="value")`.
     ///
     /// This is a helper function for executing before, after, and fallback scripts.
-    fn execute_script(
-        &self,
-        script: &str,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        command_path: Option<&[String]>,
-        args: &HashMap<String, String>,
-        dry_run: bool,
-        verbose: bool,
-        parent_args: &HashMap<String, String>,
-        hide_output: bool,
-    ) -> Result<(), String> {
-        if dry_run {
+    fn execute_script(&self, script: &str, context: &ScriptExecutionContext) -> Result<(), String> {
+        if context.dry_run {
             use super::output::OutputFormatter;
             OutputFormatter::info(&format!("[DRY RUN] Would execute: {}", script));
             return Ok(());
         }
 
         // Pre-process script to handle function calls in templates {{ func() }}
-        let script = self.process_function_calls_in_templates(
-            script,
-            env_vars,
-            cwd,
-            command_path,
-            args,
-            dry_run,
-            verbose,
-            parent_args,
-            hide_output,
-        )?;
+        let script = self.process_function_calls_in_templates(script, context)?;
 
         // Process script line by line
         let lines: Vec<&str> = script.lines().collect();
@@ -1232,44 +1215,32 @@ impl CliGenerator {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
-                    Self::execute_shell_script(
-                        &shell_script,
-                        env_vars,
-                        cwd,
-                        args,
-                        verbose,
-                        hide_output,
-                        self.pid_callback.as_deref(),
-                    )?;
+                    Self::execute_shell_script(&shell_script, context)?;
                     current_shell_block.clear();
                 }
 
                 // Remove "shell:" prefix and process template variables (e.g., $*)
-                let external_command = trimmed_line[6..].trim_start(); // "shell:" is 6 chars
+                let external_command = trimmed_line
+                    .strip_prefix("shell:")
+                    .unwrap_or(trimmed_line)
+                    .trim_start();
                 if !external_command.is_empty() {
                     // Process template variables in the command (e.g., $* -> arguments) and execute
+                    let tpl_context = TemplateContext {
+                        global_variables: &self.variables,
+                        global_constants: &self.constants,
+                        local_variables: &[],
+                        local_constants: &[],
+                        parent_variables: &[],
+                        parent_constants: &[],
+                    };
                     let processed_command = TemplateProcessor::process(
                         external_command,
-                        args,
-                        &self.variables,
-                        &self.constants,
-                        &[],
-                        &[],
-                        &[],
-                        &[],
-                        parent_args,
+                        context.args,
+                        &tpl_context,
+                        context.parent_args,
                     );
-                    // Execute immediately - store in variable to ensure it lives long enough
-                    let cmd = processed_command;
-                    Self::execute_shell_script(
-                        &cmd,
-                        env_vars,
-                        cwd,
-                        args,
-                        verbose,
-                        hide_output,
-                        self.pid_callback.as_deref(),
-                    )?;
+                    Self::execute_shell_script(&processed_command, context)?;
                 }
                 continue;
             }
@@ -1279,15 +1250,7 @@ impl CliGenerator {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
-                    Self::execute_shell_script(
-                        &shell_script,
-                        env_vars,
-                        cwd,
-                        args,
-                        verbose,
-                        hide_output,
-                        self.pid_callback.as_deref(),
-                    )?;
+                    Self::execute_shell_script(&shell_script, context)?;
                     current_shell_block.clear();
                 }
 
@@ -1295,23 +1258,19 @@ impl CliGenerator {
                 if !call_name.contains(':') {
                     if let Some(func) = self.find_function(&call_name) {
                         // Merge global env_vars with system env
-                        let mut merged_env = env_vars.clone();
+                        let mut merged_env = context.env_vars.clone();
                         use std::env;
                         for (key, value) in env::vars() {
                             merged_env.insert(key, value);
                         }
 
                         // Execute function and capture return value (if any)
-                        let _return_value = self.execute_function(
-                            func,
-                            &call_args,
-                            &merged_env,
-                            cwd,
-                            command_path,
-                            dry_run,
-                            verbose,
-                            hide_output,
-                        )?;
+                        let func_context = ScriptExecutionContext {
+                            args: &call_args,
+                            env_vars: &merged_env,
+                            ..*context
+                        };
+                        let _return_value = self.execute_function(func, &func_context)?;
                         // Note: return value is currently ignored when calling from script
                         // To use return value, use {{ func() }} syntax in templates
                         continue;
@@ -1325,7 +1284,7 @@ impl CliGenerator {
                 } else {
                     // Relative path - resolve from current command's parent
                     let cmd_name = call_name.trim().to_string();
-                    if let Some(current_path) = command_path {
+                    if let Some(current_path) = context.command_path {
                         if current_path.is_empty() {
                             // Top-level command - dependency is also top-level
                             vec![cmd_name]
@@ -1342,7 +1301,7 @@ impl CliGenerator {
                 };
 
                 // Check if resolved path matches current command (recursive call)
-                if let Some(current_path) = command_path {
+                if let Some(current_path) = context.command_path {
                     if resolved_path == current_path {
                         // This is a recursive call - treat as shell command instead
                         use super::output::colors;
@@ -1365,9 +1324,9 @@ impl CliGenerator {
                         let mut shell_cmd = call_name.clone();
 
                         // Add wildcard arguments if available (for wildcard commands)
-                        if let Some(wildcard_args) = args.get("*") {
+                        if let Some(wildcard_args) = context.args.get("*") {
                             if !wildcard_args.is_empty() {
-                                shell_cmd.push_str(" ");
+                                shell_cmd.push(' ');
                                 shell_cmd.push_str(wildcard_args);
                             }
                         } else if !call_args.is_empty() {
@@ -1383,21 +1342,24 @@ impl CliGenerator {
                                     }
                                 })
                                 .collect();
-                            shell_cmd.push_str(" ");
+                            shell_cmd.push(' ');
                             shell_cmd.push_str(&args_str.join(" "));
                         }
 
                         // Process template variables (e.g., $*) before treating as shell command
+                        let tpl_context = TemplateContext {
+                            global_variables: &self.variables,
+                            global_constants: &self.constants,
+                            local_variables: &[],
+                            local_constants: &[],
+                            parent_variables: &[],
+                            parent_constants: &[],
+                        };
                         let processed_line = TemplateProcessor::process(
                             &shell_cmd,
-                            args,
-                            &self.variables,
-                            &self.constants,
-                            &[],
-                            &[],
-                            &[],
-                            &[],
-                            parent_args,
+                            context.args,
+                            &tpl_context,
+                            &HashMap::new(),
                         );
                         current_shell_block.push(processed_line);
                         continue;
@@ -1405,7 +1367,7 @@ impl CliGenerator {
                 }
 
                 if let Some(cmd) = self.find_command(&resolved_path) {
-                    if verbose {
+                    if context.verbose {
                         use super::output::OutputFormatter;
                         let args_str = if call_args.is_empty() {
                             String::new()
@@ -1425,13 +1387,13 @@ impl CliGenerator {
 
                     let mut visited = std::collections::HashSet::new();
                     // Commands called from scripts don't inherit parent args
-                    let empty_parent_args = HashMap::new();
+                    let empty_parent_args: HashMap<String, String> = HashMap::new();
                     self.execute_command_with_deps(
                         cmd,
                         &call_args,
                         Some(&resolved_path),
-                        dry_run,
-                        verbose,
+                        context.dry_run,
+                        context.verbose,
                         &mut visited,
                         &empty_parent_args,
                     )?;
@@ -1450,15 +1412,7 @@ impl CliGenerator {
             let shell_script = current_shell_block.join("\n");
             // Don't trim - preserve all whitespace and structure
             if !shell_script.trim().is_empty() {
-                Self::execute_shell_script(
-                    &shell_script,
-                    env_vars,
-                    cwd,
-                    args,
-                    verbose,
-                    hide_output,
-                    self.pid_callback.as_deref(),
-                )?;
+                Self::execute_shell_script(&shell_script, context)?;
             }
         }
 
@@ -1481,10 +1435,8 @@ impl CliGenerator {
                 "zsh"
             } else if shell_path.contains("fish") {
                 "fish"
-            } else if shell_path.contains("sh") {
-                "sh"
             } else {
-                "sh" // default
+                "sh"
             };
 
             // Remove shebang line from script
@@ -1504,27 +1456,24 @@ impl CliGenerator {
     }
 
     /// Executes a shell script (helper function).
-    fn execute_shell_script(
-        script: &str,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        args: &HashMap<String, String>,
-        _verbose: bool,
-        hide_output: bool,
-        pid_callback: Option<&(dyn Fn(u32) + Send + Sync)>,
-    ) -> Result<(), String> {
-        // Detect shell from shebang and remove it
-        let (shell, script_without_shebang) = Self::detect_shell_and_remove_shebang(script);
-        Self::execute_shell_script_with_shell(
-            &script_without_shebang,
-            shell,
-            env_vars,
-            cwd,
-            args,
-            _verbose,
-            hide_output,
-            pid_callback,
-        )
+    fn execute_shell_script(script: &str, context: &ScriptExecutionContext) -> Result<(), String> {
+        use super::ast::Command;
+        use super::executor::{CommandExecutor, ExecutionContext};
+
+        let exec_context = ExecutionContext {
+            command: &Command::default(), // Placeholder if not available
+            args: context.args,
+            env_vars: context.env_vars,
+            cwd: context.cwd,
+            command_path: context.command_path,
+            dry_run: context.dry_run,
+            verbose: context.verbose,
+            privileged: context.privileged,
+            pid_callback: context.pid_callback.map(|cb| cb as &dyn Fn(u32)),
+            hide_output: context.hide_output,
+        };
+
+        CommandExecutor::execute(script, &exec_context)
     }
 
     /// Executes a shell script with specified shell (helper function).
@@ -1662,16 +1611,9 @@ impl CliGenerator {
     fn process_function_calls_in_templates(
         &self,
         script: &str,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        command_path: Option<&[String]>,
-        _args: &HashMap<String, String>,
-        dry_run: bool,
-        verbose: bool,
-        _parent_args: &HashMap<String, String>,
-        hide_output: bool,
+        context: &ScriptExecutionContext,
     ) -> Result<String, String> {
-        let mut merged_env = env_vars.clone();
+        let mut merged_env = context.env_vars.clone();
         use std::env;
         for (key, value) in env::vars() {
             merged_env.insert(key, value);
@@ -1717,16 +1659,13 @@ impl CliGenerator {
                                 if !func_name.contains(':') {
                                     if let Some(func) = self.find_function(&func_name) {
                                         // Execute function
-                                        let return_value = self.execute_function(
-                                            func,
-                                            &func_args,
-                                            &merged_env,
-                                            cwd,
-                                            command_path,
-                                            dry_run,
-                                            verbose,
-                                            hide_output,
-                                        )?;
+                                        let func_context = ScriptExecutionContext {
+                                            args: &func_args,
+                                            env_vars: &merged_env,
+                                            ..*context
+                                        };
+                                        let return_value =
+                                            self.execute_function(func, &func_context)?;
 
                                         // Replace template with return value
                                         let replacement = return_value.unwrap_or_else(String::new);
@@ -1777,9 +1716,6 @@ impl CliGenerator {
         found
     }
 
-    /// Collects variables and constants from all parent commands in the path.
-    ///
-    /// This function traverses the command path and collects local variables
     /// and constants from each parent command. The order is from root to leaf,
     /// so variables from closer parents can override variables from farther parents.
     ///
@@ -1973,20 +1909,15 @@ impl CliGenerator {
     fn execute_function(
         &self,
         function: &Function,
-        args: &HashMap<String, String>,
-        env_vars: &HashMap<String, String>,
-        cwd: Option<&str>,
-        command_path: Option<&[String]>,
-        dry_run: bool,
-        verbose: bool,
-        hide_output: bool,
+        context: &ScriptExecutionContext,
     ) -> Result<Option<String>, String> {
-        if verbose {
+        if context.verbose {
             use super::output::OutputFormatter;
-            let args_str = if args.is_empty() {
+            let args_str = if context.args.is_empty() {
                 String::new()
             } else {
-                let args_display: Vec<String> = args
+                let args_display: Vec<String> = context
+                    .args
                     .iter()
                     .map(|(k, v)| format!("{}=\"{}\"", k, v))
                     .collect();
@@ -2021,7 +1952,7 @@ impl CliGenerator {
             let mut body = function.body.clone();
 
             // Replace parameter placeholders {{param}}
-            for (key, value) in args {
+            for (key, value) in context.args {
                 let placeholder = format!("{{{{{}}}}}", key);
                 body = body.replace(&placeholder, value);
             }
@@ -2050,7 +1981,7 @@ impl CliGenerator {
         // Execute function body line by line to support @return directive
         // Functions don't inherit parent args - they use their own args
         // Functions inherit hide_output from the calling script
-        let empty_parent_args = HashMap::new();
+        let empty_parent_args: HashMap<String, String> = HashMap::new();
         let lines: Vec<&str> = processed_body.lines().collect();
         let mut current_shell_block: Vec<String> = Vec::new();
 
@@ -2062,23 +1993,17 @@ impl CliGenerator {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
-                    Self::execute_shell_script(
-                        &shell_script,
-                        env_vars,
-                        cwd,
-                        args,
-                        verbose,
-                        hide_output,
-                        self.pid_callback.as_deref(),
-                    )?;
+                    Self::execute_shell_script(&shell_script, context)?;
                     current_shell_block.clear();
                 }
 
                 // Extract return value
-                let return_value = if trimmed_line.len() > 7 {
-                    // Process template variables in return value
-                    let return_expr = trimmed_line[7..].trim_start();
-                    Self::process_template_in_return_value(return_expr, args, &var_map)
+                let return_value = if let Some(return_expr) = trimmed_line.strip_prefix("return ") {
+                    Self::process_template_in_return_value(
+                        return_expr.trim_start(),
+                        context.args,
+                        &var_map,
+                    )
                 } else {
                     String::new()
                 };
@@ -2097,42 +2022,31 @@ impl CliGenerator {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
-                    Self::execute_shell_script(
-                        &shell_script,
-                        env_vars,
-                        cwd,
-                        args,
-                        verbose,
-                        hide_output,
-                        self.pid_callback.as_deref(),
-                    )?;
+                    Self::execute_shell_script(&shell_script, context)?;
                     current_shell_block.clear();
                 }
 
                 // Remove "shell:" prefix and process template variables
-                let external_command = trimmed_line[6..].trim_start();
+                let external_command = trimmed_line
+                    .strip_prefix("shell:")
+                    .unwrap_or(trimmed_line)
+                    .trim_start();
                 if !external_command.is_empty() {
-                    use super::template::TemplateProcessor;
+                    let tpl_context = TemplateContext {
+                        global_variables: &self.variables,
+                        global_constants: &self.constants,
+                        local_variables: &[],
+                        local_constants: &[],
+                        parent_variables: &[],
+                        parent_constants: &[],
+                    };
                     let processed_command = TemplateProcessor::process(
                         external_command,
-                        args,
-                        &self.variables,
-                        &self.constants,
-                        &[],
-                        &[],
-                        &[],
-                        &[],
-                        &empty_parent_args,
+                        context.args,
+                        &tpl_context,
+                        context.parent_args,
                     );
-                    Self::execute_shell_script(
-                        &processed_command,
-                        env_vars,
-                        cwd,
-                        args,
-                        verbose,
-                        hide_output,
-                        self.pid_callback.as_deref(),
-                    )?;
+                    Self::execute_shell_script(&processed_command, context)?;
                 }
                 continue;
             }
@@ -2142,15 +2056,7 @@ impl CliGenerator {
                 // Execute any accumulated shell commands first
                 if !current_shell_block.is_empty() {
                     let shell_script = current_shell_block.join("\n");
-                    Self::execute_shell_script(
-                        &shell_script,
-                        env_vars,
-                        cwd,
-                        args,
-                        verbose,
-                        hide_output,
-                        self.pid_callback.as_deref(),
-                    )?;
+                    Self::execute_shell_script(&shell_script, context)?;
                     current_shell_block.clear();
                 }
 
@@ -2158,23 +2064,14 @@ impl CliGenerator {
                 if !call_name.contains(':') {
                     if let Some(func) = self.find_function(&call_name) {
                         // Merge global env_vars with system env
-                        let mut merged_env = env_vars.clone();
+                        let mut merged_env = context.env_vars.clone();
                         use std::env;
                         for (key, value) in env::vars() {
                             merged_env.insert(key, value);
                         }
 
                         // Execute function and capture return value (if any)
-                        let _return_value = self.execute_function(
-                            func,
-                            &call_args,
-                            &merged_env,
-                            cwd,
-                            command_path,
-                            dry_run,
-                            verbose,
-                            hide_output,
-                        )?;
+                        let _return_value = self.execute_function(func, context)?;
                         // Note: return value is ignored here - functions called from within functions
                         // don't automatically propagate their return values unless explicitly handled
                         continue;
@@ -2186,7 +2083,7 @@ impl CliGenerator {
                     call_name.split(':').map(|s| s.trim().to_string()).collect()
                 } else {
                     let cmd_name = call_name.trim().to_string();
-                    if let Some(current_path) = command_path {
+                    if let Some(current_path) = context.command_path {
                         if current_path.is_empty() {
                             vec![cmd_name]
                         } else {
@@ -2202,7 +2099,13 @@ impl CliGenerator {
 
                 // Execute command (recursive call detection handled in execute_command)
                 if let Some(cmd) = self.find_command(&resolved_path) {
-                    self.execute_command(cmd, &call_args, Some(&resolved_path), dry_run, verbose)?;
+                    self.execute_command(
+                        cmd,
+                        &call_args,
+                        Some(&resolved_path),
+                        context.dry_run,
+                        context.verbose,
+                    )?;
                 } else {
                     // Not a command, treat as shell command
                     current_shell_block.push(line.to_string());
@@ -2216,15 +2119,7 @@ impl CliGenerator {
         // Execute any remaining shell commands
         if !current_shell_block.is_empty() {
             let shell_script = current_shell_block.join("\n");
-            Self::execute_shell_script(
-                &shell_script,
-                env_vars,
-                cwd,
-                args,
-                verbose,
-                hide_output,
-                self.pid_callback.as_deref(),
-            )?;
+            Self::execute_shell_script(&shell_script, context)?;
         }
 
         // Function completed without @return - return None
@@ -2348,7 +2243,7 @@ impl CliGenerator {
 
                     s.spawn(move || {
                         if let Some(dep_command) = self.find_command(&dep_path) {
-                            let empty_parent_args = HashMap::new();
+                            let empty_parent_args: HashMap<String, String> = HashMap::new();
                             if let Err(e) = self.execute_command_with_deps(
                                 dep_command,
                                 &dep.args,
@@ -2384,7 +2279,7 @@ impl CliGenerator {
             // Serial execution
             for (dep, dep_path) in tasks {
                 if let Some(dep_command) = self.find_command(&dep_path) {
-                    let empty_parent_args = HashMap::new();
+                    let empty_parent_args: HashMap<String, String> = HashMap::new();
                     self.execute_command_with_deps(
                         dep_command,
                         &dep.args,
@@ -2473,7 +2368,7 @@ impl CliGenerator {
             }
             let env_vars = EnvironmentManager::extract_env_vars(&all_env_directives);
 
-            if let Err(e) = self.validate_parameters(
+            self.validate_parameters(
                 &validate_directives,
                 args,
                 &env_vars,
@@ -2483,9 +2378,7 @@ impl CliGenerator {
                 &parent_consts,
                 parent_args,
                 command_path_unwrapped,
-            ) {
-                return Err(e);
-            }
+            )?;
         }
 
         // Execute dependencies first
@@ -2630,19 +2523,18 @@ impl CliGenerator {
             processed_env_vars.insert(key.clone(), value.clone());
         }
 
+        let context = TemplateContext {
+            global_variables: &self.variables,
+            global_constants: &self.constants,
+            local_variables: &command.local_variables,
+            local_constants: &command.local_constants,
+            parent_variables: &parent_variables,
+            parent_constants: &parent_constants,
+        };
+
         // Process ALL environment variables through template processor
         for value in processed_env_vars.values_mut() {
-            *value = TemplateProcessor::process(
-                value,
-                args,
-                &self.variables,
-                &self.constants,
-                &command.local_variables,
-                &command.local_constants,
-                &parent_variables,
-                &parent_constants,
-                &merged_parent_args,
-            );
+            *value = TemplateProcessor::process(value, args, &context, &merged_parent_args);
         }
 
         // Update NEST_CALL_STACK for child processes
@@ -2661,38 +2553,34 @@ impl CliGenerator {
 
         let env_vars = processed_env_vars;
 
+        // Base script execution context
+        let mut script_exec_context = ScriptExecutionContext {
+            args,
+            env_vars: &env_vars,
+            cwd: cwd.as_deref(),
+            command_path: Some(command_path_unwrapped),
+            dry_run,
+            verbose,
+            privileged,
+            pid_callback: self.pid_callback.as_deref(),
+            parent_args: &merged_parent_args,
+            hide_output: false,
+        };
+
         // Execute before script (if present in command or inherited from parent)
         let before_info = Self::get_directive_value_with_hide(&command.directives, "before")
             .or_else(|| parent_directives.get("before").cloned());
         if let Some((before_script, hide_before)) = before_info {
-            let processed_before = TemplateProcessor::process(
-                &before_script,
-                args,
-                &self.variables,
-                &self.constants,
-                &command.local_variables,
-                &command.local_constants,
-                &parent_variables,
-                &parent_constants,
-                &merged_parent_args,
-            );
+            let processed_before =
+                TemplateProcessor::process(&before_script, args, &context, &merged_parent_args);
 
             if verbose {
                 use super::output::OutputFormatter;
                 OutputFormatter::info("Executing before script...");
             }
 
-            if let Err(e) = self.execute_script(
-                &processed_before,
-                &env_vars,
-                cwd.as_deref(),
-                Some(command_path_unwrapped),
-                args,
-                dry_run,
-                verbose,
-                &merged_parent_args,
-                hide_before,
-            ) {
+            script_exec_context.hide_output = hide_before;
+            if let Err(e) = self.execute_script(&processed_before, &script_exec_context) {
                 return Err(format!("Before script failed: {}", e));
             }
         }
@@ -2703,17 +2591,8 @@ impl CliGenerator {
             Self::get_directive_value_with_hide(&command.directives, "script")
                 .ok_or_else(|| "Command has no script directive".to_string())?;
 
-        let processed_script = TemplateProcessor::process(
-            &script,
-            args,
-            &self.variables,
-            &self.constants,
-            &command.local_variables,
-            &command.local_constants,
-            &parent_variables,
-            &parent_constants,
-            &merged_parent_args,
-        );
+        let processed_script =
+            TemplateProcessor::process(&script, args, &context, &merged_parent_args);
 
         // Check privileged access BEFORE execution
         if privileged && !dry_run {
@@ -2728,46 +2607,44 @@ impl CliGenerator {
 
         // Show dry-run preview
         if dry_run {
-            use super::executor::CommandExecutor;
-            CommandExecutor::show_dry_run_preview(
+            use super::executor::{CommandExecutor, ExecutionContext};
+            let context = ExecutionContext {
                 command,
-                Some(command_path_unwrapped),
                 args,
-                &env_vars,
-                cwd.as_deref(),
-                &processed_script,
+                env_vars: &env_vars,
+                cwd: cwd.as_deref(),
+                command_path: Some(command_path_unwrapped),
+                dry_run: true,
                 verbose,
                 privileged,
-            );
+                pid_callback: None,
+                hide_output: false,
+            };
+            CommandExecutor::show_dry_run_preview(&processed_script, &context);
             return Ok(());
         }
 
         // Show verbose information if requested
         if verbose {
-            use super::executor::CommandExecutor;
-            CommandExecutor::show_verbose_info(
+            use super::executor::{CommandExecutor, ExecutionContext};
+            let context = ExecutionContext {
                 command,
-                Some(command_path_unwrapped),
                 args,
-                &env_vars,
-                cwd.as_deref(),
-                &processed_script,
+                env_vars: &env_vars,
+                cwd: cwd.as_deref(),
+                command_path: Some(command_path_unwrapped),
+                dry_run: false,
+                verbose: true,
                 privileged,
-            );
+                pid_callback: None,
+                hide_output: hide_script,
+            };
+            CommandExecutor::show_verbose_info(&processed_script, &context);
         }
 
         // Execute script with command call support
-        let main_result = self.execute_script(
-            &processed_script,
-            &env_vars,
-            cwd.as_deref(),
-            Some(command_path_unwrapped),
-            args,
-            dry_run,
-            verbose,
-            &merged_parent_args,
-            hide_script,
-        );
+        script_exec_context.hide_output = hide_script;
+        let main_result = self.execute_script(&processed_script, &script_exec_context);
 
         // Handle main script result first (before logging to avoid partial move)
         let result = match main_result {
@@ -2779,12 +2656,7 @@ impl CliGenerator {
                     let processed_after = TemplateProcessor::process(
                         &after_script,
                         args,
-                        &self.variables,
-                        &self.constants,
-                        &command.local_variables,
-                        &command.local_constants,
-                        &parent_variables,
-                        &parent_constants,
+                        &context,
                         &merged_parent_args,
                     );
 
@@ -2793,17 +2665,8 @@ impl CliGenerator {
                         OutputFormatter::info("Executing after script...");
                     }
 
-                    if let Err(e) = self.execute_script(
-                        &processed_after,
-                        &env_vars,
-                        cwd.as_deref(),
-                        Some(command_path_unwrapped),
-                        args,
-                        dry_run,
-                        verbose,
-                        &merged_parent_args,
-                        hide_after,
-                    ) {
+                    script_exec_context.hide_output = hide_after;
+                    if let Err(e) = self.execute_script(&processed_after, &script_exec_context) {
                         return Err(format!("After script failed: {}", e));
                     }
                 }
@@ -2823,12 +2686,7 @@ impl CliGenerator {
                     let processed_fallback = TemplateProcessor::process(
                         &fallback_script,
                         &fallback_args,
-                        &self.variables,
-                        &self.constants,
-                        &command.local_variables,
-                        &command.local_constants,
-                        &parent_variables,
-                        &parent_constants,
+                        &context,
                         &merged_parent_args,
                     );
 
@@ -2838,17 +2696,12 @@ impl CliGenerator {
                     }
 
                     // Execute fallback and return its output instead of error
-                    if let Err(e) = self.execute_script(
-                        &processed_fallback,
-                        &env_vars,
-                        cwd.as_deref(),
-                        Some(command_path_unwrapped),
-                        args,
-                        dry_run,
-                        verbose,
-                        &merged_parent_args,
-                        hide_fallback,
-                    ) {
+                    let fallback_context = ScriptExecutionContext {
+                        args: &fallback_args,
+                        hide_output: hide_fallback,
+                        ..script_exec_context
+                    };
+                    if let Err(e) = self.execute_script(&processed_fallback, &fallback_context) {
                         return Err(format!("Fallback script failed: {}", e));
                     }
                     // Fallback succeeded - return Ok (suppress original error)
@@ -2891,17 +2744,16 @@ impl CliGenerator {
                 Err(e) => Err(e.clone()),
             };
 
-            let processed_finally = TemplateProcessor::process(
-                &finally_script,
-                args,
-                &self.variables,
-                &self.constants,
-                &command.local_variables,
-                &command.local_constants,
-                &parent_variables,
-                &parent_constants,
-                &merged_parent_args,
-            );
+            let context = TemplateContext {
+                global_variables: &self.variables,
+                global_constants: &self.constants,
+                local_variables: &command.local_variables,
+                local_constants: &command.local_constants,
+                parent_variables: &parent_variables,
+                parent_constants: &parent_constants,
+            };
+            let processed_finally =
+                TemplateProcessor::process(&finally_script, args, &context, &merged_parent_args);
 
             if verbose {
                 use super::output::OutputFormatter;
@@ -2909,17 +2761,9 @@ impl CliGenerator {
             }
 
             // Execute finally - errors are logged but don't change the result
-            if let Err(e) = self.execute_script(
-                &processed_finally,
-                &env_vars,
-                cwd.as_deref(),
-                Some(command_path_unwrapped),
-                args,
-                dry_run,
-                verbose,
-                &merged_parent_args,
-                hide_finally,
-            ) {
+            script_exec_context.hide_output = hide_finally;
+            script_exec_context.args = args; // Reset args if they were changed by fallback
+            if let Err(e) = self.execute_script(&processed_finally, &script_exec_context) {
                 // Log finally error but don't fail the command
                 if verbose {
                     use super::output::OutputFormatter;
@@ -3113,7 +2957,7 @@ pub fn handle_example() {
     );
     let latest_url = "https://github.com/quonaro/nest/releases/latest/download/examples.tar.gz";
 
-    if download_examples_from_release(&current_dir, &examples_dir, &release_url, &latest_url) {
+    if download_examples_from_release(&current_dir, &examples_dir, &release_url, latest_url) {
         return;
     }
 
@@ -3283,7 +3127,7 @@ fn download_examples_from_release(
 
         // Try curl first
         let curl_result = Command::new("curl")
-            .args(&[
+            .args([
                 "-fsSL",
                 "-o",
                 temp_archive.to_str().unwrap_or(archive_name),
@@ -3299,7 +3143,7 @@ fn download_examples_from_release(
             _ => {
                 // Try wget
                 let wget_result = Command::new("wget")
-                    .args(&[
+                    .args([
                         "-q",
                         "-O",
                         temp_archive.to_str().unwrap_or(archive_name),
@@ -3335,7 +3179,7 @@ fn download_examples_from_release(
     // Extract archive
     OutputFormatter::info("Extracting archive...");
     let extract_output = Command::new("tar")
-        .args(&[
+        .args([
             "xzf",
             temp_archive.to_str().unwrap_or(archive_name),
             "-C",
@@ -3364,22 +3208,22 @@ fn download_examples_from_release(
                     colors::RESET
                 );
                 println!("Run: cd examples");
-                return true;
+                true
             } else {
                 OutputFormatter::error("Examples directory not found after extraction");
                 let _ = fs::remove_file(&temp_archive);
-                return false;
+                false
             }
         }
         Ok(_) => {
             OutputFormatter::error("Failed to extract archive");
             let _ = fs::remove_file(&temp_archive);
-            return false;
+            false
         }
         Err(_) => {
             OutputFormatter::error("tar command not available. Please install tar.");
             let _ = fs::remove_file(&temp_archive);
-            return false;
+            false
         }
     }
 }
@@ -3402,7 +3246,7 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
 
     // Clone repository (depth 1 for faster download)
     let clone_output = Command::new("git")
-        .args(&[
+        .args([
             "clone",
             "--depth",
             "1",
@@ -3417,7 +3261,7 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
         Ok(output) if output.status.success() => {
             // Set sparse checkout to only get examples folder
             let sparse_output = Command::new("git")
-                .args(&["sparse-checkout", "set", "cli/examples"])
+                .args(["sparse-checkout", "set", "cli/examples"])
                 .current_dir(&temp_dir)
                 .output();
 
@@ -3429,7 +3273,7 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
                         .current_dir(&temp_dir)
                         .output();
 
-                    if let Err(_) = checkout_output {
+                    if checkout_output.is_err() {
                         let _ = std::fs::remove_dir_all(&temp_dir);
                         OutputFormatter::error("Failed to checkout files after sparse checkout");
                         std::process::exit(1);
@@ -3443,7 +3287,7 @@ fn download_examples_from_repo(current_dir: &std::path::Path, examples_dir: &std
                         .current_dir(&temp_dir)
                         .output();
 
-                    if let Err(_) = checkout_output {
+                    if checkout_output.is_err() {
                         let _ = std::fs::remove_dir_all(&temp_dir);
                         OutputFormatter::error("Failed to checkout files");
                         std::process::exit(1);
@@ -3518,7 +3362,7 @@ fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::
     // Download archive
     OutputFormatter::info("Downloading archive...");
     let _download_output = match Command::new("curl")
-        .args(&[
+        .args([
             "-fsSL",
             "-o",
             temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"),
@@ -3578,7 +3422,7 @@ fn download_examples_archive(current_dir: &std::path::Path, examples_dir: &std::
     // Extract archive (requires unzip or tar)
     OutputFormatter::info("Extracting archive...");
     let extract_output = Command::new("unzip")
-        .args(&[
+        .args([
             "-q",
             temp_zip.to_str().unwrap_or(".nest_examples_temp.zip"),
             "-d",
@@ -3806,9 +3650,7 @@ pub fn handle_update(recreate: bool) {
     };
 
     // Create temporary directory
-    let temp_dir = match env::temp_dir().join(format!("nest-update-{}", std::process::id())) {
-        dir => dir,
-    };
+    let temp_dir = env::temp_dir().join(format!("nest-update-{}", std::process::id()));
     if let Err(e) = fs::create_dir_all(&temp_dir) {
         OutputFormatter::error(&format!("Failed to create temporary directory: {}", e));
         std::process::exit(1);
@@ -3831,7 +3673,7 @@ pub fn handle_update(recreate: bool) {
     let download_success = if Command::new("curl").arg("--version").output().is_ok() {
         // Use curl
         let output = Command::new("curl")
-            .args(&[
+            .args([
                 "-L",
                 "-s",
                 "-S",
@@ -3877,7 +3719,7 @@ pub fn handle_update(recreate: bool) {
     } else if Command::new("wget").arg("--version").output().is_ok() {
         // Use wget
         let output = Command::new("wget")
-            .args(&["-O", temp_file_str, &url])
+            .args(["-O", temp_file_str, &url])
             .output();
 
         match output {
@@ -3942,7 +3784,7 @@ pub fn handle_update(recreate: bool) {
     };
 
     let extract_output = Command::new("tar")
-        .args(&["-xzf", temp_file_str, "-C", extract_dir_str])
+        .args(["-xzf", temp_file_str, "-C", extract_dir_str])
         .output();
 
     match extract_output {

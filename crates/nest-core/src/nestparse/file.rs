@@ -1,35 +1,8 @@
 //! File reading utilities for configuration files.
 
-
 use std::fs;
 use std::io;
 use std::path::Path;
-
-/// Reads the contents of a configuration file.
-///
-/// This function validates that:
-/// 1. The file exists
-/// 2. The file name matches a valid configuration file name
-///
-/// # Arguments
-///
-/// * `path` - Path to the configuration file
-///
-/// # Returns
-///
-/// - `Ok(content)` - The file contents as a string
-/// - `Err(error)` - An I/O error if the file cannot be read or is invalid
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The file does not exist
-/// - The file name is not a valid configuration file name
-/// - The file cannot be read
-
-// read_config_file removed as it is unused and read_file_unchecked is preferred.
-
-
 /// Reads the contents of a file without validating the file name.
 ///
 /// This function is used for include directives where files may have
